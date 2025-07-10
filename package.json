@@ -1,0 +1,70 @@
+{
+  "name": "damage-estimate",
+  "version": "1.0.0",
+  "description": "Nikke 伤害估算器桌面应用",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run electron-dev\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "electron-dev": "concurrently \"npm run dev:vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "npm run build:electron-src && electron .",
+    "build": "npm run build:vite && npm run build:electron-src && electron-builder",
+    "build:vite": "tsc && vite build",
+    "build:electron-src": "tsc -p electron/tsconfig.json",
+    "build:electron": "electron-builder",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IsolateOB/DamageEstimate.git"
+  },
+  "keywords": ["game", "damage", "calculator", "electron", "react"],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/IsolateOB/DamageEstimate/issues"
+  },
+  "homepage": "https://github.com/IsolateOB/DamageEstimate#readme",
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.2.0",
+    "@mui/material": "^7.2.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.4"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.damage-estimate.app",
+    "productName": "Nikke 伤害估算器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "dist-electron/package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.games"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

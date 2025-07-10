@@ -1,0 +1,67 @@
+// 角色基础信息
+export interface Character {
+  id: number
+  name_cn: string
+  name_en: string
+  name_code: number
+  class: 'Attacker' | 'Defender' | 'Supporter'
+  element: 'Electronic' | 'Fire' | 'Wind' | 'Water' | 'Iron'
+  use_burst_skill: 'Step1' | 'Step2' | 'Step3' | 'AllStep'
+  corporation: 'ELYSION' | 'MISSILIS' | 'TETRA' | 'PILGRIM' | 'ABNORMAL'
+  weapon_type: 'AR' | 'SMG' | 'SG' | 'SR' | 'MG' | 'RL'
+  original_rare: 'SSR' | 'SR' | 'R'
+}
+
+// 队伍角色位置
+export interface TeamCharacter {
+  character?: Character
+  position: number // 1-5
+  damageCoefficient?: number // 伤害系数，支持两位小数
+}
+
+// 筛选条件
+export interface CharacterFilter {
+  name: string
+  class: string
+  element: string
+  use_burst_skill: string
+  corporation: string
+  weapon_type: string
+  original_rare: string
+}
+
+// 账号数据
+export interface AccountData {
+  id: string
+  name: string
+  level: number
+  characterData: any[] // 角色数据
+  equipmentData: any[] // 装备数据
+  // 其他账号相关数据
+}
+
+// 文件上传状态
+export interface FileUploadState {
+  isUploading: boolean
+  fileName?: string
+  error?: string
+  data?: AccountData
+}
+
+// 伤害计算器属性
+export interface DamageCalculatorProps {
+  onBaselineDataChange?: (data: any) => void
+  onTargetDataChange?: (data: any) => void
+}
+
+// Electron API 类型定义
+declare global {
+  interface Window {
+    electronAPI?: {
+      minimizeWindow: () => Promise<void>
+      maximizeWindow: () => Promise<void>
+      closeWindow: () => Promise<void>
+      isMaximized: () => Promise<boolean>
+    }
+  }
+}
