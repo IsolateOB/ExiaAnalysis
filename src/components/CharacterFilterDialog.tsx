@@ -50,8 +50,51 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     const loadCharacters = async () => {
       setLoading(true)
       try {
-        const response = await fetch('/list.json')
-        const data = await response.json()
+        // 在 Electron 环境中，尝试不同的路径
+        let response
+        let data
+        
+        // 首先尝试相对路径
+        try {
+          response = await fetch('./list.json')
+          if (response.ok) {
+            data = await response.json()
+          }
+        } catch (error) {
+          console.log('相对路径失败，尝试绝对路径')
+        }
+        
+        // 如果相对路径失败，尝试绝对路径
+        if (!data) {
+          try {
+            response = await fetch('/list.json')
+            if (response.ok) {
+              data = await response.json()
+            }
+          } catch (error) {
+            console.log('绝对路径也失败')
+          }
+        }
+        
+        // 如果还是失败，尝试通过 file:// 协议
+        if (!data) {
+          try {
+            const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
+            response = await fetch(`${baseUrl}/list.json`)
+            if (response.ok) {
+              data = await response.json()
+            }
+          } catch (error) {
+            console.log('file:// 协议也失败')
+          }
+        }
+        
+        if (!data) {
+          throw new Error('无法加载角色数据文件')
+        }
+        
+        console.log('成功加载角色数据，角色数量:', data.nikkes?.length || 0)
+        
         // 过滤掉不完整的角色数据
         const validCharacters = data.nikkes.filter((nikke: any) => 
           nikke.id && 
@@ -64,6 +107,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
           nikke.weapon_type &&
           nikke.original_rare
         )
+        console.log('过滤后的角色数量:', validCharacters.length)
         setNikkeList(validCharacters)
       } catch (error) {
         console.error('Failed to load character data:', error)

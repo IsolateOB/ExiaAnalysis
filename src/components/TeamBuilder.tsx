@@ -45,44 +45,85 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
   // 获取同步器等级攻击力
   let syncAttack = 0
   try {
-    const atkResponse = await fetch('/atk.json')
-    const atkData = await atkResponse.json()
+    // 在 Electron 环境中，尝试不同的路径
+    let atkResponse
+    let atkData
     
-    // 根据角色职业获取对应的攻击力数组
-    const classMap = {
-      'Attacker': 'Attacker_level_attack_list',
-      'Defender': 'Defender_level_attack_list', 
-      'Supporter': 'Supporter_level_attack_list'
+    // 首先尝试相对路径
+    try {
+      atkResponse = await fetch('./atk.json')
+      if (atkResponse.ok) {
+        atkData = await atkResponse.json()
+      }
+    } catch (error) {
+      console.log('atk.json 相对路径失败，尝试绝对路径')
     }
     
-    const attackList = atkData[classMap[character.class]]
-    // 从根级别数据获取同步器等级，如果不存在则尝试从角色数据获取
-    const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
-    if (attackList && synchroLevel > 0) {
-      // synchroLevel作为索引，需要减1因为数组从0开始
-      const index = Math.max(0, Math.min(synchroLevel - 1, attackList.length - 1))
-      syncAttack = attackList[index] || 0
+    // 如果相对路径失败，尝试绝对路径
+    if (!atkData) {
+      try {
+        atkResponse = await fetch('/atk.json')
+        if (atkResponse.ok) {
+          atkData = await atkResponse.json()
+        }
+      } catch (error) {
+        console.log('atk.json 绝对路径也失败')
+      }
     }
     
-    // 获取item攻击力
-    let itemAttack = 0
-    const itemArray = atkData.item || []
-    if (characterData.item_rare === 'SSR') {
-      // SSR按照SR最高等级计算（9688）
-      itemAttack = 9688
-    } else if (characterData.item_rare === 'SR') {
-      // SR按照item_level作为索引
-      const itemLevel = characterData.item_level || 0
-      const itemIndex = Math.max(0, Math.min(itemLevel, itemArray.length - 1))
-      itemAttack = itemArray[itemIndex] || 0
+    // 如果还是失败，尝试通过 file:// 协议
+    if (!atkData) {
+      try {
+        const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
+        atkResponse = await fetch(`${baseUrl}/atk.json`)
+        if (atkResponse.ok) {
+          atkData = await atkResponse.json()
+        }
+      } catch (error) {
+        console.log('atk.json file:// 协议也失败')
+      }
     }
     
-    // 计算最终攻击力
-    const baseAttack = syncAttack * breakthroughCoeff + itemAttack
-    const attackWithStatAtk = baseAttack * (1 + totalStatAtk / 100)
-    const finalStrength = attackWithStatAtk * 0.9 * (1 + totalIncElementDmg / 100)
+    if (atkData) {
+      // 根据角色职业获取对应的攻击力数组
+      const classMap = {
+        'Attacker': 'Attacker_level_attack_list',
+        'Defender': 'Defender_level_attack_list', 
+        'Supporter': 'Supporter_level_attack_list'
+      }
+      
+      const attackList = atkData[classMap[character.class]]
+      // 从根级别数据获取同步器等级，如果不存在则尝试从角色数据获取
+      const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
+      if (attackList && synchroLevel > 0) {
+        // synchroLevel作为索引，需要减1因为数组从0开始
+        const index = Math.max(0, Math.min(synchroLevel - 1, attackList.length - 1))
+        syncAttack = attackList[index] || 0
+      }
+      
+      // 获取item攻击力
+      let itemAttack = 0
+      const itemArray = atkData.item || []
+      if (characterData.item_rare === 'SSR') {
+        // SSR按照SR最高等级计算（9688）
+        itemAttack = 9688
+      } else if (characterData.item_rare === 'SR') {
+        // SR按照item_level作为索引
+        const itemLevel = characterData.item_level || 0
+        const itemIndex = Math.max(0, Math.min(itemLevel, itemArray.length - 1))
+        itemAttack = itemArray[itemIndex] || 0
+      }
+      
+      // 计算最终攻击力
+      const baseAttack = syncAttack * breakthroughCoeff + itemAttack
+      const attackWithStatAtk = baseAttack * (1 + totalStatAtk / 100)
+      const finalStrength = attackWithStatAtk * 0.9 * (1 + totalIncElementDmg / 100)
+      
+      return finalStrength
+    }
     
-    return finalStrength
+    // 如果没有加载到数据，返回简化计算
+    return totalIncElementDmg + (totalStatAtk * 0.9)
     
   } catch (error) {
     console.error('Error loading atk.json:', error)

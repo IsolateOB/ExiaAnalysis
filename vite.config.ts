@@ -9,11 +9,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        format: 'es'
-      }
-    }
   },
   server: {
     port: 5173,

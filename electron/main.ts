@@ -9,7 +9,7 @@ const fs = require('fs')
 // │ │
 // │ ├─┬ dist-electron
 // │ │ ├── main.js
-// │ │ └── preload.mjs
+// │ │ └── preload.js
 // │
 process.env.APP_ROOT = path.join(__dirname, '..')
 
@@ -42,6 +42,19 @@ function createWindow() {
     show: false,
   })
 
+  // 添加开发者工具快捷键支持
+  win.webContents.on('before-input-event', (event: any, input: any) => {
+    // F12 或 Ctrl+Shift+I 打开/关闭开发者工具
+    if (input.key === 'F12' || 
+        (input.control && input.shift && input.key === 'I')) {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools()
+      } else {
+        win.webContents.openDevTools()
+      }
+    }
+  })
+
   // 窗口准备好后显示
   win.once('ready-to-show', () => {
     if (win) {
@@ -54,22 +67,9 @@ function createWindow() {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
-  // 添加开发者工具快捷键支持
-  win.webContents.on('before-input-event', (event, input) => {
-    // F12 或 Ctrl+Shift+I 打开/关闭开发者工具
-    if (input.key === 'F12' || 
-        (input.control && input.shift && input.key === 'I')) {
-      if (win.webContents.isDevToolsOpened()) {
-        win.webContents.closeDevTools()
-      } else {
-        win.webContents.openDevTools()
-      }
-    }
-  })
-
   // 检查是否在开发模式
   const isDev = process.env.NODE_ENV === 'development'
-  const hasDevServer = process.env.VITE_DEV_SERVER_URL && process.env.VITE_DEV_SERVER_URL !== 'http://localhost:5173'
+  const hasDevServer = VITE_DEV_SERVER_URL && VITE_DEV_SERVER_URL !== 'http://localhost:5173'
   
   if (isDev && hasDevServer) {
     // 开发模式
