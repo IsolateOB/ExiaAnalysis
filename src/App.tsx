@@ -4,6 +4,8 @@ import {
   createTheme,
   CssBaseline,
   Box,
+  Snackbar,
+  Alert,
 } from '@mui/material'
 import CustomTitleBar from './components/CustomTitleBar'
 import TeamBuilder from './components/TeamBuilder'
@@ -49,10 +51,31 @@ const App: React.FC = () => {
   const [targetData, setTargetData] = useState<any>(null)
   const [baselineTeamStrength, setBaselineTeamStrength] = useState<number>(0)
   const [targetTeamStrength, setTargetTeamStrength] = useState<number>(0)
+  const [notification, setNotification] = useState<{
+    open: boolean
+    message: string
+    severity: 'success' | 'error' | 'info' | 'warning'
+  }>({
+    open: false,
+    message: '',
+    severity: 'info'
+  })
 
   const handleTeamStrengthChange = (baselineStrength: number, targetStrength: number) => {
     setBaselineTeamStrength(baselineStrength)
     setTargetTeamStrength(targetStrength)
+  }
+
+  const handleStatusChange = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setNotification({
+      open: true,
+      message,
+      severity
+    })
+  }
+
+  const handleCloseNotification = () => {
+    setNotification(prev => ({ ...prev, open: false }))
   }
 
   return (
@@ -109,9 +132,26 @@ const App: React.FC = () => {
               onTargetDataChange={setTargetData}
               baselineTeamStrength={baselineTeamStrength}
               targetTeamStrength={targetTeamStrength}
+              onStatusChange={handleStatusChange}
             />
           </Box>
         </Box>
+        
+        {/* 全局通知 */}
+        <Snackbar
+          open={notification.open}
+          autoHideDuration={6000}
+          onClose={handleCloseNotification}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert 
+            onClose={handleCloseNotification} 
+            severity={notification.severity}
+            sx={{ width: '100%' }}
+          >
+            {notification.message}
+          </Alert>
+        </Snackbar>
       </Box>
     </ThemeProvider>
   )

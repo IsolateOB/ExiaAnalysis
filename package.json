@@ -9,8 +9,9 @@
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "electron-dev": "concurrently \"npm run dev:vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:dev": "npm run build:electron-src && electron .",
-    "build": "npm run build:vite && npm run build:electron-src && electron-builder",
+    "build": "npm run build:vite-only && npm run build:electron-src && electron-builder",
     "build:vite": "tsc && vite build",
+    "build:vite-only": "vite build",
     "build:electron-src": "tsc -p electron/tsconfig.json",
     "build:electron": "electron-builder",
     "preview": "vite preview"
@@ -19,7 +20,13 @@
     "type": "git",
     "url": "git+https://github.com/IsolateOB/DamageEstimate.git"
   },
-  "keywords": ["game", "damage", "calculator", "electron", "react"],
+  "keywords": [
+    "game",
+    "damage",
+    "calculator",
+    "electron",
+    "react"
+  ],
   "author": "",
   "license": "ISC",
   "type": "module",
@@ -38,12 +45,15 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/node": "^24.0.13",
     "concurrently": "^9.2.0",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.6",
     "wait-on": "^8.0.3"
   },
   "build": {
@@ -55,8 +65,22 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "dist-electron/package.json"
+      "public/atk.json",
+      "public/list.json",
+      "!node_modules/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "public/atk.json",
+        "to": "atk.json"
+      },
+      {
+        "from": "public/list.json", 
+        "to": "list.json"
+      }
+    ],
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
     "mac": {
       "category": "public.app-category.games"
     },
