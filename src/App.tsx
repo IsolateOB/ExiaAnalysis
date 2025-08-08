@@ -54,6 +54,8 @@ const App: React.FC = () => {
   const [targetData, setTargetData] = useState<any>(null)
   const [baselineTeamStrength, setBaselineTeamStrength] = useState<number>(0)
   const [targetTeamStrength, setTargetTeamStrength] = useState<number>(0)
+  const [teamScale, setTeamScale] = useState<number>(1)
+  const [ratioLabel, setRatioLabel] = useState<string>('—')
   const [baselineScore, setBaselineScore] = useState<Record<string, number>>({})
   const [targetScore, setTargetScore] = useState<Record<string, number>>({})
   const [notification, setNotification] = useState<{
@@ -69,6 +71,10 @@ const App: React.FC = () => {
   const handleTeamStrengthChange = (baselineStrength: number, targetStrength: number) => {
     setBaselineTeamStrength(baselineStrength)
     setTargetTeamStrength(targetStrength)
+  }
+  const handleTeamRatioChange = (scale: number, label: string) => {
+    setTeamScale(scale)
+    setRatioLabel(label)
   }
 
   const handleStatusChange = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
@@ -110,6 +116,7 @@ const App: React.FC = () => {
                     onTeamStrengthChange={handleTeamStrengthChange}
                     baselineScore={baselineScore}
                     targetScore={targetScore}
+                    onTeamRatioChange={handleTeamRatioChange}
                   />
                 </Box>
               </Paper>
@@ -123,6 +130,8 @@ const App: React.FC = () => {
                     onTargetDataChange={setTargetData}
                     baselineTeamStrength={baselineTeamStrength}
                     targetTeamStrength={targetTeamStrength}
+                    teamScale={teamScale}
+                    ratioLabel={ratioLabel}
                     onBaselineScoreChange={setBaselineScore}
                     onTargetScoreChange={setTargetScore}
                     onStatusChange={handleStatusChange}

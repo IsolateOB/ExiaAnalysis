@@ -27,6 +27,8 @@ interface DamageCalculatorProps {
   onTargetDataChange?: (data: any) => void
   baselineTeamStrength?: number
   targetTeamStrength?: number
+  teamScale?: number // 目标/基线 强度比（按角色加权比值）
+  ratioLabel?: string // 展示标签，例如 20:1
   onBaselineScoreChange?: (scores: Record<string, number>) => void
   onTargetScoreChange?: (scores: Record<string, number>) => void
   onStatusChange?: (status: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
@@ -37,6 +39,8 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
   onTargetDataChange,
   baselineTeamStrength = 0,
   targetTeamStrength = 0,
+  teamScale = 1,
+  ratioLabel = '—',
   onBaselineScoreChange,
   onTargetScoreChange,
   onStatusChange
@@ -431,16 +435,12 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
 
   // 计算伤害
   const handleCalculate = useCallback(() => {
-    if (baselineDamage > 0 && baselineTeamStrength > 0 && targetTeamStrength > 0) {
-      // 计算队伍强度比值
-      const strengthRatio = targetTeamStrength / baselineTeamStrength
-      // 使用对称幂函数缩小差异，保证A→B和B→A结果对称
-      const adjustedRatio = Math.pow(strengthRatio, 0.7)
-      // 根据调整后的比值计算目标伤害
-      const calculatedTargetDamage = baselineDamage * adjustedRatio
+    if (baselineDamage > 0) {
+      // 直接使用按角色比值加权得到的 teamScale 参与伤害换算
+      const calculatedTargetDamage = baselineDamage * teamScale
       setCalculatedDamage(calculatedTargetDamage)
     }
-  }, [baselineDamage, baselineTeamStrength, targetTeamStrength])
+  }, [baselineDamage, teamScale])
 
   // 单个文件上传区域组件
   const FileUploadArea: React.FC<{
@@ -685,7 +685,7 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
                   variant="contained"
                   startIcon={<CalculateIcon />}
                   onClick={handleCalculate}
-                  disabled={!baselineDamage || !baselineTeamStrength || !targetTeamStrength}
+                  disabled={!baselineDamage || !teamScale}
                   size="small"
                 >
                   计算伤害
@@ -702,6 +702,7 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
                     <Typography variant="body2" color="text.secondary">
                       目标强度: {targetTeamStrength.toFixed(1)}
                     </Typography>
+                    <Chip label={`强度比: ${ratioLabel} (×${teamScale.toFixed(3)})`} size="small" color="primary" variant="outlined" />
                     <Typography variant="body2">
                       基线伤害: {baselineDamage.toLocaleString()}
                     </Typography>

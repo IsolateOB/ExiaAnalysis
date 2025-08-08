@@ -1,13 +1,21 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Box,
   Typography,
   Paper,
+  TextField,
+  Button,
+  Select,
+  MenuItem,
+  IconButton,
+  Tooltip,
 } from '@mui/material'
 import { Character, TeamCharacter, AttributeCoefficients } from '../types'
 import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
+import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../utils/templates'
+import { Save as SaveIcon, FolderOpen as LoadIcon, Delete as DeleteIcon } from '@mui/icons-material'
 
 interface TeamBuilderProps {
   baselineData?: any // 基线JSON数据
@@ -15,6 +23,7 @@ interface TeamBuilderProps {
   baselineScore?: Record<string, number>   // 基线词条突破分
   targetScore?: Record<string, number>   // 目标词条突破分
   onTeamStrengthChange?: (baselineStrength: number, targetStrength: number) => void
+  onTeamRatioChange?: (scale: number, ratioLabel: string) => void
 }
 
 // 计算角色强度的工具函数
@@ -140,7 +149,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   targetData, 
   baselineScore = {}, 
   targetScore = {}, 
-  onTeamStrengthChange 
+  onTeamStrengthChange,
+  onTeamRatioChange,
 }) => {
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
     Array.from({ length: 5 }, (_, index) => ({
@@ -154,14 +164,63 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [characterStrengths, setCharacterStrengths] = useState<{[position: number]: {baseline: number, target: number}}>({})
   const [coefficientsMap, setCoefficientsMap] = useState<{[position: number]: AttributeCoefficients}>({})
   const [rawMap, setRawMap] = useState<{[position: number]: { baseline?: any, target?: any }}>({})
+  // 模板管理
+  const [templates, setTemplates] = useState<TeamTemplate[]>(() => listTemplates())
+  const [templateName, setTemplateName] = useState<string>('')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+  const refreshTemplates = () => setTemplates(listTemplates())
+
+  // 载入 list.json 用于根据 id 还原 Character
+  const [listData, setListData] = useState<any>(null)
+  useEffect(() => {
+    const load = async () => {
+      let res: Response | undefined
+      try {
+        try { res = await fetch('./list.json'); if (res.ok) return setListData(await res.json()) } catch {}
+        try { res = await fetch('/list.json'); if (res.ok) return setListData(await res.json()) } catch {}
+        try {
+          const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
+          res = await fetch(`${baseUrl}/list.json`)
+          if (res.ok) return setListData(await res.json())
+        } catch {}
+      } catch {}
+    }
+    load()
+  }, [])
+
+  const characterFromList = useMemo(() => {
+    const map = new Map<string, Character>()
+    if (listData?.nikkes) {
+      listData.nikkes.forEach((n: any) => {
+        if (n?.id != null) {
+          const ch: Character = {
+            id: Number(n.id),
+            name_cn: n.name_cn || n.name || '未命名',
+            name_en: n.name_en || n.name || 'Unknown',
+            name_code: n.name_code || 0,
+            class: (n.class || 'Attacker'),
+            element: (n.element || 'Fire'),
+            use_burst_skill: (n.use_burst_skill || 'AllStep'),
+            corporation: (n.corporation || 'ABNORMAL'),
+            weapon_type: (n.weapon_type || 'AR'),
+            original_rare: (n.original_rare || 'SSR'),
+          } as Character
+          map.set(String(n.id), ch)
+        }
+      })
+    }
+    return (id: string): Character | undefined => map.get(String(id))
+  }, [listData])
 
   // 当team或数据变化时重新计算强度
   useEffect(() => {
     const calculateAllStrengths = async () => {
       const newStrengths: {[position: number]: {baseline: number, target: number}} = {}
       const newRaw: {[position: number]: { baseline?: any, target?: any }} = {}
-      let totalBaselineStrength = 0
-      let totalTargetStrength = 0
+  let totalBaselineStrength = 0
+  let totalTargetStrength = 0
+  let ratioWeightedSum = 0
+  let weightSum = 0
       
       // 计算系数总和，用于归一化
       const totalCoefficient = team.reduce((sum, teamChar) => {
@@ -186,11 +245,16 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           
           // 如果系数总和为0，则所有角色都不贡献输出
           if (totalCoefficient > 0) {
-            // 计算该角色在队伍中的输出占比
+            // 计算该角色在队伍中的输出占比（用于绝对值展示）
             const outputRatio = (teamChar.damageCoefficient || 0) / totalCoefficient
-            // 按占比计算该角色对队伍强度的贡献
             totalBaselineStrength += strengths.baseline * outputRatio
             totalTargetStrength += strengths.target * outputRatio
+          }
+          // 以比值的方式参与：按伤害系数做加权平均
+          const w = teamChar.damageCoefficient || 0
+          if (w > 0 && strengths.baseline > 0) {
+            ratioWeightedSum += w * (strengths.target / strengths.baseline)
+            weightSum += w
           }
         } else {
           newStrengths[teamChar.position] = { baseline: 0, target: 0 }
@@ -200,10 +264,12 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   setCharacterStrengths(newStrengths)
   setRawMap(newRaw)
       
-      // 回调给父组件
-      if (onTeamStrengthChange) {
-        onTeamStrengthChange(totalBaselineStrength, totalTargetStrength)
-      }
+  // 回调：绝对值（用于信息展示）
+  onTeamStrengthChange?.(totalBaselineStrength, totalTargetStrength)
+  // 回调：比值（用于伤害计算和展示），按角色比值加权平均
+  const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
+  const label = scale > 0 ? `${(1/scale).toFixed(2)} : 1` : '—'
+  onTeamRatioChange?.(scale, label)
     }
     
     calculateAllStrengths()
@@ -253,6 +319,65 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     setCoefficientsMap(prev => ({ ...prev, [position]: next }))
   }
 
+  // 模板保存
+  const handleSaveTemplate = () => {
+    const id = Math.random().toString(36).slice(2)
+    const members = team.map(t => ({
+      position: t.position,
+      characterId: t.character ? String(t.character.id) : undefined,
+      damageCoefficient: t.damageCoefficient || 0,
+      coefficients: coefficientsMap[t.position] || getDefaultCoefficients(),
+    }))
+    const totalDamageCoefficient = team.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
+    const tpl: TeamTemplate = {
+      id,
+      name: templateName || `模板-${new Date().toLocaleString()}`,
+      createdAt: Date.now(),
+      members,
+      totalDamageCoefficient,
+    }
+    saveTemplate(tpl)
+    setTemplateName('')
+    refreshTemplates()
+    setSelectedTemplateId(tpl.id)
+  }
+
+  const applyTemplate = async (tpl: TeamTemplate) => {
+    // 还原队伍
+    const nextTeam: TeamCharacter[] = team.map(slot => {
+      const m = tpl.members.find(mm => mm.position === slot.position)
+      let character: Character | undefined = slot.character
+      if (m?.characterId && characterFromList) {
+        const ch = characterFromList(m.characterId)
+        if (ch) character = ch
+      }
+      return {
+        position: slot.position,
+        character,
+        damageCoefficient: m?.damageCoefficient ?? 1.0,
+      }
+    })
+    setTeam(nextTeam)
+    // 还原系数
+    const nextCoeffs: {[pos:number]: AttributeCoefficients} = {}
+    tpl.members.forEach(m => {
+      nextCoeffs[m.position] = (m.coefficients || getDefaultCoefficients()) as AttributeCoefficients
+    })
+    setCoefficientsMap(nextCoeffs)
+  }
+
+  const handleLoadTemplate = () => {
+    const tpl = templates.find(t => t.id === selectedTemplateId)
+    if (tpl) applyTemplate(tpl)
+  }
+
+  const handleDeleteTemplate = () => {
+    if (!selectedTemplateId) return
+    deleteTemplate(selectedTemplateId)
+    refreshTemplates()
+    setSelectedTemplateId('')
+  }
+
   // 根据角色ID查找对应的JSON数据中的角色
   const findCharacterDataById = (characterId: string, jsonData: any) => {
     if (!jsonData || !jsonData.elements) return null
@@ -286,6 +411,49 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   return (
     <Paper elevation={2} sx={{ p: 1, height: '100%', overflow: 'auto' }}>
+      {/* 模板工具条 */}
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
+        <TextField
+          size="small"
+          label="模板名称"
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          sx={{ width: 200 }}
+        />
+        <Tooltip title="保存当前队伍为模板">
+          <span>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<SaveIcon />}
+              onClick={handleSaveTemplate}
+              disabled={templates.length >= 200}
+            >保存</Button>
+          </span>
+        </Tooltip>
+        <Select
+          size="small"
+          displayEmpty
+          value={selectedTemplateId}
+          onChange={(e) => setSelectedTemplateId(String(e.target.value))}
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value=""><em>选择模板</em></MenuItem>
+          {templates.map(t => (
+            <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
+          ))}
+        </Select>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<LoadIcon />}
+          onClick={handleLoadTemplate}
+          disabled={!selectedTemplateId}
+        >加载</Button>
+        <IconButton size="small" color="error" onClick={handleDeleteTemplate} disabled={!selectedTemplateId}>
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {team.map((teamChar) => {
           const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }
