@@ -17,6 +17,8 @@ export interface TeamCharacter {
   character?: Character
   position: number // 1-5
   damageCoefficient?: number // 伤害系数，支持两位小数
+  // 每个角色的属性系数
+  attributeCoefficients?: AttributeCoefficients
 }
 
 // 筛选条件
@@ -64,4 +66,41 @@ declare global {
       isMaximized: () => Promise<boolean>
     }
   }
+}
+
+// 词条/属性键
+export type AttributeKey =
+  | 'IncElementDmg'
+  | 'StatAtk'
+  | 'StatAmmoLoad'
+  | 'StatChargeTime'
+  | 'StatChargeDamage'
+  | 'StatCritical'
+  | 'StatCriticalDamage'
+  | 'StatAccuracyCircle'
+  | 'StatDef'
+  | 'hp'
+
+// 每角色的属性系数（默认值：StatAtk=0.9，IncElementDmg=1，其他=0，hp=0）
+export interface AttributeCoefficients {
+  IncElementDmg: number
+  StatAtk: number
+  StatAmmoLoad: number
+  StatChargeTime: number
+  StatChargeDamage: number
+  StatCritical: number
+  StatCriticalDamage: number
+  StatAccuracyCircle: number
+  StatDef: number
+  hp: number
+}
+
+// 每角色原始属性分（不乘以系数），用于展示
+export interface RawAttributeScores {
+  baseAttack: number
+  baseDefense: number
+  baseHP: number
+  breakthroughCoeff: number
+  // 百分比类词条的原始总和（%），其中 IncElementDmg 已包含默认 +10%
+  totals: Record<Exclude<AttributeKey, 'hp'>, number>
 }

@@ -6,6 +6,9 @@ import {
   Box,
   Snackbar,
   Alert,
+  Grid,
+  Paper,
+  Typography,
 } from '@mui/material'
 import CustomTitleBar from './components/CustomTitleBar'
 import TeamBuilder from './components/TeamBuilder'
@@ -51,6 +54,8 @@ const App: React.FC = () => {
   const [targetData, setTargetData] = useState<any>(null)
   const [baselineTeamStrength, setBaselineTeamStrength] = useState<number>(0)
   const [targetTeamStrength, setTargetTeamStrength] = useState<number>(0)
+  const [baselineScore, setBaselineScore] = useState<Record<string, number>>({})
+  const [targetScore, setTargetScore] = useState<Record<string, number>>({})
   const [notification, setNotification] = useState<{
     open: boolean
     message: string
@@ -93,48 +98,39 @@ const App: React.FC = () => {
         <CustomTitleBar title="Nikke 伤害估算器" />
 
         {/* 主内容区域 */}
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            overflow: 'hidden',
-          }}
-        >
-          {/* 左侧 - 角色队伍构建 */}
-          <Box
-            sx={{
-              minWidth: '600px', // 增加最小宽度保证显示完整
-              width: '60%', // 增加到60%宽度
-              height: '100%',
-              overflow: 'hidden',
-              p: 1,
-            }}
-          >
-            <TeamBuilder 
-              baselineData={baselineData}
-              targetData={targetData}
-              onTeamStrengthChange={handleTeamStrengthChange}
-            />
-          </Box>
-
-          {/* 右侧 - 伤害计算区域 */}
-          <Box
-            sx={{
-              width: '40%', // 缩减到40%宽度
-              minWidth: '250px', // 减少最小宽度给左侧更多空间
-              height: '100%',
-              overflow: 'hidden',
-              p: 1,
-            }}
-          >
-            <DamageCalculator 
-              onBaselineDataChange={setBaselineData}
-              onTargetDataChange={setTargetData}
-              baselineTeamStrength={baselineTeamStrength}
-              targetTeamStrength={targetTeamStrength}
-              onStatusChange={handleStatusChange}
-            />
-          </Box>
+        <Box sx={{ flex: 1, overflow: 'hidden', p: 1 }}>
+          <Grid container spacing={1} sx={{ height: '100%' }}>
+            <Grid size={{ xs: 12, md: 7 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
+              <Paper sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="h6" sx={{ mb: 1 }}>队伍构建</Typography>
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <TeamBuilder 
+                    baselineData={baselineData}
+                    targetData={targetData}
+                    onTeamStrengthChange={handleTeamStrengthChange}
+                    baselineScore={baselineScore}
+                    targetScore={targetScore}
+                  />
+                </Box>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
+              <Paper sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="h6" sx={{ mb: 1 }}>伤害计算</Typography>
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <DamageCalculator 
+                    onBaselineDataChange={setBaselineData}
+                    onTargetDataChange={setTargetData}
+                    baselineTeamStrength={baselineTeamStrength}
+                    targetTeamStrength={targetTeamStrength}
+                    onBaselineScoreChange={setBaselineScore}
+                    onTargetScoreChange={setTargetScore}
+                    onStatusChange={handleStatusChange}
+                  />
+                </Box>
+              </Paper>
+            </Grid>
+          </Grid>
         </Box>
         
         {/* 全局通知 */}

@@ -46,48 +46,48 @@ export const calculateCharacterStrength = async (characterData: any, character: 
   let syncAttack = 0
   try {
     // 在 Electron 环境中，尝试不同的路径
-    let atkResponse
-    let atkData
+  let numResponse
+  let numData
     
     // 首先尝试相对路径
     try {
-      atkResponse = await fetch('./atk.json')
-      if (atkResponse.ok) {
-        atkData = await atkResponse.json()
-        console.log('✅ 成功加载 atk.json (相对路径)');
+      numResponse = await fetch('./number.json')
+      if (numResponse.ok) {
+        numData = await numResponse.json()
+        console.log('✅ 成功加载 number.json (相对路径)');
       }
     } catch (error) {
-      console.log('atk.json 相对路径失败，尝试绝对路径')
+  console.log('number.json 相对路径失败，尝试绝对路径')
     }
     
     // 如果相对路径失败，尝试绝对路径
-    if (!atkData) {
+    if (!numData) {
       try {
-        atkResponse = await fetch('/atk.json')
-        if (atkResponse.ok) {
-          atkData = await atkResponse.json()
-          console.log('✅ 成功加载 atk.json (绝对路径)');
+        numResponse = await fetch('/number.json')
+        if (numResponse.ok) {
+          numData = await numResponse.json()
+          console.log('✅ 成功加载 number.json (绝对路径)');
         }
       } catch (error) {
-        console.log('atk.json 绝对路径也失败')
+  console.log('number.json 绝对路径也失败')
       }
     }
     
     // 如果还是失败，尝试通过 file:// 协议
-    if (!atkData) {
+    if (!numData) {
       try {
         const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-        atkResponse = await fetch(`${baseUrl}/atk.json`)
-        if (atkResponse.ok) {
-          atkData = await atkResponse.json()
-          console.log('✅ 成功加载 atk.json (file协议)');
+        numResponse = await fetch(`${baseUrl}/number.json`)
+        if (numResponse.ok) {
+          numData = await numResponse.json()
+          console.log('✅ 成功加载 number.json (file协议)');
         }
       } catch (error) {
-        console.log('atk.json file:// 协议也失败')
+  console.log('number.json file:// 协议也失败')
       }
     }
     
-    if (atkData) {
+    if (numData) {
       // 加载角色职业映射
       let characterClass = character.class; // 默认使用传入的职业
       console.log(`🔍 开始查找角色职业信息: id=${character.id}, name_code=${character.name_code}, 默认职业=${characterClass}`);
@@ -162,7 +162,7 @@ export const calculateCharacterStrength = async (characterData: any, character: 
         映射到: classMap[characterClass]
       });
       
-      const attackList = atkData[classMap[characterClass]]
+  const attackList = numData[classMap[characterClass]]
       // 从根级别数据获取同步器等级，如果不存在则尝试从角色数据获取
       const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
       console.log(`📊 同步器等级: ${synchroLevel}`);
@@ -178,7 +178,7 @@ export const calculateCharacterStrength = async (characterData: any, character: 
       
       // 获取item攻击力
       let itemAttack = 0
-      const itemArray = atkData.item || []
+  const itemArray = numData.item_atk || []
       if (characterData.item_rare === 'SSR') {
         // SSR按照SR最高等级计算（9688）
         itemAttack = 9688
@@ -191,28 +191,75 @@ export const calculateCharacterStrength = async (characterData: any, character: 
         console.log(`🔧 SR装备攻击力: ${itemAttack} (等级: ${itemLevel})`)
       }
       
-      // 计算最终攻击力
+      // 计算有同步器的最终攻击力
       const baseAttack = syncAttack * breakthroughCoeff + itemAttack
-      const attackWithStatAtk = baseAttack * (1 + totalStatAtk / 100)
-      const finalStrength = attackWithStatAtk * 0.9 * (1 + totalIncElementDmg / 100)
+  // 按新公式：[(SynchroAttack × 突破系数) + ItemAttack] × (1 + 0.9 × ΣStatAtk%/100) × (1 + ΣIncElementDmg%/100)
+  const attackWithStatAtk = baseAttack * (1 + 0.9 * totalStatAtk / 100)
+  const finalStrength = attackWithStatAtk * (1 + totalIncElementDmg / 100)
       
       console.log(`💪 最终强度计算: 
         - 基础攻击力: ${baseAttack.toFixed(1)} (同步器: ${syncAttack} × 突破系数: ${breakthroughCoeff.toFixed(3)} + 装备: ${itemAttack})
-        - StatAtk加成后: ${attackWithStatAtk.toFixed(1)} (+ ${totalStatAtk}%)
-        - 最终强度: ${finalStrength.toFixed(1)} (× 0.9 × ${(1 + totalIncElementDmg / 100).toFixed(3)})`);
+  - StatAtk(×0.9)加成后: ${attackWithStatAtk.toFixed(1)} (+ ${totalStatAtk}% × 0.9)
+  - 最终强度: ${finalStrength.toFixed(1)} (× ${(1 + totalIncElementDmg / 100).toFixed(3)})`);
       
       return finalStrength
     }
     
     // 如果没有加载到数据，返回简化计算
-    console.warn('⚠️ 无法加载atk.json，使用简化计算')
-    return totalIncElementDmg + (totalStatAtk * 0.9)
+  console.warn('⚠️ 无法加载number.json，使用简化计算')
+  return totalIncElementDmg + (totalStatAtk * 0.9)
     
   } catch (error) {
-    console.error('Error loading atk.json:', error)
+  console.error('Error loading number.json:', error)
     // 如果加载失败，返回之前的简化计算
-    return totalIncElementDmg + (totalStatAtk * 0.9)
+  return totalIncElementDmg + (totalStatAtk * 0.9)
   }
+}
+
+// 计算角色词条突破分的工具函数
+export const calculateCharacterStrengthNoSync = async (characterData: any, character: Character, rootData?: any): Promise<number> => {
+  console.log(`🎯 开始计算角色 ${characterData.id} (${characterData.name_cn}) 词条突破分`);
+  
+  if (!characterData || !characterData.equipments) {
+    console.log('❌ 角色数据缺失或没有装备数据');
+    return 0
+  }
+
+  let totalIncElementDmg = 0
+  let totalStatAtk = 0
+
+  // 遍历所有装备槽 (0-3)，统计属性
+  Object.entries(characterData.equipments).forEach(([slotIndex, equipmentSlot]) => {
+    if (Array.isArray(equipmentSlot)) {
+      equipmentSlot.forEach((equipment: any) => {
+        if (equipment.function_type === 'IncElementDmg') {
+          totalIncElementDmg += equipment.function_value || 0
+        } else if (equipment.function_type === 'StatAtk') {
+          totalStatAtk += equipment.function_value || 0
+        }
+      })
+    }
+  })
+
+  // 计算突破系数
+  const breakThrough = characterData.limit_break || {}
+  const grade = breakThrough.grade || 0
+  const core = breakThrough.core || 0
+  const breakthroughCoeff = 1 + (grade * 0.03) + (core * 0.02)
+
+  // 计算词条突破分（不带系数）：1 × (1 + StatAtk% / 100) × (1 + (IncElementDmg% + 10) / 100) × 突破系数
+  const baseScore = 1  // 基础分数为1
+  const scoreWithStatAtk = baseScore * (1 + totalStatAtk / 100)
+  const scoreWithElementDmg = scoreWithStatAtk * (1 + (totalIncElementDmg + 10) / 100)
+  const finalScore = scoreWithElementDmg * breakthroughCoeff
+  
+  console.log(`🏆 词条突破分计算: 
+    - 基础分数: ${baseScore}
+  - StatAtk(×0.9)加成后: ${scoreWithStatAtk.toFixed(3)} (+ ${totalStatAtk}% × 0.9)
+    - 元素伤害加成后: ${scoreWithElementDmg.toFixed(3)} (× ${(1 + totalIncElementDmg / 100).toFixed(3)})
+    - 词条突破分: ${finalScore.toFixed(3)} (× 突破系数: ${breakthroughCoeff.toFixed(3)})`);
+  
+  return finalScore
 }
 
 // 根据角色ID查找对应的JSON数据中的角色（从TeamBuilder提取）

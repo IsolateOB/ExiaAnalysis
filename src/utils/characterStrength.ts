@@ -36,28 +36,28 @@ export const calculateCharacterStrength = async (
   let syncAttack = 0
   try {
     // 在 Electron 环境中，尝试不同的路径
-    let atkResponse
-    let atkData
+  let atkResponse
+  let atkData
     
     // 首先尝试相对路径
     try {
-      atkResponse = await fetch('./atk.json')
+  atkResponse = await fetch('./number.json')
       if (atkResponse.ok) {
         atkData = await atkResponse.json()
       }
     } catch (error) {
-      console.log('atk.json 相对路径失败，尝试绝对路径')
+  console.log('number.json 相对路径失败，尝试绝对路径')
     }
     
     // 如果相对路径失败，尝试绝对路径
     if (!atkData) {
       try {
-        atkResponse = await fetch('/atk.json')
+  atkResponse = await fetch('/number.json')
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
       } catch (error) {
-        console.log('atk.json 绝对路径也失败')
+  console.log('number.json 绝对路径也失败')
       }
     }
     
@@ -65,12 +65,12 @@ export const calculateCharacterStrength = async (
     if (!atkData) {
       try {
         const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-        atkResponse = await fetch(`${baseUrl}/atk.json`)
+  atkResponse = await fetch(`${baseUrl}/number.json`)
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
       } catch (error) {
-        console.log('atk.json file:// 协议也失败')
+  console.log('number.json file:// 协议也失败')
       }
     }
     
@@ -117,7 +117,7 @@ export const calculateCharacterStrength = async (
       
       // 获取item攻击力
       let itemAttack = 0
-      const itemArray = atkData.item || []
+  const itemArray = atkData.item_atk || []
       if (characterData.item_rare === 'SSR') {
         // SSR按照SR最高等级计算（9688）
         itemAttack = 9688
@@ -128,10 +128,9 @@ export const calculateCharacterStrength = async (
         itemAttack = itemArray[itemIndex] || 0
       }
       
-      // 计算最终攻击力
+  // 计算最终攻击力（新公式）：[(SynchroAttack × 突破系数) + ItemAttack] × (1 + 0.9 × ΣStatAtk%/100) × (1 + ΣIncElementDmg%/100)
       const baseAttack = syncAttack * breakthroughCoeff + itemAttack
-      const attackWithStatAtk = baseAttack * (1 + totalStatAtk / 100)
-      const finalStrength = attackWithStatAtk * 0.9 * (1 + totalIncElementDmg / 100)
+      const finalStrength = baseAttack * (1 + totalStatAtk * 0.9 / 100) * (1 + totalIncElementDmg / 100)
       
       return finalStrength
     }
@@ -140,7 +139,7 @@ export const calculateCharacterStrength = async (
     return totalIncElementDmg + (totalStatAtk * 0.9)
     
   } catch (error) {
-    console.error('Error loading atk.json:', error)
+  console.error('Error loading number.json:', error)
     // 如果加载失败，返回之前的简化计算
     return totalIncElementDmg + (totalStatAtk * 0.9)
   }

@@ -4,13 +4,16 @@ import {
   Typography,
   Paper,
 } from '@mui/material'
-import { Character, TeamCharacter } from '../types'
+import { Character, TeamCharacter, AttributeCoefficients } from '../types'
 import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
+import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 
 interface TeamBuilderProps {
   baselineData?: any // 基线JSON数据
   targetData?: any   // 目标JSON数据
+  baselineScore?: Record<string, number>   // 基线词条突破分
+  targetScore?: Record<string, number>   // 目标词条突破分
   onTeamStrengthChange?: (baselineStrength: number, targetStrength: number) => void
 }
 
@@ -46,28 +49,28 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
   let syncAttack = 0
   try {
     // 在 Electron 环境中，尝试不同的路径
-    let atkResponse
-    let atkData
+  let atkResponse
+  let atkData
     
     // 首先尝试相对路径
     try {
-      atkResponse = await fetch('./atk.json')
+  atkResponse = await fetch('./number.json')
       if (atkResponse.ok) {
         atkData = await atkResponse.json()
       }
     } catch (error) {
-      console.log('atk.json 相对路径失败，尝试绝对路径')
+      console.log('number.json 相对路径失败，尝试绝对路径')
     }
     
     // 如果相对路径失败，尝试绝对路径
     if (!atkData) {
       try {
-        atkResponse = await fetch('/atk.json')
+  atkResponse = await fetch('/number.json')
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
       } catch (error) {
-        console.log('atk.json 绝对路径也失败')
+        console.log('number.json 绝对路径也失败')
       }
     }
     
@@ -75,12 +78,12 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
     if (!atkData) {
       try {
         const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-        atkResponse = await fetch(`${baseUrl}/atk.json`)
+  atkResponse = await fetch(`${baseUrl}/number.json`)
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
       } catch (error) {
-        console.log('atk.json file:// 协议也失败')
+        console.log('number.json file:// 协议也失败')
       }
     }
     
@@ -103,7 +106,7 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
       
       // 获取item攻击力
       let itemAttack = 0
-      const itemArray = atkData.item || []
+  const itemArray = atkData.item_atk || []
       if (characterData.item_rare === 'SSR') {
         // SSR按照SR最高等级计算（9688）
         itemAttack = 9688
@@ -116,23 +119,29 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
       
       // 计算最终攻击力
       const baseAttack = syncAttack * breakthroughCoeff + itemAttack
-      const attackWithStatAtk = baseAttack * (1 + totalStatAtk / 100)
-      const finalStrength = attackWithStatAtk * 0.9 * (1 + totalIncElementDmg / 100)
+  const attackWithStatAtk = baseAttack * (1 + 0.9 * totalStatAtk / 100)
+  const finalStrength = attackWithStatAtk * (1 + totalIncElementDmg / 100)
       
       return finalStrength
     }
     
-    // 如果没有加载到数据，返回简化计算
-    return totalIncElementDmg + (totalStatAtk * 0.9)
+    // 如果没有加载到数据，返回0
+    return 0
     
   } catch (error) {
-    console.error('Error loading atk.json:', error)
-    // 如果加载失败，返回之前的简化计算
-    return totalIncElementDmg + (totalStatAtk * 0.9)
+    console.error('Error loading number.json:', error)
+    // 如果加载失败，返回0
+    return 0
   }
 }
 
-const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onTeamStrengthChange }) => {
+const TeamBuilder: React.FC<TeamBuilderProps> = ({ 
+  baselineData, 
+  targetData, 
+  baselineScore = {}, 
+  targetScore = {}, 
+  onTeamStrengthChange 
+}) => {
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
     Array.from({ length: 5 }, (_, index) => ({
       position: index + 1,
@@ -143,11 +152,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const [selectedPosition, setSelectedPosition] = useState<number>(0)
   const [characterStrengths, setCharacterStrengths] = useState<{[position: number]: {baseline: number, target: number}}>({})
+  const [coefficientsMap, setCoefficientsMap] = useState<{[position: number]: AttributeCoefficients}>({})
+  const [rawMap, setRawMap] = useState<{[position: number]: { baseline?: any, target?: any }}>({})
 
   // 当team或数据变化时重新计算强度
   useEffect(() => {
     const calculateAllStrengths = async () => {
       const newStrengths: {[position: number]: {baseline: number, target: number}} = {}
+      const newRaw: {[position: number]: { baseline?: any, target?: any }} = {}
       let totalBaselineStrength = 0
       let totalTargetStrength = 0
       
@@ -156,10 +168,21 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
         return sum + (teamChar.damageCoefficient || 0)
       }, 0)
       
-      for (const teamChar of team) {
+    for (const teamChar of team) {
         if (teamChar.character) {
-          const strengths = await getCharacterStrengths(teamChar.character)
-          newStrengths[teamChar.position] = strengths
+      const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
+      const characterId = teamChar.character.id?.toString()
+      const baselineCharData = findCharacterDataById(characterId, baselineData)
+      const targetCharData = findCharacterDataById(characterId, targetData)
+      const baselineRaw = baselineCharData ? await computeRawAttributeScores(baselineCharData, teamChar.character, baselineData) : undefined
+      const targetRaw = targetCharData ? await computeRawAttributeScores(targetCharData, teamChar.character, targetData) : undefined
+      newRaw[teamChar.position] = { baseline: baselineRaw, target: targetRaw }
+          const baselineWeighted = baselineRaw ? computeWeightedStrength(baselineRaw, coeffs) : undefined
+          const targetWeighted = targetRaw ? computeWeightedStrength(targetRaw, coeffs) : undefined
+          const baselineValue = baselineWeighted ? (baselineWeighted.finalAtk + baselineWeighted.finalDef + baselineWeighted.finalHP) : 0
+          const targetValue = targetWeighted ? (targetWeighted.finalAtk + targetWeighted.finalDef + targetWeighted.finalHP) : 0
+      const strengths = { baseline: baselineValue, target: targetValue }
+      newStrengths[teamChar.position] = strengths
           
           // 如果系数总和为0，则所有角色都不贡献输出
           if (totalCoefficient > 0) {
@@ -174,7 +197,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
         }
       }
       
-      setCharacterStrengths(newStrengths)
+  setCharacterStrengths(newStrengths)
+  setRawMap(newRaw)
       
       // 回调给父组件
       if (onTeamStrengthChange) {
@@ -183,7 +207,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
     }
     
     calculateAllStrengths()
-  }, [team, baselineData, targetData, onTeamStrengthChange])
+  }, [team, baselineData, targetData, onTeamStrengthChange, coefficientsMap])
 
   const handleAddCharacter = (position: number) => {
     setSelectedPosition(position)
@@ -198,6 +222,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
           : teamChar
       )
     )
+    setCoefficientsMap(prev => ({
+      ...prev,
+      [selectedPosition]: prev[selectedPosition] || getDefaultCoefficients()
+    }))
     setFilterDialogOpen(false)
   }
 
@@ -219,6 +247,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
           : teamChar
       )
     )
+  }
+
+  const handleCoefficientsChange = (position: number, next: AttributeCoefficients) => {
+    setCoefficientsMap(prev => ({ ...prev, [position]: next }))
   }
 
   // 根据角色ID查找对应的JSON数据中的角色
@@ -253,63 +285,15 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
   }
 
   return (
-    <Paper
-      elevation={2}
-      sx={{
-        p: 1,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* 表头 */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          mb: 1,
-          px: 1,
-          flexShrink: 0,
-        }}
-      >
-        {/* 妮姬队伍表头 */}
-        <Box sx={{ flex: 1, minWidth: '180px' }}>
-          <Typography variant="body1" sx={{ textAlign: 'center', fontSize: '1.1rem' }}>
-            妮姬队伍
-          </Typography>
-        </Box>
-        
-        {/* 系数表头 */}
-        <Box sx={{ width: '100px', flexShrink: 0 }}>
-          <Typography variant="body1" sx={{ textAlign: 'center', fontSize: '1.1rem' }}>
-            系数
-          </Typography>
-        </Box>
-        
-        {/* 角色强度表头 */}
-        <Box sx={{ width: '200px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-          <Typography variant="body1" sx={{ textAlign: 'center', width: '100%', fontSize: '1.1rem' }}>
-            角色强度
-          </Typography>
-        </Box>
-      </Box>
-
-
-
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
+    <Paper elevation={2} sx={{ p: 1, height: '100%', overflow: 'auto' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {team.map((teamChar) => {
           const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }
-          return (
+          const baselineCharScore = baselineScore && teamChar.character ? baselineScore[teamChar.character.id] || 0 : 0
+          const targetCharScore = targetScore && teamChar.character ? targetScore[teamChar.character.id] || 0 : 0
+      const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
+      const raw = rawMap[teamChar.position] || {}
+      return (
             <CharacterCard
               key={teamChar.position}
               character={teamChar.character}
@@ -323,6 +307,12 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
               onDamageCoefficientChange={(value) => handleDamageCoefficientChange(teamChar.position, value)}
               baselineStrength={strengths.baseline}
               targetStrength={strengths.target}
+              baselineScore={baselineCharScore}
+              targetScore={targetCharScore}
+        coefficients={coeffs}
+        onCoefficientsChange={(next) => handleCoefficientsChange(teamChar.position, next)}
+        baselineRaw={raw.baseline}
+        targetRaw={raw.target}
             />
           )
         })}
@@ -333,7 +323,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({ baselineData, targetData, onT
         onClose={() => setFilterDialogOpen(false)}
         onSelectCharacter={handleSelectCharacter}
       />
-    </Paper>
+  </Paper>
   )
 }
 

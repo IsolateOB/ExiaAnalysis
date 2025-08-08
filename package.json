@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:vite\" \"npm run electron-dev\"",
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
-    "electron-dev": "concurrently \"npm run dev:vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron-dev": "wait-on http://localhost:5173 && electron .",
     "electron:dev": "npm run build:electron-src && electron .",
     "build": "npm run build:vite-only && npm run build:electron-src && electron-builder",
     "build:vite": "tsc && vite build",
@@ -65,14 +65,14 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "public/atk.json",
+      "public/number.json",
       "public/list.json",
       "!node_modules/**/*"
     ],
     "extraResources": [
       {
-        "from": "public/atk.json",
-        "to": "atk.json"
+        "from": "public/number.json",
+        "to": "number.json"
       },
       {
         "from": "public/list.json", 

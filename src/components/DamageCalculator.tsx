@@ -20,13 +20,15 @@ import {
 } from '@mui/icons-material'
 import * as XLSX from 'xlsx'
 import { AccountData, FileUploadState } from '../types'
-import { calculateCharacterStrength, createCharacterFromJsonData } from '../utils/teamUtils'
+import { calculateCharacterStrength, createCharacterFromJsonData, calculateCharacterStrengthNoSync } from '../utils/teamUtils'
 
 interface DamageCalculatorProps {
   onBaselineDataChange?: (data: any) => void
   onTargetDataChange?: (data: any) => void
   baselineTeamStrength?: number
   targetTeamStrength?: number
+  onBaselineScoreChange?: (scores: Record<string, number>) => void
+  onTargetScoreChange?: (scores: Record<string, number>) => void
   onStatusChange?: (status: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
 }
 
@@ -35,6 +37,8 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
   onTargetDataChange,
   baselineTeamStrength = 0,
   targetTeamStrength = 0,
+  onBaselineScoreChange,
+  onTargetScoreChange,
   onStatusChange
 }) => {
   const [baselineFile, setBaselineFile] = useState<FileUploadState>({
@@ -55,6 +59,39 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
 
   // 使用导入的工具函数，不需要重复定义
 
+  // 计算整个账号的角色词条突破分数据
+  const calculateAccountScores = async (accountData: any): Promise<{[characterId: string]: number}> => {
+    const results: {[characterId: string]: number} = {};
+    
+    console.log('🏆 开始计算账号词条突破分，账号数据:', accountData);
+    
+    // 处理角色数据 - 从elements对象中获取
+    if (accountData.elements) {
+      for (const [elementType, characters] of Object.entries(accountData.elements)) {
+        console.log(`🌟 处理元素类型: ${elementType}`);
+        if (Array.isArray(characters)) {
+          for (const character of characters) {
+            console.log(`🔍 计算角色 ${character.id} (${character.name_cn || character.name}) 的词条突破分`);
+            try {
+              // 将JSON数据转换为Character对象
+              const characterObj = createCharacterFromJsonData(character);
+              // 计算词条突破分
+              const score = await calculateCharacterStrengthNoSync(character, characterObj, accountData);
+              results[character.id] = score;
+              console.log(`✅ 角色 ${character.id} 词条突破分: ${score.toFixed(3)}`);
+            } catch (error) {
+              console.error(`❌ 计算角色 ${character.id} 词条突破分时出错:`, error);
+              results[character.id] = 0;
+            }
+          }
+        }
+      }
+    }
+    
+    console.log('📊 账号所有角色词条突破分结果:', results);
+    return results;
+  };
+
   // 计算整个账号的角色强度数据
   const calculateAccountStrengths = async (accountData: any): Promise<{[characterId: string]: number}> => {
     const results: {[characterId: string]: number} = {};
@@ -71,12 +108,12 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
             try {
               // 将JSON数据转换为Character对象
               const characterObj = createCharacterFromJsonData(character);
-              // 使用TeamBuilder中验证过的强度计算函数
-              const strength = await calculateCharacterStrength(character, characterObj, accountData);
+              // 批量处理使用无同步器强度计算
+              const strength = await calculateCharacterStrengthNoSync(character, characterObj, accountData);
               results[character.id] = strength;
-              console.log(`✅ 角色 ${character.id} 强度: ${strength.toFixed(1)}`);
+              console.log(`✅ 角色 ${character.id} 词条突破分: ${strength.toFixed(3)}`);
             } catch (error) {
-              console.error(`❌ 计算角色 ${character.id} 强度时出错:`, error);
+              console.error(`❌ 计算角色 ${character.id} 词条突破分时出错:`, error);
               results[character.id] = 0;
             }
           }
@@ -125,6 +162,17 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
 
         // 调用回调函数，传递解析后的JSON数据
         onDataChange?.(jsonData)
+        
+        // 计算词条突破分并传递给父组件
+        if (type === 'baseline' && onBaselineScoreChange) {
+          calculateAccountScores(jsonData).then(scores => {
+            onBaselineScoreChange(scores);
+          });
+        } else if (type === 'target' && onTargetScoreChange) {
+          calculateAccountScores(jsonData).then(scores => {
+            onTargetScoreChange(scores);
+          });
+        }
       } catch (error) {
         setState({
           isUploading: false,
@@ -386,10 +434,8 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
     if (baselineDamage > 0 && baselineTeamStrength > 0 && targetTeamStrength > 0) {
       // 计算队伍强度比值
       const strengthRatio = targetTeamStrength / baselineTeamStrength
-      // 对比例进行调整以缩小差异 - 使用平方根来减少极端值的影响
-      const adjustedRatio = strengthRatio > 1 
-        ? 1 + (strengthRatio - 1) * 0.7  // 如果比例大于1，缩小70%的增益
-        : 1 - (1 - strengthRatio) * 0.7  // 如果比例小于1，缩小70%的减益
+      // 使用对称幂函数缩小差异，保证A→B和B→A结果对称
+      const adjustedRatio = Math.pow(strengthRatio, 0.7)
       // 根据调整后的比值计算目标伤害
       const calculatedTargetDamage = baselineDamage * adjustedRatio
       setCalculatedDamage(calculatedTargetDamage)
