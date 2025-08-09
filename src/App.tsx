@@ -129,8 +129,8 @@ const App: React.FC = () => {
         {/* 主内容区域 */}
         <Box sx={{ flex: 1, overflow: 'hidden', p: 1 }}>
           <Grid container spacing={1} sx={{ height: '100%' }}>
-            <Grid size={{ xs: 12, md: 8 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
-              <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 720 }}>
+            <Grid size={{ xs: 12, md: 7 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
+              <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 560 }}>
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <TeamBuilder 
                     baselineData={baselineData}
@@ -143,7 +143,7 @@ const App: React.FC = () => {
                 </Box>
               </Box>
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
+            <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
               <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <DamageCalculator 

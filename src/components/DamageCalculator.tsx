@@ -1,11 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Typography, TextField, Button, Alert, LinearProgress, Divider, Paper, Chip } from '@mui/material'
-import {
-  CloudUpload as CloudUploadIcon,
-  Delete as DeleteIcon,
-  Calculate as CalculateIcon,
-  Assessment as AssessmentIcon,
-} from '@mui/icons-material'
+import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon, Assessment as AssessmentIcon } from '@mui/icons-material'
 import * as XLSX from 'xlsx'
 import { AccountData, FileUploadState } from '../types'
 import { calculateCharacterStrength, createCharacterFromJsonData, calculateCharacterStrengthNoSync } from '../utils/teamUtils'
@@ -47,7 +42,6 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
     status?: string
   }>({ isProcessing: false })
   const [baselineDamage, setBaselineDamage] = useState<number>(0)
-  const [calculatedDamage, setCalculatedDamage] = useState<number | null>(null)
 
   // 使用导入的工具函数，不需要重复定义
 
@@ -411,7 +405,6 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
     
     if (type === 'baseline') {
       setBaselineDamage(0)
-      setCalculatedDamage(null)
     }
   }, [])
 
@@ -421,14 +414,8 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
     setBatchProgress({ isProcessing: false });
   }, []);
 
-  // 计算伤害
-  const handleCalculate = useCallback(() => {
-    if (baselineDamage > 0) {
-      // 直接使用按角色比值加权得到的 teamScale 参与伤害换算
-      const calculatedTargetDamage = baselineDamage * teamScale
-      setCalculatedDamage(calculatedTargetDamage)
-    }
-  }, [baselineDamage, teamScale])
+  // 自动计算：基于当前基线伤害与强度比在渲染时直接得出
+  const calculatedDamage: number | null = baselineDamage > 0 ? baselineDamage * teamScale : null
 
   // 单个文件上传区域组件
   const FileUploadArea: React.FC<{
@@ -529,7 +516,7 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column' }}>
         <Typography variant="h6" gutterBottom sx={{ mb: 1 }}>
-          批量处理区域
+          攻优突破分批量处理
         </Typography>
         
         <Box
@@ -669,15 +656,7 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
                   }}
                 />
                 
-                <Button
-                  variant="contained"
-                  startIcon={<CalculateIcon />}
-                  onClick={handleCalculate}
-                  disabled={!baselineDamage || !teamScale}
-                  size="small"
-                >
-                  计算伤害
-                </Button>
+                {/* 已改为自动计算，无需按钮 */}
               </Box>
 
               {calculatedDamage !== null && (

@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, TextField, Button, IconButton, Tooltip, Toolbar, Stack, Divider, Autocomplete } from '@mui/material'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { Box, Typography, TextField, Button, IconButton, Tooltip, Toolbar, Stack, Divider, Autocomplete, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material'
 import { Character, TeamCharacter, AttributeCoefficients } from '../types'
 import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../utils/templates'
 import { Save as SaveIcon, FolderOpen as LoadIcon, Delete as DeleteIcon } from '@mui/icons-material'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import CheckIcon from '@mui/icons-material/Check'
 
 interface TeamBuilderProps {
   baselineData?: any // 基线JSON数据
@@ -156,9 +160,45 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [rawMap, setRawMap] = useState<{[position: number]: { baseline?: any, target?: any }}>({})
   // 模板管理
   const [templates, setTemplates] = useState<TeamTemplate[]>(() => listTemplates())
-  const [templateName, setTemplateName] = useState<string>('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const refreshTemplates = () => setTemplates(listTemplates())
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
+  const [menuTplId, setMenuTplId] = useState<string>('')
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null)
+  const [autoOpen, setAutoOpen] = useState(false)
+  const [lockOpen, setLockOpen] = useState(false)
+  const [acOpen, setAcOpen] = useState(false)
+
+  // 重命名状态
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameId, setRenameId] = useState<string>('')
+  const [renameValue, setRenameValue] = useState<string>('')
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
+
+  const openSettingsMenu = (e: React.MouseEvent<HTMLElement>, tplId: string) => {
+    e.stopPropagation()
+    e.preventDefault()
+    // 使用点击位置作为锚点，避免 Autocomplete 选项卸载导致锚点失效
+    setMenuPos({ left: e.clientX, top: e.clientY })
+    setMenuAnchor(null)
+    setMenuTplId(tplId)
+  // 打开菜单时锁定下拉保持展开
+  setLockOpen(true)
+  }
+  const closeSettingsMenu = () => {
+    setMenuAnchor(null)
+    setMenuTplId('')
+    setMenuPos(null)
+  // 关闭菜单时允许下拉恢复默认行为
+  setLockOpen(false)
+  }
+
+  const generateNextDefaultName = () => {
+    const existing = listTemplates().map(t => t.name)
+    let n = 1
+    while (existing.includes(`模板${n}`)) n++
+    return `模板${n}`
+  }
 
   // 载入 list.json 用于根据 id 还原 Character
   const [listData, setListData] = useState<any>(null)
@@ -321,13 +361,12 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const totalDamageCoefficient = team.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
     const tpl: TeamTemplate = {
       id,
-      name: templateName || `模板-${new Date().toLocaleString()}`,
+  name: generateNextDefaultName(),
       createdAt: Date.now(),
       members,
       totalDamageCoefficient,
     }
     saveTemplate(tpl)
-    setTemplateName('')
     refreshTemplates()
     setSelectedTemplateId(tpl.id)
   }
@@ -361,11 +400,57 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (tpl) applyTemplate(tpl)
   }
 
-  const handleDeleteTemplate = () => {
-    if (!selectedTemplateId) return
-    deleteTemplate(selectedTemplateId)
+  const handleDeleteTemplate = (id?: string) => {
+    const targetId = id || selectedTemplateId
+    if (!targetId) return
+    deleteTemplate(targetId)
     refreshTemplates()
-    setSelectedTemplateId('')
+    if (selectedTemplateId === targetId) setSelectedTemplateId('')
+  }
+
+  const startRenameTemplate = (id: string) => {
+    setIsRenaming(true)
+    setRenameId(id)
+  // 预填原名称
+  const tpl = templates.find(t => t.id === id) || listTemplates().find(t => t.id === id)
+  setRenameValue((tpl?.name || '').toString())
+    // 等待选项渲染后聚焦并选中
+    setTimeout(() => {
+      if (renameInputRef.current) {
+        renameInputRef.current.focus()
+        renameInputRef.current.select()
+      }
+    }, 0)
+  }
+
+  const confirmRename = () => {
+    const id = renameId
+    const name = renameValue.trim()
+    if (!id || !name) {
+      // 空名不提交，保持在编辑态
+      return
+    }
+    const list = listTemplates()
+    const tpl = list.find(t => t.id === id)
+    if (!tpl) return
+    tpl.name = name
+    saveTemplate(tpl)
+    refreshTemplates()
+    setSelectedTemplateId(id)
+    setIsRenaming(false)
+    setRenameId('')
+    setRenameValue('')
+    setLockOpen(false)
+  }
+
+  const handleDuplicateTemplate = (id: string) => {
+    const list = listTemplates()
+    const tpl = list.find(t => t.id === id)
+    if (!tpl) return
+    const copy: TeamTemplate = { ...tpl, id: Math.random().toString(36).slice(2), name: generateNextDefaultName(), createdAt: Date.now() }
+    saveTemplate(copy)
+    refreshTemplates()
+    setSelectedTemplateId(copy.id)
   }
 
   // 根据角色ID查找对应的JSON数据中的角色
@@ -414,7 +499,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       >
         <Typography variant="subtitle1" noWrap sx={{ fontWeight: 600, mr: 1 }}>队伍构建</Typography>
         <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-        {/* 左侧可伸缩分组：名称/保存/模板选择 */}
+  {/* 左侧可伸缩分组：保存/模板选择（移除名称输入） */}
     <Stack
           direction="row"
           spacing={1}
@@ -426,21 +511,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       mr: 0.5,
           }}
         >
-          <TextField
-            size="small"
-            label="模板名称"
-            value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
-            sx={{
-              flex: '1 1 180px',
-              minWidth: 160,
-              '& .MuiInputBase-input': {
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              },
-            }}
-          />
           <Tooltip title="保存当前队伍为模板">
             <span>
               <Button
@@ -460,7 +530,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             value={templates.find(t => t.id === selectedTemplateId) || null}
             isOptionEqualToValue={(opt, val) => opt.id === val.id}
             onChange={(e, val) => setSelectedTemplateId(val?.id ?? '')}
-            sx={{ flex: '1 1 220px', minWidth: 160 }}
+            sx={{ flex: '1 1 180px', minWidth: 140 }}
+            open={lockOpen || isRenaming ? true : acOpen}
+            onOpen={() => setAcOpen(true)}
+            onClose={(e, reason) => { if (lockOpen || isRenaming) return; setAcOpen(false) }}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -475,9 +548,49 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                 }}
               />
             )}
+            renderOption={(props, option) => (
+              <li {...props}>
+                {isRenaming && renameId === option.id ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>e.stopPropagation()}>
+                    <TextField
+                      size="small"
+                      placeholder="输入模板名称"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.stopPropagation(); confirmRename() }
+                        if (e.key === 'Escape') { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue(''); setLockOpen(false) }
+                      }}
+                      autoFocus
+                      inputRef={(el) => {
+                        renameInputRef.current = el
+                        if (el) { el.focus(); el.select() }
+                      }}
+                      sx={{ flex: 1 }}
+                    />
+                    <IconButton size="small" color="primary" onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>{ e.stopPropagation(); confirmRename() }}>
+                      <CheckIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, width: '100%', '&:hover .tpl-menu-btn': { opacity: 1 } }}>
+                    <Typography variant="body2" noWrap>{option.name}</Typography>
+                    <IconButton
+                      size="small"
+                      className="tpl-menu-btn"
+                      sx={{ opacity: 0, transition: 'opacity 0.2s' }}
+                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openSettingsMenu(e, option.id) }}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                )}
+              </li>
+            )}
           />
     </Stack>
-    {/* 右侧按钮组：不粘性，避免白底突兀与间距不均 */}
+    {/* 右侧按钮组：仅加载（删除移入选项菜单） */}
   <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'nowrap', flex: '0 0 auto', ml: 0, flexShrink: 0 }}>
           <Button
             variant="outlined"
@@ -487,11 +600,30 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             disabled={!selectedTemplateId}
             sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
           >加载</Button>
-          <IconButton aria-label="删除模板" size="small" color="error" onClick={handleDeleteTemplate} disabled={!selectedTemplateId} sx={{ flexShrink: 0 }}>
-            <DeleteIcon fontSize="small" />
-          </IconButton>
         </Stack>
   </Toolbar>
+  <Menu
+    anchorEl={menuAnchor}
+    open={Boolean(menuPos)}
+    onClose={closeSettingsMenu}
+    anchorReference={menuPos ? 'anchorPosition' : 'anchorEl'}
+    anchorPosition={menuPos ? { left: menuPos.left, top: menuPos.top } : undefined}
+    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+  >
+    <MenuItem onClick={() => { closeSettingsMenu(); if (menuTplId) startRenameTemplate(menuTplId) }}>
+      <ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
+      <ListItemText>重命名</ListItemText>
+    </MenuItem>
+    <MenuItem onClick={() => { closeSettingsMenu(); if (menuTplId) handleDuplicateTemplate(menuTplId) }}>
+      <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon>
+      <ListItemText>复制</ListItemText>
+    </MenuItem>
+    <MenuItem onClick={() => { closeSettingsMenu(); if (menuTplId) handleDeleteTemplate(menuTplId) }} sx={{ color: 'error.main' }}>
+      <ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
+      <ListItemText>删除</ListItemText>
+    </MenuItem>
+  </Menu>
   <Divider />
   <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
         <Stack spacing={1}>

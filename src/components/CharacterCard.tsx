@@ -124,7 +124,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
     <Paper variant="outlined" sx={{ width: '100%', pl: 1.25, pr: 0.75, minHeight: 84 }}>
       {/* 行卡头部：名称、简要信息、系数与指标汇总，单行展示（垂直居中） */}
   <Box sx={{ minHeight: 84, display: 'flex', alignItems: 'center' }}>
-  <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) 120px minmax(170px, 1.25fr) auto', alignItems: 'center', columnGap: 0.25, width: '100%' }}>
+  <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 0.7fr) 100px minmax(170px, 1.2fr) 64px', alignItems: 'center', columnGap: 0.25, width: '100%' }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minWidth: 0 }}>
           <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{character.name_cn}</Typography>
           <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
@@ -133,7 +133,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
           <TextField
-            label="伤害系数"
+            label="总系数"
             type="number"
             size="small"
             value={damageCoefficient}
@@ -142,23 +142,23 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
               onDamageCoefficientChange?.(isNaN(value) ? 0 : Math.round(value * 100) / 100)
             }}
             slotProps={{ input: { inputProps: { step: 0.01, min: 0, max: 99.99 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-            sx={{ width: 80 }}
+            sx={{ width: 72 }}
           />
         </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: 180 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: 170 }}>
           <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>攻优突破分</Typography>
           <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>综合强度</Typography>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{baselineScore.toFixed(2)} → {targetScore.toFixed(2)}</Typography>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{baselineStrength.toFixed(1)} → {targetStrength.toFixed(1)}</Typography>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)}→${targetScore.toFixed(2)}`}</Typography>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
         </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minWidth: 64, flexShrink: 0 }}>
           <Tooltip title={openDetails ? '收起详情' : '展开详情'}>
-            <IconButton size="small" onClick={() => setOpenDetails(v => !v)}>
+            <IconButton size="small" onClick={() => setOpenDetails(v => !v)} sx={{ p: 0.2, m: 0 }}>
               <ExpandMore sx={{ fontSize: 18, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </IconButton>
           </Tooltip>
           {onRemoveCharacter && (
-            <IconButton size="small" onClick={onRemoveCharacter} sx={{ color: 'error.main', p: 0.2 }}>
+            <IconButton size="small" onClick={onRemoveCharacter} sx={{ color: 'error.main', p: 0.2, m: 0 }}>
               <Delete sx={{ fontSize: 16 }} />
             </IconButton>
           )}
@@ -176,7 +176,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             <Box />
             <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
             <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>系数</Typography>
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>属性系数</Typography>
 
             {/* 基础攻击 */}
             <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础攻击</Typography>
