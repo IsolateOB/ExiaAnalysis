@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import {
-  Box,
-  Typography,
-  Paper,
-  TextField,
-  Button,
-  Select,
-  MenuItem,
-  IconButton,
-  Tooltip,
-} from '@mui/material'
+import { Box, Typography, TextField, Button, IconButton, Tooltip, Toolbar, Stack, Divider, Autocomplete } from '@mui/material'
 import { Character, TeamCharacter, AttributeCoefficients } from '../types'
 import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
@@ -20,8 +10,8 @@ import { Save as SaveIcon, FolderOpen as LoadIcon, Delete as DeleteIcon } from '
 interface TeamBuilderProps {
   baselineData?: any // 基线JSON数据
   targetData?: any   // 目标JSON数据
-  baselineScore?: Record<string, number>   // 基线词条突破分
-  targetScore?: Record<string, number>   // 目标词条突破分
+  baselineScore?: Record<string, number>   // 基线攻优突破分
+  targetScore?: Record<string, number>   // 目标攻优突破分
   onTeamStrengthChange?: (baselineStrength: number, targetStrength: number) => void
   onTeamRatioChange?: (scale: number, ratioLabel: string) => void
 }
@@ -410,51 +400,101 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }
 
   return (
-    <Paper elevation={2} sx={{ p: 1, height: '100%', overflow: 'auto' }}>
-      {/* 模板工具条 */}
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
-        <TextField
-          size="small"
-          label="模板名称"
-          value={templateName}
-          onChange={(e) => setTemplateName(e.target.value)}
-          sx={{ width: 200 }}
-        />
-        <Tooltip title="保存当前队伍为模板">
-          <span>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveTemplate}
-              disabled={templates.length >= 200}
-            >保存</Button>
-          </span>
-        </Tooltip>
-        <Select
-          size="small"
-          displayEmpty
-          value={selectedTemplateId}
-          onChange={(e) => setSelectedTemplateId(String(e.target.value))}
-          sx={{ minWidth: 200 }}
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Toolbar
+        variant="dense"
+        sx={{
+          pl: 1,
+          pr: 0.5,
+          gap: 1,
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          alignItems: 'center',
+        }}
+      >
+        <Typography variant="subtitle1" noWrap sx={{ fontWeight: 600, mr: 1 }}>队伍构建</Typography>
+        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+        {/* 左侧可伸缩分组：名称/保存/模板选择 */}
+    <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          sx={{
+            flexWrap: 'nowrap',
+            flex: 1,
+            minWidth: 0,
+      mr: 0.5,
+          }}
         >
-          <MenuItem value=""><em>选择模板</em></MenuItem>
-          {templates.map(t => (
-            <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
-          ))}
-        </Select>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<LoadIcon />}
-          onClick={handleLoadTemplate}
-          disabled={!selectedTemplateId}
-        >加载</Button>
-        <IconButton size="small" color="error" onClick={handleDeleteTemplate} disabled={!selectedTemplateId}>
-          <DeleteIcon fontSize="small" />
-        </IconButton>
-      </Box>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <TextField
+            size="small"
+            label="模板名称"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            sx={{
+              flex: '1 1 180px',
+              minWidth: 160,
+              '& .MuiInputBase-input': {
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              },
+            }}
+          />
+          <Tooltip title="保存当前队伍为模板">
+            <span>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveTemplate}
+                disabled={templates.length >= 200}
+                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+              >保存</Button>
+            </span>
+          </Tooltip>
+          <Autocomplete
+            size="small"
+            options={templates}
+            getOptionLabel={(t) => t?.name ?? ''}
+            value={templates.find(t => t.id === selectedTemplateId) || null}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            onChange={(e, val) => setSelectedTemplateId(val?.id ?? '')}
+            sx={{ flex: '1 1 220px', minWidth: 160 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="选择模板"
+                inputProps={{ ...params.inputProps, 'aria-label': '选择模板' }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                }}
+              />
+            )}
+          />
+    </Stack>
+    {/* 右侧按钮组：不粘性，避免白底突兀与间距不均 */}
+  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'nowrap', flex: '0 0 auto', ml: 0, flexShrink: 0 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<LoadIcon />}
+            onClick={handleLoadTemplate}
+            disabled={!selectedTemplateId}
+            sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+          >加载</Button>
+          <IconButton aria-label="删除模板" size="small" color="error" onClick={handleDeleteTemplate} disabled={!selectedTemplateId} sx={{ flexShrink: 0 }}>
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+  </Toolbar>
+  <Divider />
+  <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
+        <Stack spacing={1}>
         {team.map((teamChar) => {
           const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }
           const baselineCharScore = baselineScore && teamChar.character ? baselineScore[teamChar.character.id] || 0 : 0
@@ -484,14 +524,15 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             />
           )
         })}
+        </Stack>
       </Box>
 
-      <CharacterFilterDialog
+    <CharacterFilterDialog
         open={filterDialogOpen}
         onClose={() => setFilterDialogOpen(false)}
         onSelectCharacter={handleSelectCharacter}
       />
-  </Paper>
+  </Box>
   )
 }
 

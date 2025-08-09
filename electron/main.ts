@@ -30,7 +30,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
-    minWidth: 1000,
+  minWidth: 1200,
     minHeight: 650,
     frame: false, // 去掉原生标题栏
     webPreferences: {

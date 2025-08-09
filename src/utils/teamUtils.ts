@@ -216,9 +216,9 @@ export const calculateCharacterStrength = async (characterData: any, character: 
   }
 }
 
-// 计算角色词条突破分的工具函数
+// 计算角色攻优突破分的工具函数
 export const calculateCharacterStrengthNoSync = async (characterData: any, character: Character, rootData?: any): Promise<number> => {
-  console.log(`🎯 开始计算角色 ${characterData.id} (${characterData.name_cn}) 词条突破分`);
+  console.log(`🎯 开始计算角色 ${characterData.id} (${characterData.name_cn}) 攻优突破分`);
   
   if (!characterData || !characterData.equipments) {
     console.log('❌ 角色数据缺失或没有装备数据');
@@ -247,17 +247,17 @@ export const calculateCharacterStrengthNoSync = async (characterData: any, chara
   const core = breakThrough.core || 0
   const breakthroughCoeff = 1 + (grade * 0.03) + (core * 0.02)
 
-  // 计算词条突破分（不带系数）：1 × (1 + 0.9 × StatAtk% / 100) × (1 + (IncElementDmg% + 10) / 100) × 突破系数
+  // 计算攻优突破分（不带系数）：1 × (1 + 0.9 × StatAtk% / 100) × (1 + (IncElementDmg% + 10) / 100) × 突破系数
   const baseScore = 1  // 基础分数为1
   const scoreWithStatAtk = baseScore * (1 + 0.9 * totalStatAtk / 100)
   const scoreWithElementDmg = scoreWithStatAtk * (1 + (totalIncElementDmg + 10) / 100)
   const finalScore = scoreWithElementDmg * breakthroughCoeff
   
-  console.log(`🏆 词条突破分计算: 
+  console.log(`🏆 攻优突破分计算: 
     - 基础分数: ${baseScore}
     - StatAtk(×0.9)加成后: ${scoreWithStatAtk.toFixed(3)} (+ ${totalStatAtk}% × 0.9)
     - 元素伤害加成后: ${scoreWithElementDmg.toFixed(3)} (× ${(1 + (totalIncElementDmg + 10) / 100).toFixed(3)})
-    - 词条突破分: ${finalScore.toFixed(3)} (× 突破系数: ${breakthroughCoeff.toFixed(3)})`);
+  - 攻优突破分: ${finalScore.toFixed(3)} (× 突破系数: ${breakthroughCoeff.toFixed(3)})`);
   
   return finalScore
 }

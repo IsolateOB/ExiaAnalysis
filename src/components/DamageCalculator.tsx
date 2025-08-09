@@ -1,17 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Alert,
-  LinearProgress,
-  Divider,
-  Paper,
-  Chip,
-} from '@mui/material'
+import { Box, Typography, TextField, Button, Alert, LinearProgress, Divider, Paper, Chip } from '@mui/material'
 import {
   CloudUpload as CloudUploadIcon,
   Delete as DeleteIcon,
@@ -63,11 +51,11 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
 
   // 使用导入的工具函数，不需要重复定义
 
-  // 计算整个账号的角色词条突破分数据
+  // 计算整个账号的角色攻优突破分数据
   const calculateAccountScores = async (accountData: any): Promise<{[characterId: string]: number}> => {
     const results: {[characterId: string]: number} = {};
     
-    console.log('🏆 开始计算账号词条突破分，账号数据:', accountData);
+  console.log('🏆 开始计算账号攻优突破分，账号数据:', accountData);
     
     // 处理角色数据 - 从elements对象中获取
     if (accountData.elements) {
@@ -75,16 +63,16 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
         console.log(`🌟 处理元素类型: ${elementType}`);
         if (Array.isArray(characters)) {
           for (const character of characters) {
-            console.log(`🔍 计算角色 ${character.id} (${character.name_cn || character.name}) 的词条突破分`);
+            console.log(`🔍 计算角色 ${character.id} (${character.name_cn || character.name}) 的攻优突破分`);
             try {
               // 将JSON数据转换为Character对象
               const characterObj = createCharacterFromJsonData(character);
-              // 计算词条突破分
+              // 计算攻优突破分
               const score = await calculateCharacterStrengthNoSync(character, characterObj, accountData);
               results[character.id] = score;
-              console.log(`✅ 角色 ${character.id} 词条突破分: ${score.toFixed(3)}`);
+              console.log(`✅ 角色 ${character.id} 攻优突破分: ${score.toFixed(3)}`);
             } catch (error) {
-              console.error(`❌ 计算角色 ${character.id} 词条突破分时出错:`, error);
+              console.error(`❌ 计算角色 ${character.id} 攻优突破分时出错:`, error);
               results[character.id] = 0;
             }
           }
@@ -92,7 +80,7 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
       }
     }
     
-    console.log('📊 账号所有角色词条突破分结果:', results);
+  console.log('📊 账号所有角色攻优突破分结果:', results);
     return results;
   };
 
@@ -115,9 +103,9 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
               // 批量处理使用无同步器强度计算
               const strength = await calculateCharacterStrengthNoSync(character, characterObj, accountData);
               results[character.id] = strength;
-              console.log(`✅ 角色 ${character.id} 词条突破分: ${strength.toFixed(3)}`);
+              console.log(`✅ 角色 ${character.id} 攻优突破分: ${strength.toFixed(3)}`);
             } catch (error) {
-              console.error(`❌ 计算角色 ${character.id} 词条突破分时出错:`, error);
+              console.error(`❌ 计算角色 ${character.id} 攻优突破分时出错:`, error);
               results[character.id] = 0;
             }
           }
@@ -167,7 +155,7 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
         // 调用回调函数，传递解析后的JSON数据
         onDataChange?.(jsonData)
         
-        // 计算词条突破分并传递给父组件
+  // 计算攻优突破分并传递给父组件
         if (type === 'baseline' && onBaselineScoreChange) {
           calculateAccountScores(jsonData).then(scores => {
             onBaselineScoreChange(scores);
@@ -448,8 +436,8 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
     type: 'baseline' | 'target'
     fileState: FileUploadState
   }> = ({ title, type, fileState }) => (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column' }}>
         <Typography variant="subtitle1" gutterBottom sx={{ fontSize: '0.9rem', mb: 0.5 }}>
           {title}
         </Typography>
@@ -532,14 +520,14 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
             </Box>
           )}
         </Box>
-      </CardContent>
-    </Card>
+      </Box>
+    </Box>
   )
 
   // 批量上传区域组件
   const BatchUploadArea: React.FC = () => (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column' }}>
         <Typography variant="h6" gutterBottom sx={{ mb: 1 }}>
           批量处理区域
         </Typography>
@@ -626,8 +614,8 @@ const DamageCalculator: React.FC<DamageCalculatorProps> = ({
             清空
           </Button>
         </Box>
-      </CardContent>
-    </Card>
+      </Box>
+    </Box>
   )
 
   return (

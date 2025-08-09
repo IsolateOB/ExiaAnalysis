@@ -6,10 +6,10 @@ import {
   Box,
   Snackbar,
   Alert,
-  Grid,
   Paper,
   Typography,
 } from '@mui/material'
+import { Grid } from '@mui/material'
 import CustomTitleBar from './components/CustomTitleBar'
 import TeamBuilder from './components/TeamBuilder'
 import DamageCalculator from './components/DamageCalculator'
@@ -31,11 +31,34 @@ const theme = createTheme({
   typography: {
     fontFamily: '"Roboto", "Microsoft YaHei", "PingFang SC", sans-serif',
   },
+  shape: { borderRadius: 8 },
   components: {
+    MuiTextField: {
+      defaultProps: { size: 'small' },
+    },
+    MuiSelect: {
+      defaultProps: { size: 'small' },
+    },
+    MuiAutocomplete: {
+      defaultProps: { size: 'small' },
+    },
+    MuiIconButton: {
+      defaultProps: { size: 'small' },
+    },
     MuiButton: {
+      defaultProps: { size: 'small' },
       styleOverrides: {
         root: {
           textTransform: 'none',
+        },
+      },
+    },
+    MuiPaper: {
+      defaultProps: { variant: 'outlined' },
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+          borderColor: '#e5e7eb',
         },
       },
     },
@@ -106,9 +129,8 @@ const App: React.FC = () => {
         {/* 主内容区域 */}
         <Box sx={{ flex: 1, overflow: 'hidden', p: 1 }}>
           <Grid container spacing={1} sx={{ height: '100%' }}>
-            <Grid size={{ xs: 12, md: 7 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
-              <Paper sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <Typography variant="h6" sx={{ mb: 1 }}>队伍构建</Typography>
+            <Grid size={{ xs: 12, md: 8 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
+              <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 720 }}>
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <TeamBuilder 
                     baselineData={baselineData}
@@ -119,11 +141,10 @@ const App: React.FC = () => {
                     onTeamRatioChange={handleTeamRatioChange}
                   />
                 </Box>
-              </Paper>
+              </Box>
             </Grid>
-            <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
-              <Paper sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <Typography variant="h6" sx={{ mb: 1 }}>伤害计算</Typography>
+            <Grid size={{ xs: 12, md: 4 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
+              <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <DamageCalculator 
                     onBaselineDataChange={setBaselineData}
@@ -137,7 +158,7 @@ const App: React.FC = () => {
                     onStatusChange={handleStatusChange}
                   />
                 </Box>
-              </Paper>
+              </Box>
             </Grid>
           </Grid>
         </Box>
