@@ -8,7 +8,7 @@ import {
   TextField,
 } from '@mui/material'
 import { Add, Delete } from '@mui/icons-material'
-import { Character, AttributeCoefficients, RawAttributeScores } from '../types'
+import { Character, AttributeCoefficients, RawAttributeScores, AttributeKey } from '../types'
 import { ExpandMore } from '@mui/icons-material'
 import { Collapse, Divider, Tooltip } from '@mui/material'
 
@@ -58,7 +58,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
     hp: '生命',
   }
 
-  const percentKeys: (keyof AttributeCoefficients)[] = [
+  const percentKeys: Exclude<AttributeKey, 'hp'>[] = [
     'IncElementDmg',
     'StatAtk',
     'StatAmmoLoad',
@@ -221,46 +221,46 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
       {/* 详情折叠区 */}
       <Collapse in={openDetails} timeout="auto" unmountOnExit>
         <Divider sx={{ mx: 1 }} />
-        <Box sx={{ p: 1.25, display: 'flex', gap: 1 }}>
-          {/* 左：原始分（不乘系数） */}
-          <Box sx={{ flex: 7 }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>原始分（不乘系数）</Typography>
-            <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: 0.25 }}>
-              <Box />
-              <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
-              <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
-              {/* 基础攻防血 */}
-              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础攻击</Typography>
-              <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseAttack != null ? Math.round(baselineRaw.baseAttack).toString() : '-'}</Typography>
-              <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseAttack != null ? Math.round(targetRaw.baseAttack).toString() : '-'}</Typography>
-              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础防御</Typography>
-              <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseDefense != null ? Math.round(baselineRaw.baseDefense).toString() : '-'}</Typography>
-              <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseDefense != null ? Math.round(targetRaw.baseDefense).toString() : '-'}</Typography>
-              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础生命</Typography>
-              <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseHP != null ? Math.round(baselineRaw.baseHP).toString() : '-'}</Typography>
-              <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseHP != null ? Math.round(targetRaw.baseHP).toString() : '-'}</Typography>
-              {/* 百分比词条合计 */}
-              {percentKeys.map((k) => (
-                <React.Fragment key={k}>
-                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{labels[k]}</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>
-                    {baselineRaw?.totals?.[k as any] != null ? `${baselineRaw?.totals?.[k as any].toFixed(2)}%` : '-'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>
-                    {targetRaw?.totals?.[k as any] != null ? `${targetRaw?.totals?.[k as any].toFixed(2)}%` : '-'}
-                  </Typography>
-                </React.Fragment>
-              ))}
-            </Box>
-          </Box>
-          {/* 右：系数编辑 */}
-          <Box sx={{ flex: 5 }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>属性系数（默认：优越=1，攻击=0.9，其余=0，生命=0）</Typography>
-            <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '1fr 80px', gap: 0.5 }}>
-              {coefficients && (
-                (Object.keys(coefficients) as (keyof AttributeCoefficients)[]).map((k) => (
-                  <React.Fragment key={k}>
-                    <Typography variant="body2" sx={{ fontSize: '0.8rem', alignSelf: 'center' }}>{labels[k]}</Typography>
+        <Box sx={{ p: 1.25 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>原始分（不乘系数）与属性系数</Typography>
+          {/* 统一对齐表格：属性名 | 基线 | 目标 | 系数 */}
+          <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '110px 1fr 1fr 90px', alignItems: 'center', gap: 0.5 }}>
+            <Box />
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>系数</Typography>
+
+            {/* 基础攻击 */}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础攻击</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseAttack != null ? Math.round(baselineRaw.baseAttack).toString() : '-'}</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseAttack != null ? Math.round(targetRaw.baseAttack).toString() : '-'}</Typography>
+            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
+
+            {/* 基础防御 */}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础防御</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseDefense != null ? Math.round(baselineRaw.baseDefense).toString() : '-'}</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseDefense != null ? Math.round(targetRaw.baseDefense).toString() : '-'}</Typography>
+            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
+
+            {/* 基础生命 */}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础生命</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseHP != null ? Math.round(baselineRaw.baseHP).toString() : '-'}</Typography>
+            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseHP != null ? Math.round(targetRaw.baseHP).toString() : '-'}</Typography>
+            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
+
+            {/* 百分比类词条行，与系数输入对齐 */}
+            {percentKeys.map((k) => (
+              <React.Fragment key={k}>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{labels[k]}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>
+                  {baselineRaw?.totals?.[k] != null ? `${baselineRaw?.totals?.[k].toFixed(2)}%` : '-'}
+                </Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>
+                  {targetRaw?.totals?.[k] != null ? `${targetRaw?.totals?.[k].toFixed(2)}%` : '-'}
+                </Typography>
+                {/* 系数输入（不再显示属性名，只显示输入框） */}
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  {coefficients && (
                     <TextField
                       type="number"
                       size="small"
@@ -272,9 +272,32 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                         onCoefficientsChange(next)
                       }}
                       inputProps={{ step: 0.1 }}
+                      sx={{ width: 80 }}
                     />
-                  </React.Fragment>
-                ))
+                  )}
+                </Box>
+              </React.Fragment>
+            ))}
+
+            {/* 生命（系数）单独一行对齐 */}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>生命（系数）</Typography>
+            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
+            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              {coefficients && (
+                <TextField
+                  type="number"
+                  size="small"
+                  value={coefficients.hp}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (!onCoefficientsChange) return
+                    const next = { ...coefficients, hp: isNaN(v) ? 0 : v }
+                    onCoefficientsChange(next)
+                  }}
+                  inputProps={{ step: 0.1 }}
+                  sx={{ width: 80 }}
+                />
               )}
             </Box>
           </Box>

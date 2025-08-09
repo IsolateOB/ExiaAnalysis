@@ -268,7 +268,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   onTeamStrengthChange?.(totalBaselineStrength, totalTargetStrength)
   // 回调：比值（用于伤害计算和展示），按角色比值加权平均
   const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
-  const label = scale > 0 ? `${(1/scale).toFixed(2)} : 1` : '—'
+  const label = scale > 0 ? `${scale.toFixed(2)} : 1` : '—'
   onTeamRatioChange?.(scale, label)
     }
     

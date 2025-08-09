@@ -247,16 +247,16 @@ export const calculateCharacterStrengthNoSync = async (characterData: any, chara
   const core = breakThrough.core || 0
   const breakthroughCoeff = 1 + (grade * 0.03) + (core * 0.02)
 
-  // 计算词条突破分（不带系数）：1 × (1 + StatAtk% / 100) × (1 + (IncElementDmg% + 10) / 100) × 突破系数
+  // 计算词条突破分（不带系数）：1 × (1 + 0.9 × StatAtk% / 100) × (1 + (IncElementDmg% + 10) / 100) × 突破系数
   const baseScore = 1  // 基础分数为1
-  const scoreWithStatAtk = baseScore * (1 + totalStatAtk / 100)
+  const scoreWithStatAtk = baseScore * (1 + 0.9 * totalStatAtk / 100)
   const scoreWithElementDmg = scoreWithStatAtk * (1 + (totalIncElementDmg + 10) / 100)
   const finalScore = scoreWithElementDmg * breakthroughCoeff
   
   console.log(`🏆 词条突破分计算: 
     - 基础分数: ${baseScore}
-  - StatAtk(×0.9)加成后: ${scoreWithStatAtk.toFixed(3)} (+ ${totalStatAtk}% × 0.9)
-    - 元素伤害加成后: ${scoreWithElementDmg.toFixed(3)} (× ${(1 + totalIncElementDmg / 100).toFixed(3)})
+    - StatAtk(×0.9)加成后: ${scoreWithStatAtk.toFixed(3)} (+ ${totalStatAtk}% × 0.9)
+    - 元素伤害加成后: ${scoreWithElementDmg.toFixed(3)} (× ${(1 + (totalIncElementDmg + 10) / 100).toFixed(3)})
     - 词条突破分: ${finalScore.toFixed(3)} (× 突破系数: ${breakthroughCoeff.toFixed(3)})`);
   
   return finalScore

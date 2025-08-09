@@ -37,6 +37,32 @@ const loadNumberJson = async (): Promise<any | null> => {
 
 // 从 JSON 账号数据中聚合装备词条
 const aggregateEquipStats = (characterData: any) => {
+  // 同义键映射，容错不同数据源的命名差异
+  const alias: Record<string, string | 'ignore'> = {
+    // 防御
+    StatDefense: 'StatDef',
+    Defense: 'StatDef',
+    Def: 'StatDef',
+    Defence: 'StatDef',
+    StatDefence: 'StatDef',
+    // 暴击
+    Crit: 'StatCritical',
+    CritRate: 'StatCritical',
+    CriticalRate: 'StatCritical',
+    // 暴伤
+    CritDmg: 'StatCriticalDamage',
+    CriticalDamage: 'StatCriticalDamage',
+    // 命中/准星
+    Accuracy: 'StatAccuracyCircle',
+    Hit: 'StatAccuracyCircle',
+    // 弹量
+    Ammo: 'StatAmmoLoad',
+    AmmoLoad: 'StatAmmoLoad',
+    // 蓄力
+    ChargeTime: 'StatChargeTime',
+    ChargeSpeed: 'StatChargeTime',
+    ChargeDamage: 'StatChargeDamage',
+  }
   const totals: Record<string, number> = {
     IncElementDmg: 0,
     StatAtk: 0,
@@ -52,7 +78,14 @@ const aggregateEquipStats = (characterData: any) => {
   Object.values(characterData.equipments).forEach((slot: any) => {
     if (Array.isArray(slot)) {
       slot.forEach((e: any) => {
-        const k = e.function_type as string
+        let k = e.function_type as string
+        // 归一化键名
+        if (!(k in totals) && k in alias) {
+          const mapped = alias[k]
+          if (mapped && mapped !== 'ignore') {
+            k = mapped
+          }
+        }
         if (k in totals) totals[k] += e.function_value || 0
       })
     }
@@ -146,11 +179,27 @@ export const computeWeightedStrength = (
   // 攻击/元素增伤等按乘法累乘
   const atkFactor = 1 + (coeffs.StatAtk * raw.totals.StatAtk) / 100
   const elemFactor = 1 + (coeffs.IncElementDmg * raw.totals.IncElementDmg) / 100
-  const finalAtk = raw.baseAttack * atkFactor * elemFactor
+  // 其余进攻相关百分比词条作为附加乘法因子（通用加权），默认系数为0时不影响
+  const miscKeys: (keyof AttributeCoefficients)[] = [
+    'StatAmmoLoad',
+    'StatChargeTime',
+    'StatChargeDamage',
+    'StatCritical',
+    'StatCriticalDamage',
+    'StatAccuracyCircle',
+  ]
+  const miscFactor = miscKeys.reduce((acc, k) => {
+    const total = (raw.totals as any)?.[k] ?? 0
+    const coeff = (coeffs as any)?.[k] ?? 0
+    return acc * (1 + (coeff * total) / 100)
+  }, 1)
 
-  // 防御：与攻击类似，使用 StatDef 百分比
-  const defFactor = 1 + (coeffs.StatDef * raw.totals.StatDef) / 100
-  const finalDef = raw.baseDefense * defFactor
+  const finalAtk = raw.baseAttack * atkFactor * elemFactor * miscFactor
+
+  // 防御：默认不计入（系数为0），当系数>0时按“轴权重×(1+防御%)”计入
+  const defAxis = Math.max(0, coeffs.StatDef || 0)
+  const defFactor = 1 + (raw.totals.StatDef || 0) / 100
+  const finalDef = raw.baseDefense * defAxis * defFactor
 
   // HP：无词条，仅同步器+item 乘以 hp 系数
   const finalHP = raw.baseHP * (coeffs.hp || 0)
