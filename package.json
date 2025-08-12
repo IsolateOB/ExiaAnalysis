@@ -1,6 +1,6 @@
 {
   "name": "damage-estimate",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Nikke 伤害估算器桌面应用",
   "main": "dist-electron/main.js",
   "scripts": {

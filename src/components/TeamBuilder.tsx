@@ -169,6 +169,16 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [lockOpen, setLockOpen] = useState(false)
   const [acOpen, setAcOpen] = useState(false)
 
+  // 统一补全/迁移系数：新增基础轴属性系数，迁移旧 hp -> axisHP
+  const normalizeCoefficients = (c?: AttributeCoefficients): AttributeCoefficients => {
+    const base: any = c ? { ...c } : getDefaultCoefficients()
+    if (base.axisAttack == null) base.axisAttack = 1
+    if (base.axisDefense == null) base.axisDefense = 0
+    if (base.axisHP == null) base.axisHP = base.hp ? base.hp : 0
+    if (base.hp == null) base.hp = 0 // 保持字段存在以兼容保存结构
+    return base as AttributeCoefficients
+  }
+
   // 重命名状态
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameId, setRenameId] = useState<string>('')
@@ -320,7 +330,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     )
     setCoefficientsMap(prev => ({
       ...prev,
-      [selectedPosition]: prev[selectedPosition] || getDefaultCoefficients()
+      [selectedPosition]: normalizeCoefficients(prev[selectedPosition])
     }))
     setFilterDialogOpen(false)
   }
@@ -350,18 +360,20 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }
 
   // 模板保存
-  const handleSaveTemplate = () => {
-    const id = Math.random().toString(36).slice(2)
+  // 新建模板
+  const handleCreateTemplate = () => {
     const members = team.map(t => ({
       position: t.position,
       characterId: t.character ? String(t.character.id) : undefined,
       damageCoefficient: t.damageCoefficient || 0,
-      coefficients: coefficientsMap[t.position] || getDefaultCoefficients(),
+      coefficients: normalizeCoefficients(coefficientsMap[t.position]),
     }))
     const totalDamageCoefficient = team.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
+    // 新建
+    const id = Math.random().toString(36).slice(2)
     const tpl: TeamTemplate = {
       id,
-  name: generateNextDefaultName(),
+      name: generateNextDefaultName(),
       createdAt: Date.now(),
       members,
       totalDamageCoefficient,
@@ -369,6 +381,25 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     saveTemplate(tpl)
     refreshTemplates()
     setSelectedTemplateId(tpl.id)
+  }
+
+  // 覆盖当前选中模板
+  const handleOverwriteTemplate = () => {
+    if (!selectedTemplateId) return
+    const list = listTemplates()
+    const existing = list.find(t => t.id === selectedTemplateId)
+    if (!existing) return
+    const members = team.map(t => ({
+      position: t.position,
+      characterId: t.character ? String(t.character.id) : undefined,
+      damageCoefficient: t.damageCoefficient || 0,
+      coefficients: normalizeCoefficients(coefficientsMap[t.position]),
+    }))
+    existing.members = members
+    existing.totalDamageCoefficient = team.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
+    ;(existing as any).updatedAt = Date.now()
+    saveTemplate(existing)
+    refreshTemplates()
   }
 
   const applyTemplate = async (tpl: TeamTemplate) => {
@@ -390,7 +421,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     // 还原系数
     const nextCoeffs: {[pos:number]: AttributeCoefficients} = {}
     tpl.members.forEach(m => {
-      nextCoeffs[m.position] = (m.coefficients || getDefaultCoefficients()) as AttributeCoefficients
+      nextCoeffs[m.position] = normalizeCoefficients(m.coefficients as AttributeCoefficients)
     })
     setCoefficientsMap(nextCoeffs)
   }
@@ -511,16 +542,27 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       mr: 0.5,
           }}
         >
-          <Tooltip title="保存当前队伍为模板">
+          <Tooltip title="以当前配置创建新模板">
             <span>
               <Button
                 variant="contained"
                 size="small"
                 startIcon={<SaveIcon />}
-                onClick={handleSaveTemplate}
+                onClick={handleCreateTemplate}
                 disabled={templates.length >= 200}
                 sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-              >保存</Button>
+              >新建</Button>
+            </span>
+          </Tooltip>
+          <Tooltip title={selectedTemplateId ? '覆盖当前选中模板' : '先在右侧选择要覆盖的模板'}>
+            <span>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleOverwriteTemplate}
+                disabled={!selectedTemplateId}
+                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+              >覆盖</Button>
             </span>
           </Tooltip>
           <Autocomplete

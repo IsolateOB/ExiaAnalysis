@@ -84,6 +84,7 @@ export type AttributeKey =
 // 每角色的属性系数（默认值：StatAtk=0.9，IncElementDmg=1，其他=0，hp=0）
 export interface AttributeCoefficients {
   IncElementDmg: number
+  // 攻击百分比词条系数（词条系数）
   StatAtk: number
   StatAmmoLoad: number
   StatChargeTime: number
@@ -91,8 +92,14 @@ export interface AttributeCoefficients {
   StatCritical: number
   StatCriticalDamage: number
   StatAccuracyCircle: number
+  // 防御百分比词条系数（词条系数）
   StatDef: number
+  // 旧：hp 作为生命轴系数；现改为 axisHP，hp 仅为兼容旧模板（可忽略 UI）
   hp: number
+  // 新增：三大基础轴“属性系数”
+  axisAttack: number
+  axisDefense: number
+  axisHP: number
 }
 
 // 每角色原始属性分（不乘以系数），用于展示

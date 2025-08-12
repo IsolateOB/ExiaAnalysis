@@ -38,7 +38,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
 }) => {
   const [openDetails, setOpenDetails] = React.useState(false)
 
-  const labels: Record<keyof AttributeCoefficients, string> = {
+    const labels: Record<string, string> = {
     IncElementDmg: '优越',
     StatAtk: '攻击',
     StatAmmoLoad: '装弹',
@@ -49,6 +49,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
     StatAccuracyCircle: '命中',
     StatDef: '防御',
     hp: '生命',
+      axisAttack: '基础攻击轴',
+      axisDefense: '基础防御轴',
+      axisHP: '基础生命轴',
   }
 
   const percentKeys: Exclude<AttributeKey, 'hp'>[] = [
@@ -170,84 +173,72 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
       <Collapse in={openDetails} timeout="auto" unmountOnExit>
         <Divider sx={{ mx: 1 }} />
         <Box sx={{ p: 1.25 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>原始分（不乘系数）与属性系数</Typography>
-          {/* 统一对齐表格：属性名 | 基线 | 目标 | 系数 */}
-          <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '110px 1fr 1fr 90px', alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>基础属性与属性系数 / 百分比词条与词条系数</Typography>
+          {/* 基础三轴表 */}
+          <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '100px 1fr 1fr 90px', alignItems: 'center', gap: 0.5, mb: 1 }}>
             <Box />
             <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
             <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
             <Typography variant="caption" sx={{ textAlign: 'center' }}>属性系数</Typography>
-
-            {/* 基础攻击 */}
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础攻击</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseAttack != null ? Math.round(baselineRaw.baseAttack).toString() : '-'}</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseAttack != null ? Math.round(targetRaw.baseAttack).toString() : '-'}</Typography>
-            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
-
-            {/* 基础防御 */}
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础防御</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseDefense != null ? Math.round(baselineRaw.baseDefense).toString() : '-'}</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseDefense != null ? Math.round(targetRaw.baseDefense).toString() : '-'}</Typography>
-            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
-
-            {/* 基础生命 */}
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>基础生命</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.baseHP != null ? Math.round(baselineRaw.baseHP).toString() : '-'}</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.baseHP != null ? Math.round(targetRaw.baseHP).toString() : '-'}</Typography>
-            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
-
-            {/* 百分比类词条行，与系数输入对齐 */}
-            {percentKeys.map((k) => (
-              <React.Fragment key={k}>
-                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{labels[k]}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>
-                  {baselineRaw?.totals?.[k] != null ? `${baselineRaw?.totals?.[k].toFixed(2)}%` : '-'}
-                </Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>
-                  {targetRaw?.totals?.[k] != null ? `${targetRaw?.totals?.[k].toFixed(2)}%` : '-'}
-                </Typography>
-                {/* 系数输入（不再显示属性名，只显示输入框） */}
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            {[
+              { label: '基础攻击', key: 'axisAttack', baseB: baselineRaw?.baseAttack, baseT: targetRaw?.baseAttack },
+              { label: '基础防御', key: 'axisDefense', baseB: baselineRaw?.baseDefense, baseT: targetRaw?.baseDefense },
+              { label: '基础生命', key: 'axisHP', baseB: baselineRaw?.baseHP, baseT: targetRaw?.baseHP },
+            ].map(row => (
+              <React.Fragment key={row.key}>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{row.label}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.baseB != null ? Math.round(row.baseB).toString() : '-'}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.baseT != null ? Math.round(row.baseT).toString() : '-'}</Typography>
+                <Box sx={{ textAlign: 'center' }}>
                   {coefficients && (
                     <TextField
                       type="number"
                       size="small"
-                      value={coefficients[k]}
+                      value={(coefficients as any)[row.key] ?? 0}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value)
+                        if (!onCoefficientsChange) return
+                        onCoefficientsChange({ ...coefficients, [row.key]: isNaN(v) ? 0 : v } as AttributeCoefficients)
+                      }}
+                      slotProps={{ input: { inputProps: { step: 0.1 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
+                      sx={{ width: 72 }}
+                    />
+                  )}
+                </Box>
+              </React.Fragment>
+            ))}
+          </Box>
+
+          {/* 百分比词条表 */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '110px 1fr 1fr 90px', alignItems: 'center', gap: 0.5 }}>
+            <Box />
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
+            <Typography variant="caption" sx={{ textAlign: 'center' }}>词条系数</Typography>
+            {percentKeys.map((k) => (
+              <React.Fragment key={k}>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{labels[k]}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.totals?.[k] != null ? `${baselineRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.totals?.[k] != null ? `${targetRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  {coefficients && (
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={(coefficients as any)[k]}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value)
                         if (!onCoefficientsChange) return
                         const next = { ...coefficients, [k]: isNaN(v) ? 0 : v }
                         onCoefficientsChange(next)
                       }}
-          slotProps={{ input: { inputProps: { step: 0.1 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-          sx={{ width: 72 }}
+                      slotProps={{ input: { inputProps: { step: 0.1 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
+                      sx={{ width: 72 }}
                     />
                   )}
                 </Box>
               </React.Fragment>
             ))}
-
-            {/* 生命（系数）单独一行对齐 */}
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>生命（系数）</Typography>
-            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
-            <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>—</Box>
-    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              {coefficients && (
-                <TextField
-                  type="number"
-                  size="small"
-                  value={coefficients.hp}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (!onCoefficientsChange) return
-                    const next = { ...coefficients, hp: isNaN(v) ? 0 : v }
-                    onCoefficientsChange(next)
-                  }}
-      slotProps={{ input: { inputProps: { step: 0.1 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-      sx={{ width: 72 }}
-                />
-              )}
-            </Box>
           </Box>
         </Box>
       </Collapse>

@@ -12,6 +12,9 @@ export const defaultCoefficients: AttributeCoefficients = {
   StatAccuracyCircle: 0,
   StatDef: 0,
   hp: 0,
+  axisAttack: 1, // 基础攻击轴属性系数默认 1
+  axisDefense: 0, // 默认忽略防御基础轴
+  axisHP: 0, // 默认忽略生命基础轴
 }
 
 // 读取 number.json（根据 Electron/打包路径兼容）
@@ -157,10 +160,10 @@ export const computeRawAttributeScores = async (
   const breakthroughCoeff = getBreakthroughCoeff(characterData)
   const numData = await loadNumberJson()
   const { syncAtk, syncDef, syncHP, itemAtk, itemDef, itemHP } = getBaseNumbers(numData, { ...rootData, ...characterData }, character)
-
-  const baseAttack = syncAtk * breakthroughCoeff + itemAtk
-  const baseDefense = syncDef * breakthroughCoeff + itemDef
-  const baseHP = syncHP * breakthroughCoeff + itemHP
+  // 新算法：基础值不再预乘突破；突破作为最终外部乘区单独放大，防止同步器部分与突破重复嵌套
+  const baseAttack = syncAtk + itemAtk
+  const baseDefense = syncDef + itemDef
+  const baseHP = syncHP + itemHP
 
   return {
     baseAttack,
@@ -176,33 +179,59 @@ export const computeWeightedStrength = (
   raw: RawAttributeScores,
   coeffs: AttributeCoefficients
 ) => {
-  // 攻击/元素增伤等按乘法累乘
-  const atkFactor = 1 + (coeffs.StatAtk * raw.totals.StatAtk) / 100
-  const elemFactor = 1 + (coeffs.IncElementDmg * raw.totals.IncElementDmg) / 100
-  // 其余进攻相关百分比词条作为附加乘法因子（通用加权），默认系数为0时不影响
-  const miscKeys: (keyof AttributeCoefficients)[] = [
-    'StatAmmoLoad',
-    'StatChargeTime',
-    'StatChargeDamage',
-    'StatCritical',
-    'StatCriticalDamage',
-    'StatAccuracyCircle',
-  ]
-  const miscFactor = miscKeys.reduce((acc, k) => {
-    const total = (raw.totals as any)?.[k] ?? 0
-    const coeff = (coeffs as any)?.[k] ?? 0
-    return acc * (1 + (coeff * total) / 100)
-  }, 1)
+  // 新算法：
+  // 1. 内部轴（Attack / Defense / HP）分别按自身百分比或权重调整，然后求和。
+  //    Attack 轴: baseAttack * (1 + StatAtkCoeff * StatAtk% / 100)
+  //    Defense 轴: baseDefense * (1 + StatDefCoeff * StatDef% / 100)
+  //    HP 轴: baseHP * hpCoeff （仍然作为纯权重，不存在百分比词条）
+  // 2. 外部乘区：元素增伤与所有杂项（装弹 / 蓄力时间(反转) / 蓄力伤害 / 暴击率(封顶100) / 暴伤 / 命中）
+  //    Factor = Π (1 + coeff * value% / 100)，其中蓄力时间使用反转值 benefit = -rawValue。
+  // 3. 最后整体乘以突破系数 breakthroughCoeff。
 
-  const finalAtk = raw.baseAttack * atkFactor * elemFactor * miscFactor
+  const statAtkPct = raw.totals.StatAtk || 0
+  const statDefPct = raw.totals.StatDef || 0
+  // 暴击率封顶 100
+  const critPctRaw = raw.totals.StatCritical || 0
+  const critPctCapped = Math.min(critPctRaw, 100)
+  const critDmgPct = raw.totals.StatCriticalDamage || 0
+  const ammoPct = raw.totals.StatAmmoLoad || 0
+  const chargeTimeRaw = raw.totals.StatChargeTime || 0
+  // 反转：装备/词条通常以负值表示“减少 X% 蓄力时间”，负值越大收益越高 => benefit = -raw
+  const chargeTimeBenefit = -chargeTimeRaw
+  const chargeDmgPct = raw.totals.StatChargeDamage || 0
+  const accuracyPct = raw.totals.StatAccuracyCircle || 0
+  const elementPct = raw.totals.IncElementDmg || 0
 
-  // 防御：默认不计入（系数为0），当系数>0时按“轴权重×(1+防御%)”计入
-  const defAxis = Math.max(0, coeffs.StatDef || 0)
-  const defFactor = 1 + (raw.totals.StatDef || 0) / 100
-  const finalDef = raw.baseDefense * defAxis * defFactor
+  // 内部三轴
+  // 轴权重语义：系数=0 完全忽略该基础轴；系数>0 时：Coeff * Base * (1 + 百分比词条/100)
+  // 词条系数：StatAtk / StatDef
+  // 属性系数：axisAttack / axisDefense / axisHP
+  const axisAtkCoeff = coeffs.axisAttack != null ? coeffs.axisAttack : 1
+  const axisDefCoeff = coeffs.axisDefense || 0
+  const axisHPCoeff = coeffs.axisHP || coeffs.hp || 0 // 兼容旧 hp
 
-  // HP：无词条，仅同步器+item 乘以 hp 系数
-  const finalHP = raw.baseHP * (coeffs.hp || 0)
+  const internalAtk = axisAtkCoeff * raw.baseAttack * (1 + (coeffs.StatAtk || 0) * statAtkPct / 100)
+  const internalDef = axisDefCoeff * raw.baseDefense * (1 + (coeffs.StatDef || 0) * statDefPct / 100)
+  const internalHP = axisHPCoeff * raw.baseHP
+  const internalSum = internalAtk + internalDef + internalHP
+
+  // 外部乘区因子（允许系数为负，表示该轴带来抑制）
+  const elementFactor = 1 + (coeffs.IncElementDmg * elementPct) / 100
+  const ammoFactor = 1 + (coeffs.StatAmmoLoad * ammoPct) / 100
+  const chargeTimeFactor = 1 + (coeffs.StatChargeTime * chargeTimeBenefit) / 100
+  const chargeDmgFactor = 1 + (coeffs.StatChargeDamage * chargeDmgPct) / 100
+  const critRateFactor = 1 + (coeffs.StatCritical * critPctCapped) / 100
+  const critDmgFactor = 1 + (coeffs.StatCriticalDamage * critDmgPct) / 100
+  const accuracyFactor = 1 + (coeffs.StatAccuracyCircle * accuracyPct) / 100
+
+  const externalProduct = elementFactor * ammoFactor * chargeTimeFactor * chargeDmgFactor * critRateFactor * critDmgFactor * accuracyFactor
+
+  const totalScale = externalProduct * raw.breakthroughCoeff
+
+  // 将外部 & 突破乘区分摊到各内部轴，便于 UI 展示 breakdown（求和仍等于最终值）
+  const finalAtk = internalAtk * totalScale
+  const finalDef = internalDef * totalScale
+  const finalHP = internalHP * totalScale
 
   return { finalAtk, finalDef, finalHP }
 }
