@@ -1,5 +1,5 @@
 {
-  "name": "damage-estimate",
+  "name": "damage-estimater",
   "version": "1.0.1",
   "description": "Nikke 伤害估算器桌面应用",
   "main": "dist-electron/main.js",
@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/IsolateOB/DamageEstimate.git"
+    "url": "git+https://github.com/IsolateOB/NikkeDamageEstimater.git"
   },
   "keywords": [
     "game",
@@ -28,12 +28,12 @@
     "react"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "LGPL-2.1-or-later",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/IsolateOB/DamageEstimate/issues"
+    "url": "https://github.com/IsolateOB/NikkeDamageEstimater/issues"
   },
-  "homepage": "https://github.com/IsolateOB/DamageEstimate#readme",
+  "homepage": "https://github.com/IsolateOB/NikkeDamageEstimater#readme",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
@@ -58,7 +58,7 @@
   },
   "build": {
     "appId": "com.damage-estimate.app",
-    "productName": "Nikke 伤害估算器",
+    "productName": "NikkeDanageEstimater",
     "directories": {
       "output": "release"
     },
