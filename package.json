@@ -1,7 +1,7 @@
 {
-  "name": "damage-estimater",
-  "version": "1.0.1",
-  "description": "Nikke 伤害估算器桌面应用",
+  "name": "arcana-divination",
+  "version": "1.0.2",
+  "description": "ArcanaDivination桌面应用",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run electron-dev\"",
@@ -9,7 +9,8 @@
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "electron-dev": "wait-on http://localhost:5173 && electron .",
     "electron:dev": "npm run build:electron-src && electron .",
-    "build": "npm run build:vite-only && npm run build:electron-src && electron-builder",
+    "clean": "rimraf release dist dist-electron",
+    "build": "npm run clean && npm run build:vite-only && npm run build:electron-src && electron-builder",
     "build:vite": "tsc && vite build",
     "build:vite-only": "vite build",
     "build:electron-src": "tsc -p electron/tsconfig.json",
@@ -18,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/IsolateOB/NikkeDamageEstimater.git"
+    "url": "git+https://github.com/IsolateOB/ArcanaDivination.git"
   },
   "keywords": [
     "game",
@@ -29,36 +30,36 @@
   ],
   "author": "",
   "license": "LGPL-2.1-or-later",
-  "type": "module",
   "bugs": {
-    "url": "https://github.com/IsolateOB/NikkeDamageEstimater/issues"
+    "url": "https://github.com/IsolateOB/ArcanaDivination/issues"
   },
-  "homepage": "https://github.com/IsolateOB/NikkeDamageEstimater#readme",
+  "homepage": "https://github.com/IsolateOB/ArcanaDivination#readme",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.2.0",
     "@mui/material": "^7.2.0",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "typescript": "^5.8.3",
-    "vite": "^7.0.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.13",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
     "concurrently": "^9.2.0",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
-    "esbuild": "^0.25.6",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.4",
+    "rimraf": "^6.0.1",
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.damage-estimate.app",
-    "productName": "NikkeDanageEstimater",
+    "appId": "com.arcana-divination.app",
+    "productName": "ArcanaDivination",
     "directories": {
       "output": "release"
     },
@@ -81,6 +82,7 @@
     ],
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
+  "npmRebuild": false,
     "mac": {
       "category": "public.app-category.games"
     },

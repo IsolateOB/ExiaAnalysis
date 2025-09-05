@@ -445,6 +445,42 @@
             "original_rare": "SSR"
         },
         {
+            "id": 209301,
+            "name_code": 5147,
+            "class": "Supporter",
+            "name_cn": "艾玛：战术升级",
+            "name_en": "Emma: Tactical Upgrade",
+            "element": "Fire",
+            "use_burst_skill": "Step1",
+            "corporation": "ELYSION",
+            "weapon_type": "MG",
+            "original_rare": "SSR"
+        },
+        {
+            "id": 209401,
+            "name_code": 5148,
+            "class": "Attacker",
+            "name_cn": "贝斯蒂：战术升级",
+            "name_en": "Vesti: Tactical Upgrade",
+            "element": "Fire",
+            "use_burst_skill": "Step3",
+            "corporation": "ELYSION",
+            "weapon_type": "RL",
+            "original_rare": "SSR"
+        },
+        {
+            "id": 209501,
+            "name_code": 5149,
+            "class": "Attacker",
+            "name_cn": "银华：战术升级",
+            "name_en": "Eunhwa: Tactical Upgrade",
+            "element": "Fire",
+            "use_burst_skill": "Step2",
+            "corporation": "ELYSION",
+            "weapon_type": "SR",
+            "original_rare": "SSR"
+        },
+        {
             "id": 110201,
             "name_code": 5001,
             "class": "Attacker",
@@ -1330,6 +1366,30 @@
             "use_burst_skill": "Step2",
             "corporation": "TETRA",
             "weapon_type": "RL",
+            "original_rare": "SSR"
+        },
+        {
+            "id": 314301,
+            "name_code": 5150,
+            "class": "Attacker",
+            "name_cn": "米尔克：花漾兔女郎",
+            "name_en": "Milk: Blooming Bunny",
+            "element": "Iron",
+            "use_burst_skill": "Step3",
+            "corporation": "TETRA",
+            "weapon_type": "SR",
+            "original_rare": "SSR"
+        },
+        {
+            "id": 331501,
+            "name_code": 5151,
+            "class": "Supporter",
+            "name_cn": "爱德：特务兔女郎",
+            "name_en": "Ade: Agent Bunny",
+            "element": "Iron",
+            "use_burst_skill": "Step2",
+            "corporation": "TETRA",
+            "weapon_type": "SR",
             "original_rare": "SSR"
         },
         {

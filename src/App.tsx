@@ -124,7 +124,7 @@ const App: React.FC = () => {
         }}
       >
         {/* 自定义标题栏 */}
-        <CustomTitleBar title="Nikke 伤害估算器" />
+        <CustomTitleBar title="ArcanaDivination" />
 
         {/* 主内容区域 */}
         <Box sx={{ flex: 1, overflow: 'hidden', p: 1 }}>
