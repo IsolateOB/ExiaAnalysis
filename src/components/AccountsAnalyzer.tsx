@@ -119,7 +119,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                     {/* 子表头：角色 / AEL / 综合强度 */}
                       <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(120px,1fr) minmax(96px,1fr) minmax(120px,1fr)', columnGap: 1, alignItems: 'center', color: 'text.secondary', mb: 0.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>角色</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'left' }}>AEL（攻优突破分）</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'left' }}>攻优突破分(AEL)</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'left' }}>综合强度</Typography>
                     </Box>
                     <Stack spacing={0.5} divider={<Divider flexItem />} sx={{ py: 0.5 }}>

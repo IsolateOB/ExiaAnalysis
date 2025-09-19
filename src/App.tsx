@@ -111,8 +111,8 @@ const App: React.FC = () => {
       <CssBaseline />
   <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
   <Header title="ExiaAnalysis" />
-        <Container maxWidth={false} disableGutters sx={{ flex: 1, pt: 0, pb: 0 }}>
-          <Box sx={{ display: 'flex', gap: 0, height: '100%' }}>
+        <Container maxWidth={false} disableGutters sx={{ flex: 1, pt: 0, pb: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ display: 'flex', gap: 0, flex: 1, minHeight: 0 }}>
             {/* 左侧固定侧栏 */}
             <Box
               sx={{
@@ -129,7 +129,7 @@ const App: React.FC = () => {
                 pb: 2,
                 pt: 4,
                 overflowY: 'auto',
-                // 预留滚动条占位，避免内容被滚动条压住
+                // 避免滚动条出现时，左侧内容区域的抖动
                 scrollbarGutter: 'stable both-edges',
               }}
             >
@@ -146,8 +146,20 @@ const App: React.FC = () => {
               </Box>
             </Box>
 
-            {/* 右侧主内容：账号分析占满剩余空间 */}
-            <Box sx={{ flex: 1, minWidth: 0, px: 2, pb: 3, pt: 2, height: '100%' }}>
+            {/* 右侧内容区域：角色分析面板 */}
+            <Box
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                px: 2,
+                pb: 3,
+                pt: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
               <AccountsAnalyzer accounts={accounts} teamCharacters={teamChars} coefficientsMap={coeffsMap} />
             </Box>
           </Box>

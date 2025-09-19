@@ -162,7 +162,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         </Box>
         {!hideMetrics && (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: { xs: 140, md: 170 } }}>
-            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>AEL(攻优突破分)</Typography>
+            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>攻优突破分(AEL)</Typography>
             <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>综合强度</Typography>
             <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)}→${targetScore.toFixed(2)}`}</Typography>
             <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
