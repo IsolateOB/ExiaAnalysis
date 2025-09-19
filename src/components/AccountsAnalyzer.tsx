@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Box, Stack, Divider, Chip } from '@mui/material'
+import { Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Box, Stack, Divider, Chip, TableSortLabel } from '@mui/material'
 import { Character, AttributeCoefficients } from '../types'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 
@@ -12,6 +12,9 @@ interface AccountsAnalyzerProps {
 const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], teamCharacters = [], coefficientsMap = {} }) => {
   const [baselineIndex, setBaselineIndex] = useState<number | null>(null)
   const [baselineDamage, setBaselineDamage] = useState<number>(0)
+  // 排序：支持按同步器与伤害排序
+  const [sortBy, setSortBy] = useState<'synchro' | 'damage' | null>(null)
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [baselineInput, setBaselineInput] = useState<string>('')
 
   // 预处理：固定5个位置，取 TeamBuilder 的选择
@@ -94,6 +97,58 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
     return Math.round(baselineDamage * scale)
   }
 
+  // 计算排序后的索引
+  const sortedIndices = useMemo(() => {
+    const idxs = accounts.map((_, i) => i)
+    if (!sortBy) return idxs
+    const sign = sortOrder === 'asc' ? 1 : -1
+    const damageCache = new Map<number, number>()
+    const getDamage = (i: number) => {
+      if (damageCache.has(i)) return damageCache.get(i)!
+      const v = computeDamage(i)
+      damageCache.set(i, v)
+      return v
+    }
+    const getSyn = (i: number) => {
+      const acc = accounts[i]
+      const v = Number(acc?.synchroLevel ?? acc?.SynchroLevel ?? 0)
+      return Number.isFinite(v) ? v : 0
+    }
+    idxs.sort((a, b) => {
+      let va = 0, vb = 0
+      if (sortBy === 'damage') { va = getDamage(a); vb = getDamage(b) }
+      else if (sortBy === 'synchro') { va = getSyn(a); vb = getSyn(b) }
+      const diff = (va - vb) * sign
+      if (diff !== 0) return diff
+      // 同步器相同时，按伤害排序作为第二关键字
+      if (sortBy === 'synchro') {
+        const da = getDamage(a)
+        const db = getDamage(b)
+        const d2 = (da - db) * sign
+        if (d2 !== 0) return d2
+      }
+      // 伤害相同时，按同步器等级排序作为第二关键字
+      if (sortBy === 'damage') {
+        const sa = getSyn(a)
+        const sb = getSyn(b)
+        const d2 = (sa - sb) * sign
+        if (d2 !== 0) return d2
+      }
+      // 当值仍相等时，按当前排序方向决定并列的次序，确保切换方向时视觉上有变化
+      return sortOrder === 'asc' ? (a - b) : (b - a)
+    })
+    return idxs
+  }, [accounts, sortBy, sortOrder, baselineIndex, baselineDamage, perAccount, coefficientsMap])
+
+  const toggleSort = (col: 'synchro' | 'damage') => {
+    if (sortBy !== col) {
+      setSortBy(col)
+      setSortOrder('asc')
+    } else {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
+    }
+  }
+
   return (
     <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
       <Typography variant="h6" sx={{ fontSize: '1rem' }}>账号分析</Typography>
@@ -105,7 +160,17 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
           <TableHead sx={{ '& th': { borderBottom: '2px solid #94a3b8' } }}>
             <TableRow>
               <TableCell align="center" sx={{ minWidth: 170 }}>账号</TableCell>
-              <TableCell align="center" sx={{ minWidth: 90 }}>同步器</TableCell>
+              <TableCell align="center" sx={{ minWidth: 110 }}>
+                <TableSortLabel
+                  active={sortBy === 'synchro'}
+                  direction={sortBy === 'synchro' ? sortOrder : 'asc'}
+                  onClick={() => toggleSort('synchro')}
+                >
+                  <Box component="span" sx={{ fontWeight: sortBy === 'synchro' ? 600 : 400, color: sortBy === 'synchro' ? 'primary.main' : 'inherit' }}>
+                    同步器
+                  </Box>
+                </TableSortLabel>
+              </TableCell>
               <TableCell align="center" sx={{ minWidth: 160 }}>角色</TableCell>
                 <TableCell align="center" sx={{ minWidth: 120 }}>
                 攻优突破分
@@ -113,12 +178,23 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                 (AEL)
                 </TableCell>
               <TableCell align="center" sx={{ minWidth: 110 }}>综合强度</TableCell>
-              <TableCell align="center" sx={{ minWidth: 120 }}>伤害</TableCell>
+              <TableCell align="center" sx={{ minWidth: 120 }}>
+                <TableSortLabel
+                  active={sortBy === 'damage'}
+                  direction={sortBy === 'damage' ? sortOrder : 'asc'}
+                  onClick={() => toggleSort('damage')}
+                >
+                  <Box component="span" sx={{ fontWeight: sortBy === 'damage' ? 600 : 400, color: sortBy === 'damage' ? 'primary.main' : 'inherit' }}>
+                    伤害
+                  </Box>
+                </TableSortLabel>
+              </TableCell>
               <TableCell align="center">基线</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {accounts.map((acc, index) => {
+            {sortedIndices.map((index) => {
+              const acc = accounts[index]
               const name = acc?.name || acc?.role_name || `账号${index + 1}`
               const synchroLevel = Number(acc?.synchroLevel ?? acc?.SynchroLevel ?? 0)
               const isBaseline = baselineIndex === index
