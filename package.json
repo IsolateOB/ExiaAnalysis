@@ -1,44 +1,19 @@
 {
-  "name": "arcana-divination",
-  "version": "1.0.2",
-  "description": "ArcanaDivination桌面应用",
-  "main": "dist-electron/main.js",
+  "name": "exia-analysis",
+  "version": "1.1.0",
+  "description": "ExiaAnalysis 网页版",
   "scripts": {
-    "dev": "concurrently \"npm run dev:vite\" \"npm run electron-dev\"",
-    "dev:vite": "vite",
-    "dev:electron": "wait-on http://localhost:5173 && electron .",
-    "electron-dev": "wait-on http://localhost:5173 && electron .",
-    "electron:dev": "npm run build:electron-src && electron .",
-    "clean": "rimraf release dist dist-electron",
-    "build": "npm run clean && npm run build:vite-only && npm run build:electron-src && electron-builder",
-    "build:vite": "tsc && vite build",
-    "build:vite-only": "vite build",
-    "build:electron-src": "tsc -p electron/tsconfig.json",
-    "build:electron": "electron-builder",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "vite preview"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/IsolateOB/ArcanaDivination.git"
-  },
-  "keywords": [
-    "game",
-    "damage",
-    "calculator",
-    "electron",
-    "react"
-  ],
-  "author": "",
   "license": "LGPL-2.1-or-later",
-  "bugs": {
-    "url": "https://github.com/IsolateOB/ArcanaDivination/issues"
-  },
-  "homepage": "https://github.com/IsolateOB/ArcanaDivination#readme",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.2.0",
     "@mui/material": "^7.2.0",
+    "opencc-js": "^1.0.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "xlsx": "^0.18.5"
@@ -48,49 +23,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
-    "concurrently": "^9.2.0",
-    "electron": "^37.2.0",
-    "electron-builder": "^26.0.12",
-    "esbuild": "^0.21.5",
     "typescript": "^5.8.3",
-    "vite": "^7.0.4",
-    "rimraf": "^6.0.1",
-    "wait-on": "^8.0.3"
-  },
-  "build": {
-    "appId": "com.arcana-divination.app",
-    "productName": "ArcanaDivination",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "public/number.json",
-      "public/list.json",
-      "!node_modules/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "public/number.json",
-        "to": "number.json"
-      },
-      {
-        "from": "public/list.json", 
-        "to": "list.json"
-      }
-    ],
-    "nodeGypRebuild": false,
-    "buildDependenciesFromSource": false,
-  "npmRebuild": false,
-    "mac": {
-      "category": "public.app-category.games"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "vite": "^7.0.4"
   }
 }

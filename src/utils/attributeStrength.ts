@@ -17,23 +17,17 @@ export const defaultCoefficients: AttributeCoefficients = {
   axisHP: 0, // 默认忽略生命基础轴
 }
 
-// 读取 number.json（根据 Electron/打包路径兼容）
+// 读取 number.json（兼容相对/绝对/file 协议路径）
 const loadNumberJson = async (): Promise<any | null> => {
   let res: Response | undefined
   try {
     try {
-      res = await fetch('./number.json')
+      res = await fetch(`${import.meta.env.BASE_URL}number.json`)
       if (res.ok) return await res.json()
     } catch {}
-    try {
-      res = await fetch('/number.json')
-      if (res.ok) return await res.json()
-    } catch {}
-    try {
-      const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-      res = await fetch(`${baseUrl}/number.json`)
-      if (res.ok) return await res.json()
-    } catch {}
+    // 兜底：相对与绝对路径（兼容旧逻辑）
+    try { res = await fetch('./number.json'); if (res.ok) return await res.json() } catch {}
+    try { res = await fetch('/number.json'); if (res.ok) return await res.json() } catch {}
   } catch {}
   return null
 }

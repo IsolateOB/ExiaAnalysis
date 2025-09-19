@@ -41,23 +41,23 @@ export const calculateCharacterStrength = async (
     
     // 首先尝试相对路径
     try {
-  atkResponse = await fetch('./number.json')
+  atkResponse = await fetch(`${import.meta.env.BASE_URL}number.json`)
       if (atkResponse.ok) {
         atkData = await atkResponse.json()
       }
     } catch (error) {
-  console.log('number.json 相对路径失败，尝试绝对路径')
+      console.log('number.json BASE_URL 路径失败，尝试相对/绝对路径')
     }
     
-    // 如果相对路径失败，尝试绝对路径
+    // 如果 BASE_URL 失败，尝试相对/绝对路径
     if (!atkData) {
       try {
-  atkResponse = await fetch('/number.json')
+  atkResponse = await fetch('./number.json')
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
       } catch (error) {
-  console.log('number.json 绝对路径也失败')
+        console.log('number.json 相对路径失败，尝试绝对路径')
       }
     }
     

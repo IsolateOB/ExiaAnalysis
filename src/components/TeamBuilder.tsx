@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { Box, Typography, TextField, Button, IconButton, Tooltip, Toolbar, Stack, Divider, Autocomplete, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material'
+import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, Divider, MenuItem, Select } from '@mui/material'
 import { Character, TeamCharacter, AttributeCoefficients } from '../types'
 import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../utils/templates'
-import { Save as SaveIcon, FolderOpen as LoadIcon, Delete as DeleteIcon } from '@mui/icons-material'
-import MoreVertIcon from '@mui/icons-material/MoreVert'
+import { NoteAdd as NoteAddIcon, SaveAs as SaveAsIcon, Delete as DeleteIcon } from '@mui/icons-material'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import CheckIcon from '@mui/icons-material/Check'
+import CloseIcon from '@mui/icons-material/Close'
+import { fetchNikkeList } from '../services/nikkeList'
 
 interface TeamBuilderProps {
-  baselineData?: any // 基线JSON数据
-  targetData?: any   // 目标JSON数据
-  baselineScore?: Record<string, number>   // 基线攻优突破分
-  targetScore?: Record<string, number>   // 目标攻优突破分
+  baselineData?: any
+  targetData?: any
   onTeamStrengthChange?: (baselineStrength: number, targetStrength: number) => void
   onTeamRatioChange?: (scale: number, ratioLabel: string) => void
+  // 新增：将当前选择与系数暴露给父级（给 AccountsAnalyzer 使用）
+  onTeamSelectionChange?: (chars: (Character | undefined)[], coeffs: { [position: number]: AttributeCoefficients }) => void
 }
 
 // 计算角色强度的工具函数
@@ -55,39 +55,19 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
   let atkResponse
   let atkData
     
-    // 首先尝试相对路径
+    // 优先使用 Vite BASE_URL，以兼容 Gitee Pages 子路径
     try {
-  atkResponse = await fetch('./number.json')
+      atkResponse = await fetch(`${import.meta.env.BASE_URL}number.json`)
       if (atkResponse.ok) {
         atkData = await atkResponse.json()
       }
-    } catch (error) {
-      console.log('number.json 相对路径失败，尝试绝对路径')
-    }
-    
-    // 如果相对路径失败，尝试绝对路径
+    } catch {}
+    // 兜底：相对与绝对路径
     if (!atkData) {
-      try {
-  atkResponse = await fetch('/number.json')
-        if (atkResponse.ok) {
-          atkData = await atkResponse.json()
-        }
-      } catch (error) {
-        console.log('number.json 绝对路径也失败')
-      }
+      try { atkResponse = await fetch('./number.json'); if (atkResponse.ok) atkData = await atkResponse.json() } catch {}
     }
-    
-    // 如果还是失败，尝试通过 file:// 协议
     if (!atkData) {
-      try {
-        const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-  atkResponse = await fetch(`${baseUrl}/number.json`)
-        if (atkResponse.ok) {
-          atkData = await atkResponse.json()
-        }
-      } catch (error) {
-        console.log('number.json file:// 协议也失败')
-      }
+      try { atkResponse = await fetch('/number.json'); if (atkResponse.ok) atkData = await atkResponse.json() } catch {}
     }
     
     if (atkData) {
@@ -141,10 +121,9 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
 const TeamBuilder: React.FC<TeamBuilderProps> = ({ 
   baselineData, 
   targetData, 
-  baselineScore = {}, 
-  targetScore = {}, 
   onTeamStrengthChange,
   onTeamRatioChange,
+  onTeamSelectionChange,
 }) => {
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
     Array.from({ length: 5 }, (_, index) => ({
@@ -210,49 +189,34 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return `模板${n}`
   }
 
-  // 载入 list.json 用于根据 id 还原 Character
-  const [listData, setListData] = useState<any>(null)
+  // 载入远端人物目录（不落地本地文件）用于根据 id 还原 Character
+  const [nikkeList, setNikkeList] = useState<Character[]>([])
   useEffect(() => {
+    let cancelled = false
     const load = async () => {
-      let res: Response | undefined
       try {
-        try { res = await fetch('./list.json'); if (res.ok) return setListData(await res.json()) } catch {}
-        try { res = await fetch('/list.json'); if (res.ok) return setListData(await res.json()) } catch {}
-        try {
-          const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-          res = await fetch(`${baseUrl}/list.json`)
-          if (res.ok) return setListData(await res.json())
-        } catch {}
-      } catch {}
+        const { nikkes } = await fetchNikkeList()
+        if (!cancelled) setNikkeList(nikkes)
+      } catch (e) {
+        console.warn('获取人物目录失败', e)
+        if (!cancelled) setNikkeList([])
+      }
     }
     load()
+    return () => { cancelled = true }
   }, [])
 
   const characterFromList = useMemo(() => {
     const map = new Map<string, Character>()
-    if (listData?.nikkes) {
-      listData.nikkes.forEach((n: any) => {
-        if (n?.id != null) {
-          const ch: Character = {
-            id: Number(n.id),
-            name_cn: n.name_cn || n.name || '未命名',
-            name_en: n.name_en || n.name || 'Unknown',
-            name_code: n.name_code || 0,
-            class: (n.class || 'Attacker'),
-            element: (n.element || 'Fire'),
-            use_burst_skill: (n.use_burst_skill || 'AllStep'),
-            corporation: (n.corporation || 'ABNORMAL'),
-            weapon_type: (n.weapon_type || 'AR'),
-            original_rare: (n.original_rare || 'SSR'),
-          } as Character
-          map.set(String(n.id), ch)
-        }
-      })
-    }
+    nikkeList.forEach((n) => {
+      map.set(String(n.id), n)
+    })
     return (id: string): Character | undefined => map.get(String(id))
-  }, [listData])
+  }, [nikkeList])
 
-  // 当team或数据变化时重新计算强度
+  // 当team或数据变化时：
+  // 1) 重新计算强度（内部用途）
+  // 2) 通知父组件当前选择与系数
   useEffect(() => {
     const calculateAllStrengths = async () => {
       const newStrengths: {[position: number]: {baseline: number, target: number}} = {}
@@ -313,6 +277,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     }
     
     calculateAllStrengths()
+    // 通知父级当前选择与系数
+    // 将每个位置的 damageCoefficient 作为 damageWeight 传出，便于 AccountsAnalyzer 做权重计算
+    const coeffsWithWeight: { [position: number]: AttributeCoefficients } = {}
+    for (const t of team) {
+      const base = coefficientsMap[t.position] || getDefaultCoefficients()
+      coeffsWithWeight[t.position] = { ...base, damageWeight: t.damageCoefficient || 0 }
+    }
+    onTeamSelectionChange?.(team.map(t => t.character), coeffsWithWeight)
   }, [team, baselineData, targetData, onTeamStrengthChange, coefficientsMap])
 
   const handleAddCharacter = (position: number) => {
@@ -517,162 +489,99 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Toolbar
-        variant="dense"
-        sx={{
-          pl: 1,
-          pr: 0.5,
-          gap: 1,
-          flexWrap: 'nowrap',
-          overflowX: 'auto',
-          alignItems: 'center',
-        }}
-      >
-        <Typography variant="subtitle1" noWrap sx={{ fontWeight: 600, mr: 1 }}>队伍构建</Typography>
-        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-  {/* 左侧可伸缩分组：保存/模板选择（移除名称输入） */}
-    <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
-          sx={{
-            flexWrap: 'nowrap',
-            flex: 1,
-            minWidth: 0,
-      mr: 0.5,
-          }}
-        >
-          <Tooltip title="以当前配置创建新模板">
-            <span>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<SaveIcon />}
-                onClick={handleCreateTemplate}
-                disabled={templates.length >= 200}
-                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-              >新建</Button>
-            </span>
-          </Tooltip>
-          <Tooltip title={selectedTemplateId ? '覆盖当前选中模板' : '先在右侧选择要覆盖的模板'}>
-            <span>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={handleOverwriteTemplate}
-                disabled={!selectedTemplateId}
-                sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-              >覆盖</Button>
-            </span>
-          </Tooltip>
-          <Autocomplete
+      {/* 模板管理（下拉选择 + 内联操作） */}
+      <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb' }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
+          <Button
+            variant="contained"
             size="small"
-            options={templates}
-            getOptionLabel={(t) => t?.name ?? ''}
-            value={templates.find(t => t.id === selectedTemplateId) || null}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            onChange={(e, val) => setSelectedTemplateId(val?.id ?? '')}
-            sx={{ flex: '1 1 180px', minWidth: 140 }}
-            open={lockOpen || isRenaming ? true : acOpen}
-            onOpen={() => setAcOpen(true)}
-            onClose={(e, reason) => { if (lockOpen || isRenaming) return; setAcOpen(false) }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                placeholder="选择模板"
-                inputProps={{ ...params.inputProps, 'aria-label': '选择模板' }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  },
-                }}
-              />
-            )}
-            renderOption={(props, option) => (
-              <li {...props}>
-                {isRenaming && renameId === option.id ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>e.stopPropagation()}>
-                    <TextField
-                      size="small"
-                      placeholder="输入模板名称"
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.stopPropagation(); confirmRename() }
-                        if (e.key === 'Escape') { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue(''); setLockOpen(false) }
-                      }}
-                      autoFocus
-                      inputRef={(el) => {
-                        renameInputRef.current = el
-                        if (el) { el.focus(); el.select() }
-                      }}
-                      sx={{ flex: 1 }}
-                    />
-                    <IconButton size="small" color="primary" onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>{ e.stopPropagation(); confirmRename() }}>
-                      <CheckIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                ) : (
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, width: '100%', '&:hover .tpl-menu-btn': { opacity: 1 } }}>
-                    <Typography variant="body2" noWrap>{option.name}</Typography>
-                    <IconButton
-                      size="small"
-                      className="tpl-menu-btn"
-                      sx={{ opacity: 0, transition: 'opacity 0.2s' }}
-                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openSettingsMenu(e, option.id) }}
-                    >
-                      <MoreVertIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                )}
-              </li>
-            )}
-          />
-    </Stack>
-    {/* 右侧按钮组：仅加载（删除移入选项菜单） */}
-  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'nowrap', flex: '0 0 auto', ml: 0, flexShrink: 0 }}>
+            startIcon={<NoteAddIcon />}
+            onClick={handleCreateTemplate}
+            disabled={templates.length >= 200}
+          >新建模板</Button>
           <Button
             variant="outlined"
             size="small"
-            startIcon={<LoadIcon />}
-            onClick={handleLoadTemplate}
+            startIcon={<SaveAsIcon />}
+            onClick={handleOverwriteTemplate}
             disabled={!selectedTemplateId}
-            sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-          >加载</Button>
+          >覆盖模板</Button>
         </Stack>
-  </Toolbar>
-  <Menu
-    anchorEl={menuAnchor}
-    open={Boolean(menuPos)}
-    onClose={closeSettingsMenu}
-    anchorReference={menuPos ? 'anchorPosition' : 'anchorEl'}
-    anchorPosition={menuPos ? { left: menuPos.left, top: menuPos.top } : undefined}
-    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-  >
-    <MenuItem onClick={() => { closeSettingsMenu(); if (menuTplId) startRenameTemplate(menuTplId) }}>
-      <ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
-      <ListItemText>重命名</ListItemText>
-    </MenuItem>
-    <MenuItem onClick={() => { closeSettingsMenu(); if (menuTplId) handleDuplicateTemplate(menuTplId) }}>
-      <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon>
-      <ListItemText>复制</ListItemText>
-    </MenuItem>
-    <MenuItem onClick={() => { closeSettingsMenu(); if (menuTplId) handleDeleteTemplate(menuTplId) }} sx={{ color: 'error.main' }}>
-      <ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
-      <ListItemText>删除</ListItemText>
-    </MenuItem>
-  </Menu>
-  <Divider />
+        <Select
+          size="small"
+          value={selectedTemplateId || ''}
+          onChange={(e) => {
+            const id = String(e.target.value || '')
+            setSelectedTemplateId(id)
+            const tpl = templates.find(t => t.id === id)
+            if (tpl) applyTemplate(tpl)
+          }}
+          displayEmpty
+          sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 } }}
+          renderValue={(val) => {
+            const id = String(val || '')
+            const t = templates.find(tp => tp.id === id)
+            const name = t?.name || '未选择'
+            return (
+              <Typography noWrap title={name} sx={{ maxWidth: '100%' }}>{name}</Typography>
+            )
+          }}
+          MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+        >
+          <MenuItem value=""><em>未选择</em></MenuItem>
+          {templates.map(t => (
+            <MenuItem key={t.id} value={t.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {isRenaming && renameId === t.id ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e)=>e.stopPropagation()}>
+                  <TextField
+                    size="small"
+                    placeholder="输入模板名称"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); confirmRename() }; if (e.key === 'Escape') { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') } }}
+                    autoFocus
+                    inputRef={(el) => { renameInputRef.current = el; if (el) { el.focus(); el.select() } }}
+                    sx={{ flex: 1, minWidth: 0 }}
+                  />
+                  <IconButton size="small" color="primary" onClick={(e)=>{ e.stopPropagation(); confirmRename() }}>
+                    <CheckIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={(e)=>{ e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') }}>
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              ) : (
+                <>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" noWrap title={t.name}>{t.name}</Typography>
+                  </Box>
+                  <Tooltip title="重命名">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(t.id) }}
+                    >
+                      <DriveFileRenameOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(t.id) }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            </MenuItem>
+          ))}
+        </Select>
+      </Box>
   <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
         <Stack spacing={1}>
         {team.map((teamChar) => {
           const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }
-          const baselineCharScore = baselineScore && teamChar.character ? baselineScore[teamChar.character.id] || 0 : 0
-          const targetCharScore = targetScore && teamChar.character ? targetScore[teamChar.character.id] || 0 : 0
       const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
       const raw = rawMap[teamChar.position] || {}
       return (
@@ -689,12 +598,11 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
               onDamageCoefficientChange={(value) => handleDamageCoefficientChange(teamChar.position, value)}
               baselineStrength={strengths.baseline}
               targetStrength={strengths.target}
-              baselineScore={baselineCharScore}
-              targetScore={targetCharScore}
         coefficients={coeffs}
         onCoefficientsChange={(next) => handleCoefficientsChange(teamChar.position, next)}
         baselineRaw={raw.baseline}
         targetRaw={raw.target}
+              hideMetrics
             />
           )
         })}

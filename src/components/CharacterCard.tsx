@@ -1,5 +1,5 @@
 import React from 'react'
-import { Typography, Box, IconButton, TextField, Paper } from '@mui/material'
+import { Typography, Box, IconButton, TextField } from '@mui/material'
 import { Add, Delete } from '@mui/icons-material'
 import { Character, AttributeCoefficients, RawAttributeScores, AttributeKey } from '../types'
 import { ExpandMore } from '@mui/icons-material'
@@ -19,6 +19,7 @@ interface CharacterCardProps {
   onCoefficientsChange?: (next: AttributeCoefficients) => void
   baselineRaw?: RawAttributeScores
   targetRaw?: RawAttributeScores
+  hideMetrics?: boolean
 }
 
 const CharacterCard: React.FC<CharacterCardProps> = ({
@@ -35,6 +36,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   onCoefficientsChange,
   baselineRaw,
   targetRaw,
+  hideMetrics = false,
 }) => {
   const [openDetails, setOpenDetails] = React.useState(false)
 
@@ -96,38 +98,48 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   
   if (!character) {
     return (
-      <Paper
-        variant="outlined"
+      <Box
+        onClick={onAddCharacter}
         sx={{
           width: '100%',
+          pl: 1.25,
+          pr: 0.75,
           minHeight: 84,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
           cursor: 'pointer',
-          border: '2px dashed #ccc',
+          borderBottom: '1px solid #e5e7eb',
           '&:hover': {
-            borderColor: '#1976d2',
-            backgroundColor: '#f5f5f5',
+            backgroundColor: 'action.hover',
           },
         }}
-        onClick={onAddCharacter}
       >
-        <Box textAlign="center" sx={{ p: 2 }}>
-          <Add sx={{ fontSize: 20, color: '#ccc', mb: 0.5 }} />
-          <Typography variant="caption" color="textSecondary" sx={{ display: 'block' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Add sx={{ fontSize: 20, color: 'text.secondary' }} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             添加角色
           </Typography>
         </Box>
-      </Paper>
+      </Box>
     )
   }
 
   return (
-    <Paper variant="outlined" sx={{ width: '100%', pl: 1.25, pr: 0.75, minHeight: 84 }}>
+    <Box sx={{ width: '100%', pl: 1.25, pr: 0.75, minHeight: 84, overflow: 'hidden', borderBottom: '1px solid #e5e7eb' }}>
       {/* 行卡头部：名称、简要信息、系数与指标汇总，单行展示（垂直居中） */}
   <Box sx={{ minHeight: 84, display: 'flex', alignItems: 'center' }}>
-  <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 0.7fr) 100px minmax(170px, 1.2fr) 64px', alignItems: 'center', columnGap: 0.25, width: '100%' }}>
+  <Box
+    sx={{
+      display: 'grid',
+      gridTemplateColumns: hideMetrics
+        ? { xs: 'minmax(120px,1fr) 64px 48px', sm: 'minmax(140px,1fr) 80px 56px', md: 'minmax(160px,0.7fr) 100px 64px' }
+        : { xs: 'minmax(120px,1fr) 64px minmax(140px,1.1fr) 48px', sm: 'minmax(140px,1fr) 80px minmax(160px,1.2fr) 56px', md: 'minmax(160px,0.7fr) 100px minmax(170px,1.2fr) 64px' },
+      alignItems: 'center',
+      columnGap: 0.25,
+      width: '100%',
+      minWidth: 0,
+    }}
+  >
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minWidth: 0 }}>
           <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{character.name_cn}</Typography>
           <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
@@ -145,24 +157,26 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
               onDamageCoefficientChange?.(isNaN(value) ? 0 : Math.round(value * 100) / 100)
             }}
             slotProps={{ input: { inputProps: { step: 0.01, min: 0, max: 99.99 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-            sx={{ width: 72 }}
+            sx={{ width: { xs: 64, md: 72 } }}
           />
         </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: 170 }}>
-          <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>攻优突破分</Typography>
-          <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>综合强度</Typography>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)}→${targetScore.toFixed(2)}`}</Typography>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minWidth: 64, flexShrink: 0 }}>
+        {!hideMetrics && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: { xs: 140, md: 170 } }}>
+            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>AEL(攻优突破分)</Typography>
+            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>综合强度</Typography>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)}→${targetScore.toFixed(2)}`}</Typography>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
+          </Box>
+        )}
+  <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', minWidth: { xs: 44, md: 56 }, flexShrink: 0 }}>
           <Tooltip title={openDetails ? '收起详情' : '展开详情'}>
             <IconButton size="small" onClick={() => setOpenDetails(v => !v)} sx={{ p: 0.2, m: 0 }}>
-              <ExpandMore sx={{ fontSize: 18, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+              <ExpandMore sx={{ fontSize: 20, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </IconButton>
           </Tooltip>
           {onRemoveCharacter && (
             <IconButton size="small" onClick={onRemoveCharacter} sx={{ color: 'error.main', p: 0.2, m: 0 }}>
-              <Delete sx={{ fontSize: 16 }} />
+              <Delete sx={{ fontSize: 18 }} />
             </IconButton>
           )}
         </Box>
@@ -173,7 +187,6 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
       <Collapse in={openDetails} timeout="auto" unmountOnExit>
         <Divider sx={{ mx: 1 }} />
         <Box sx={{ p: 1.25 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>基础属性与属性系数 / 百分比词条与词条系数</Typography>
           {/* 基础三轴表 */}
           <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '100px 1fr 1fr 90px', alignItems: 'center', gap: 0.5, mb: 1 }}>
             <Box />
@@ -186,9 +199,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
               { label: '基础生命', key: 'axisHP', baseB: baselineRaw?.baseHP, baseT: targetRaw?.baseHP },
             ].map(row => (
               <React.Fragment key={row.key}>
-                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{row.label}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.baseB != null ? Math.round(row.baseB).toString() : '-'}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.baseT != null ? Math.round(row.baseT).toString() : '-'}</Typography>
+                <Typography variant="body2" sx={{ fontSize: '1rem' }}>{row.label}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{row.baseB != null ? Math.round(row.baseB).toString() : '-'}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{row.baseT != null ? Math.round(row.baseT).toString() : '-'}</Typography>
                 <Box sx={{ textAlign: 'center' }}>
                   {coefficients && (
                     <TextField
@@ -217,9 +230,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             <Typography variant="caption" sx={{ textAlign: 'center' }}>词条系数</Typography>
             {percentKeys.map((k) => (
               <React.Fragment key={k}>
-                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{labels[k]}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{baselineRaw?.totals?.[k] != null ? `${baselineRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '0.8rem' }}>{targetRaw?.totals?.[k] != null ? `${targetRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
+                <Typography variant="body2" sx={{ fontSize: '1rem' }}>{labels[k]}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{baselineRaw?.totals?.[k] != null ? `${baselineRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
+                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{targetRaw?.totals?.[k] != null ? `${targetRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   {coefficients && (
                     <TextField
@@ -242,7 +255,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
           </Box>
         </Box>
       </Collapse>
-  </Paper>
+  </Box>
   )
 }
 

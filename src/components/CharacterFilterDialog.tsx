@@ -17,6 +17,7 @@ import {
   ListItemText,
 } from '@mui/material'
 import { Character, CharacterFilter } from '../types'
+import { fetchNikkeList } from '../services/nikkeList'
 
 interface CharacterFilterDialogProps {
   open: boolean
@@ -45,82 +46,44 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   const [filteredCharacters, setFilteredCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(false)
 
-  // 加载角色数据
+  // 加载角色数据：仅首次打开或本地列表为空时请求，避免闪烁
   useEffect(() => {
+    let cancelled = false
     const loadCharacters = async () => {
       setLoading(true)
       try {
-        // 在 Electron 环境中，尝试不同的路径
-        let response
-        let data
-        
-        // 首先尝试相对路径
-        try {
-          response = await fetch('./list.json')
-          if (response.ok) {
-            data = await response.json()
-          }
-        } catch (error) {
-          console.log('相对路径失败，尝试绝对路径')
-        }
-        
-        // 如果相对路径失败，尝试绝对路径
-        if (!data) {
-          try {
-            response = await fetch('/list.json')
-            if (response.ok) {
-              data = await response.json()
-            }
-          } catch (error) {
-            console.log('绝对路径也失败')
-          }
-        }
-        
-        // 如果还是失败，尝试通过 file:// 协议
-        if (!data) {
-          try {
-            const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-            response = await fetch(`${baseUrl}/list.json`)
-            if (response.ok) {
-              data = await response.json()
-            }
-          } catch (error) {
-            console.log('file:// 协议也失败')
-          }
-        }
-        
-        if (!data) {
-          throw new Error('无法加载角色数据文件')
-        }
-        
-        console.log('成功加载角色数据，角色数量:', data.nikkes?.length || 0)
-        
-        // 过滤掉不完整的角色数据
-        const validCharacters = data.nikkes.filter((nikke: any) => 
-          nikke.id && 
-          nikke.name_cn && 
-          nikke.name_en && 
-          nikke.class && 
+        const { nikkes } = await fetchNikkeList()
+        // 过滤掉不完整的角色数据（理论上已在服务层处理）
+        const validCharacters = nikkes.filter((nikke: any) =>
+          nikke.id &&
+          nikke.name_cn &&
+          nikke.name_en &&
+          nikke.class &&
           nikke.element &&
           nikke.use_burst_skill &&
           nikke.corporation &&
           nikke.weapon_type &&
           nikke.original_rare
         )
-        console.log('过滤后的角色数量:', validCharacters.length)
-        setNikkeList(validCharacters)
+        if (!cancelled) setNikkeList(validCharacters)
       } catch (error) {
-        console.error('Failed to load character data:', error)
-        setNikkeList([])
+        if (!cancelled) setNikkeList([])
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     if (open) {
-      loadCharacters()
+      if (nikkeList.length === 0) {
+        // 首次打开或清空后再打开：请求并显示加载
+        loadCharacters()
+      } else {
+        // 已有缓存数据：不显示“未找到”，直接用现有列表
+        setLoading(false)
+      }
     }
-  }, [open])
+    return () => { cancelled = true }
+  }, [open, nikkeList.length])
 
   // 重置筛选条件
   useEffect(() => {
@@ -307,7 +270,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
 
           {/* 结果列表 */}
           <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
-            {loading ? (
+            { (loading || (open && nikkeList.length === 0)) ? (
               <Typography color="textSecondary" sx={{ textAlign: 'center', py: 4 }}>
                 加载角色数据中...
               </Typography>

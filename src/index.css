@@ -9,13 +9,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f5f5f5;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
-#root {
-  width: 100vw;
-  height: 100vh;
-}
+#root { min-height: 100vh; }
 
 /* 自定义滚动条 */
 ::-webkit-scrollbar {

@@ -1,18 +1,10 @@
 import React, { useState } from 'react'
-import {
-  ThemeProvider,
-  createTheme,
-  CssBaseline,
-  Box,
-  Snackbar,
-  Alert,
-  Paper,
-  Typography,
-} from '@mui/material'
-import { Grid } from '@mui/material'
-import CustomTitleBar from './components/CustomTitleBar'
+import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography } from '@mui/material'
 import TeamBuilder from './components/TeamBuilder'
-import DamageCalculator from './components/DamageCalculator'
+import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload'
+import AccountsAnalyzer from './components/AccountsAnalyzer'
+import type { Character, AttributeCoefficients } from './types'
+import Header from './components/Header'
 
 // 创建主题
 const theme = createTheme({
@@ -33,6 +25,22 @@ const theme = createTheme({
   },
   shape: { borderRadius: 8 },
   components: {
+    MuiAppBar: {
+      defaultProps: { elevation: 4 },
+      styleOverrides: {
+        root: ({ theme }) => ({
+          boxShadow: theme.shadows[4],
+          border: 'none',
+          // 避免被全局 Paper 的 outlined 覆盖
+          ['&.MuiPaper-outlined' as any]: {
+            border: 'none',
+          },
+          ['&.MuiPaper-elevation0' as any]: {
+            boxShadow: theme.shadows[4],
+          },
+        }),
+      },
+    },
     MuiTextField: {
       defaultProps: { size: 'small' },
     },
@@ -73,14 +81,9 @@ const theme = createTheme({
 })
 
 const App: React.FC = () => {
-  const [baselineData, setBaselineData] = useState<any>(null)
-  const [targetData, setTargetData] = useState<any>(null)
-  const [baselineTeamStrength, setBaselineTeamStrength] = useState<number>(0)
-  const [targetTeamStrength, setTargetTeamStrength] = useState<number>(0)
-  const [teamScale, setTeamScale] = useState<number>(1)
-  const [ratioLabel, setRatioLabel] = useState<string>('—')
-  const [baselineScore, setBaselineScore] = useState<Record<string, number>>({})
-  const [targetScore, setTargetScore] = useState<Record<string, number>>({})
+  const [accounts, setAccounts] = useState<any[]>([])
+  const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
+  const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [notification, setNotification] = useState<{
     open: boolean
     message: string
@@ -90,15 +93,6 @@ const App: React.FC = () => {
     message: '',
     severity: 'info'
   })
-
-  const handleTeamStrengthChange = (baselineStrength: number, targetStrength: number) => {
-    setBaselineTeamStrength(baselineStrength)
-    setTargetTeamStrength(targetStrength)
-  }
-  const handleTeamRatioChange = (scale: number, label: string) => {
-    setTeamScale(scale)
-    setRatioLabel(label)
-  }
 
   const handleStatusChange = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setNotification({
@@ -115,53 +109,49 @@ const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box
-        sx={{
-          height: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* 自定义标题栏 */}
-        <CustomTitleBar title="ArcanaDivination" />
+  <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+  <Header title="ExiaAnalysis" />
+        <Container maxWidth={false} disableGutters sx={{ flex: 1, pt: 0, pb: 0 }}>
+          <Box sx={{ display: 'flex', gap: 0, height: '100%' }}>
+            {/* 左侧固定侧栏 */}
+            <Box
+              sx={{
+                width: { xs: '100%', md: 380 },
+                flexShrink: 0,
+                alignSelf: 'stretch',
+                position: 'sticky',
+                top: { xs: 56, sm: 56, md: 64 },
+                height: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 56px)', md: 'calc(100vh - 64px)' },
+                bgcolor: 'background.paper',
+                boxShadow: { md: 3 },
+                borderRight: '1px solid #e5e7eb',
+                px: 2,
+                pb: 2,
+                pt: 4,
+                overflowY: 'auto',
+                // 预留滚动条占位，避免内容被滚动条压住
+                scrollbarGutter: 'stable both-edges',
+              }}
+            >
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <SingleJsonUpload onAccountsLoaded={(p: AccountsPayload) => setAccounts(p.accounts)} />
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>队伍构建</Typography>
+                  <TeamBuilder
+                    onTeamSelectionChange={(chars, coeffs) => {
+                      setTeamChars(chars); setCoeffsMap(coeffs)
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Box>
 
-        {/* 主内容区域 */}
-        <Box sx={{ flex: 1, overflow: 'hidden', p: 1 }}>
-          <Grid container spacing={1} sx={{ height: '100%' }}>
-            <Grid size={{ xs: 12, md: 7 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
-              <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 560 }}>
-                <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <TeamBuilder 
-                    baselineData={baselineData}
-                    targetData={targetData}
-                    onTeamStrengthChange={handleTeamStrengthChange}
-                    baselineScore={baselineScore}
-                    targetScore={targetScore}
-                    onTeamRatioChange={handleTeamRatioChange}
-                  />
-                </Box>
-              </Box>
-            </Grid>
-            <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
-              <Box sx={{ height: '100%', p: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <DamageCalculator 
-                    onBaselineDataChange={setBaselineData}
-                    onTargetDataChange={setTargetData}
-                    baselineTeamStrength={baselineTeamStrength}
-                    targetTeamStrength={targetTeamStrength}
-                    teamScale={teamScale}
-                    ratioLabel={ratioLabel}
-                    onBaselineScoreChange={setBaselineScore}
-                    onTargetScoreChange={setTargetScore}
-                    onStatusChange={handleStatusChange}
-                  />
-                </Box>
-              </Box>
-            </Grid>
-          </Grid>
-        </Box>
+            {/* 右侧主内容：账号分析占满剩余空间 */}
+            <Box sx={{ flex: 1, minWidth: 0, px: 2, pb: 3, pt: 2, height: '100%' }}>
+              <AccountsAnalyzer accounts={accounts} teamCharacters={teamChars} coefficientsMap={coeffsMap} />
+            </Box>
+          </Box>
+        </Container>
         
         {/* 全局通知 */}
         <Snackbar

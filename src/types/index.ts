@@ -33,40 +33,7 @@ export interface CharacterFilter {
 }
 
 // 账号数据
-export interface AccountData {
-  id: string
-  name: string
-  level: number
-  characterData: any[] // 角色数据
-  equipmentData: any[] // 装备数据
-  // 其他账号相关数据
-}
-
-// 文件上传状态
-export interface FileUploadState {
-  isUploading: boolean
-  fileName?: string
-  error?: string
-  data?: AccountData
-}
-
-// 伤害计算器属性
-export interface DamageCalculatorProps {
-  onBaselineDataChange?: (data: any) => void
-  onTargetDataChange?: (data: any) => void
-}
-
-// Electron API 类型定义
-declare global {
-  interface Window {
-    electronAPI?: {
-      minimizeWindow: () => Promise<void>
-      maximizeWindow: () => Promise<void>
-      closeWindow: () => Promise<void>
-      isMaximized: () => Promise<boolean>
-    }
-  }
-}
+// 账号上传工具所有用到的类型已内聚到组件内，此处删除未使用的类型定义
 
 // 词条/属性键
 export type AttributeKey =
@@ -100,6 +67,8 @@ export interface AttributeCoefficients {
   axisAttack: number
   axisDefense: number
   axisHP: number
+  // 新增：用于队伍输出权重（人物总系数），仅在汇总与伤害比例计算中使用
+  damageWeight?: number
 }
 
 // 每角色原始属性分（不乘以系数），用于展示
