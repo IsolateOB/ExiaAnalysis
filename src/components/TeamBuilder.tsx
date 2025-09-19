@@ -55,19 +55,39 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
   let atkResponse
   let atkData
     
-    // 优先使用 Vite BASE_URL，以兼容 Gitee Pages 子路径
+    // 首先尝试相对路径
     try {
-      atkResponse = await fetch(`${import.meta.env.BASE_URL}number.json`)
+  atkResponse = await fetch('./number.json')
       if (atkResponse.ok) {
         atkData = await atkResponse.json()
       }
-    } catch {}
-    // 兜底：相对与绝对路径
-    if (!atkData) {
-      try { atkResponse = await fetch('./number.json'); if (atkResponse.ok) atkData = await atkResponse.json() } catch {}
+    } catch (error) {
+      console.log('number.json 相对路径失败，尝试绝对路径')
     }
+    
+    // 如果相对路径失败，尝试绝对路径
     if (!atkData) {
-      try { atkResponse = await fetch('/number.json'); if (atkResponse.ok) atkData = await atkResponse.json() } catch {}
+      try {
+  atkResponse = await fetch('/number.json')
+        if (atkResponse.ok) {
+          atkData = await atkResponse.json()
+        }
+      } catch (error) {
+        console.log('number.json 绝对路径也失败')
+      }
+    }
+    
+    // 如果还是失败，尝试通过 file:// 协议
+    if (!atkData) {
+      try {
+        const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
+  atkResponse = await fetch(`${baseUrl}/number.json`)
+        if (atkResponse.ok) {
+          atkData = await atkResponse.json()
+        }
+      } catch (error) {
+        console.log('number.json file:// 协议也失败')
+      }
     }
     
     if (atkData) {

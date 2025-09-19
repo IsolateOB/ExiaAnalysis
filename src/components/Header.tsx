@@ -11,7 +11,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'ExiaAnalysis' }) => {
     <AppBar position="sticky" color="primary" enableColorOnDark sx={{ top: 0, boxShadow: (t) => t.shadows[4], border: 'none' }}>
       <Toolbar sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {/* 左侧产品 Logo */}
-        <Box component="img" src={`${import.meta.env.BASE_URL}icon-128.png`} alt="logo" sx={{ width: 32, height: 32, borderRadius: 1 }} />
+        <Box component="img" src="/icon-128.png" alt="logo" sx={{ width: 32, height: 32, borderRadius: 1 }} />
         <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>{title}</Typography>
         {/* 右侧操作预留位，可后续加按钮 */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }} />

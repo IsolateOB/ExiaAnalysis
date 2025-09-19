@@ -22,12 +22,18 @@ const loadNumberJson = async (): Promise<any | null> => {
   let res: Response | undefined
   try {
     try {
-      res = await fetch(`${import.meta.env.BASE_URL}number.json`)
+      res = await fetch('./number.json')
       if (res.ok) return await res.json()
     } catch {}
-    // 兜底：相对与绝对路径（兼容旧逻辑）
-    try { res = await fetch('./number.json'); if (res.ok) return await res.json() } catch {}
-    try { res = await fetch('/number.json'); if (res.ok) return await res.json() } catch {}
+    try {
+      res = await fetch('/number.json')
+      if (res.ok) return await res.json()
+    } catch {}
+    try {
+      const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
+      res = await fetch(`${baseUrl}/number.json`)
+      if (res.ok) return await res.json()
+    } catch {}
   } catch {}
   return null
 }
