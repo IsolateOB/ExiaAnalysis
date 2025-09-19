@@ -12,6 +12,7 @@ interface AccountsAnalyzerProps {
 const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], teamCharacters = [], coefficientsMap = {} }) => {
   const [baselineIndex, setBaselineIndex] = useState<number | null>(null)
   const [baselineDamage, setBaselineDamage] = useState<number>(0)
+  const [baselineInput, setBaselineInput] = useState<string>('')
 
   // 预处理：固定5个位置，取 TeamBuilder 的选择
   const selected = useMemo(() => {
@@ -158,10 +159,24 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                   <TableCell align="right">
                     {isBaseline ? (
                       <TextField
-                        type="number"
+                        type="text"
                         size="small"
-                        value={baselineDamage}
-                        onChange={(e) => setBaselineDamage(Number(e.target.value) || 0)}
+                        label="基线伤害"
+                        value={baselineInput}
+                        inputMode="numeric"
+                        onChange={(e) => {
+                          const raw = e.target.value || ''
+                          const cleaned = raw.replace(/,/g, '').replace(/[^\d]/g, '')
+                          if (!cleaned) {
+                            setBaselineInput('')
+                            setBaselineDamage(0)
+                            return
+                          }
+                          const num = parseInt(cleaned, 10)
+                          const formatted = Number.isFinite(num) ? num.toLocaleString() : ''
+                          setBaselineInput(formatted)
+                          setBaselineDamage(Number.isFinite(num) ? num : 0)
+                        }}
                         sx={{
                           minWidth: 120,
                           // 输入框数字右对齐并保留适度右内边距
@@ -170,14 +185,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                             paddingRight: '6px',
                             fontVariantNumeric: 'tabular-nums',
                           },
-                          // 去掉浏览器默认的 number 输入旋钮
-                          '& input[type=number]': { MozAppearance: 'textfield' },
-                          '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                            WebkitAppearance: 'none',
-                            margin: 0,
-                          },
                         }}
-                        slotProps={{ input: { inputProps: { step: 1, min: 0 } } }}
                       />
                     ) : (
                       <Box sx={{ textAlign: 'right', minWidth: 120, pr: '6px', fontVariantNumeric: 'tabular-nums' }}>{computeDamage(index).toLocaleString()}</Box>
@@ -190,7 +198,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                       <Button
                         variant="outlined"
                         size="small"
-                        onClick={() => { setBaselineIndex(index); if (baselineIndex !== index) setBaselineDamage(0); }}
+                        onClick={() => { setBaselineIndex(index); if (baselineIndex !== index) { setBaselineDamage(0); setBaselineInput('') } }}
                       >
                         设为<br />基线
                       </Button>

@@ -5,8 +5,11 @@ import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../utils/templates'
-import { NoteAdd as NoteAddIcon, SaveAs as SaveAsIcon, Delete as DeleteIcon } from '@mui/icons-material'
-import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
+import EditIcon from '@mui/icons-material/Edit'
+import SaveIcon from '@mui/icons-material/Save'
+import DeleteIcon from '@mui/icons-material/Delete'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import FileUploadIcon from '@mui/icons-material/FileUpload'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import { fetchNikkeList } from '../services/nikkeList'
@@ -167,6 +170,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [autoOpen, setAutoOpen] = useState(false)
   const [lockOpen, setLockOpen] = useState(false)
   const [acOpen, setAcOpen] = useState(false)
+  // 导入用隐藏文件输入
+  const importInputRef = useRef<HTMLInputElement | null>(null)
 
   // 统一补全/迁移系数：新增基础轴属性系数，迁移旧 hp -> axisHP
   const normalizeCoefficients = (c?: AttributeCoefficients): AttributeCoefficients => {
@@ -375,23 +380,60 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     setSelectedTemplateId(tpl.id)
   }
 
-  // 覆盖当前选中模板
-  const handleOverwriteTemplate = () => {
-    if (!selectedTemplateId) return
-    const list = listTemplates()
-    const existing = list.find(t => t.id === selectedTemplateId)
-    if (!existing) return
-    const members = team.map(t => ({
-      position: t.position,
-      characterId: t.character ? String(t.character.id) : undefined,
-      damageCoefficient: t.damageCoefficient || 0,
-      coefficients: normalizeCoefficients(coefficientsMap[t.position]),
-    }))
-    existing.members = members
-    existing.totalDamageCoefficient = team.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
-    ;(existing as any).updatedAt = Date.now()
-    saveTemplate(existing)
-    refreshTemplates()
+  // 导出全部模板
+  const handleExportTemplates = () => {
+    try {
+      const all = listTemplates()
+      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const ts = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const file = `templates-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`
+      a.href = url
+      a.download = file
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('导出模板失败', e)
+      window.alert('导出模板失败')
+    }
+  }
+
+  // 导入模板（合并到本地；如 id 冲突则生成新 id）
+  const handleImportTemplates = async (file: File) => {
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const arr: any[] = Array.isArray(data) ? data : (data && Array.isArray(data.templates) ? data.templates : [])
+      if (!Array.isArray(arr)) throw new Error('格式不正确')
+      const existing = listTemplates()
+      const ids = new Set(existing.map(t => t.id))
+      const toSave: TeamTemplate[] = []
+      for (const item of arr) {
+        if (!item || typeof item !== 'object') continue
+        const tpl: TeamTemplate = {
+          id: String(item.id || Math.random().toString(36).slice(2)),
+          name: String(item.name || generateNextDefaultName()),
+          createdAt: Number(item.createdAt || Date.now()),
+          members: Array.isArray(item.members) ? item.members : [],
+          totalDamageCoefficient: Number(item.totalDamageCoefficient || 0),
+        }
+        // id 冲突则换一个新 id
+        if (ids.has(tpl.id)) tpl.id = Math.random().toString(36).slice(2)
+        ids.add(tpl.id)
+        toSave.push(tpl)
+      }
+      // 逐个保存（saveTemplate 会合并进 localStorage）
+      toSave.forEach(saveTemplate)
+      refreshTemplates()
+      window.alert(`已导入 ${toSave.length} 个模板`)
+    } catch (e) {
+      console.error('导入模板失败', e)
+      window.alert('导入模板失败：文件格式不正确')
+    }
   }
 
   const applyTemplate = async (tpl: TeamTemplate) => {
@@ -509,25 +551,26 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* 模板管理（下拉选择 + 内联操作） */}
+      {/* 模板管理（导入导出 + 选择 + 保存为模板） */}
       <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb' }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<NoteAddIcon />}
-            onClick={handleCreateTemplate}
-            disabled={templates.length >= 200}
-          >新建模板</Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<SaveAsIcon />}
-            onClick={handleOverwriteTemplate}
-            disabled={!selectedTemplateId}
-          >覆盖模板</Button>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Button variant="outlined" size="small" startIcon={<FileUploadIcon />} onClick={() => importInputRef.current?.click()}>
+            导入模板
+          </Button>
+          <input
+            type="file"
+            accept="application/json,.json"
+            ref={importInputRef}
+            hidden
+            aria-label="导入模板文件"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportTemplates(f); e.currentTarget.value = '' } }}
+          />
+          <Button variant="outlined" size="small" startIcon={<FileDownloadIcon />} onClick={handleExportTemplates}>
+            导出模板
+          </Button>
         </Stack>
-        <Select
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Select
           size="small"
           value={selectedTemplateId || ''}
           onChange={(e) => {
@@ -537,7 +580,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             if (tpl) applyTemplate(tpl)
           }}
           displayEmpty
-          sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 } }}
+          sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
           renderValue={(val) => {
             const id = String(val || '')
             const t = templates.find(tp => tp.id === id)
@@ -580,7 +623,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                       size="small"
                       onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(t.id) }}
                     >
-                      <DriveFileRenameOutlineIcon fontSize="small" />
+                      <EditIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="删除">
@@ -597,6 +640,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             </MenuItem>
           ))}
         </Select>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<SaveIcon />}
+            onClick={handleCreateTemplate}
+            disabled={templates.length >= 200}
+          >保存</Button>
+        </Stack>
       </Box>
   <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
         <Stack spacing={1}>
