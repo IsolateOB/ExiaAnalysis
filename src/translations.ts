@@ -18,6 +18,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     character: '角色',
     aelLabel: '攻优突破分',
     aelAbbr: 'AEL',
+    'ael.tooltip': '攻优突破分(AEL)\nAEL = (1 + 0.9 × 攻击词条) × (1 + 10% + 优越词条) × (1 + 3% × 极限突破 + 2% × 核心强化)',
     strength: '综合强度',
     damage: '伤害',
     baseline: '基线',
@@ -29,18 +30,18 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     // 侧栏/构建
     teamBuilder: '队伍构建',
 
-  // 模板（Template）相关
-  'tpl.import': '导入模板',
-  'tpl.export': '导出模板',
-  'tpl.save': '保存',
-  'tpl.rename': '重命名',
-  'tpl.delete': '删除',
-  'tpl.notSelected': '未选择',
-  'tpl.inputName': '输入模板名称',
-  'tpl.imported': '已导入 {count} 个模板',
-  'tpl.importFailed': '导入模板失败：文件格式不正确',
-  'tpl.exportFailed': '导出模板失败',
-  'tpl.importFileAria': '导入模板文件',
+    // 模板（Template）相关
+    'tpl.import': '导入模板',
+    'tpl.export': '导出模板',
+    'tpl.save': '保存',
+    'tpl.rename': '重命名',
+    'tpl.delete': '删除',
+    'tpl.notSelected': '未选择',
+    'tpl.inputName': '输入模板名称',
+    'tpl.imported': '已导入 {count} 个模板',
+    'tpl.importFailed': '导入模板失败：文件格式不正确',
+    'tpl.exportFailed': '导出模板失败',
+    'tpl.importFileAria': '导入模板文件',
 
     // 上传
     'upload.title': '上传账号 JSON',
@@ -138,6 +139,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     character: 'Character',
     aelLabel: 'AEL',
     aelAbbr: 'AEL',
+    'ael.tooltip': 'Attack Element Limit Break Score (AEL)\nAEL = (1 + 0.9 × ATK%) × (1 + 10% + Elem%) × (1 + 3% × Limit Break + 2% × Core Refinement)',
     strength: 'Overall Strength',
     damage: 'Damage',
     baseline: 'Baseline',
@@ -149,18 +151,18 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     // Sidebar/Builder
     teamBuilder: 'Team Builder',
 
-  // Template related
-  'tpl.import': 'Import Templates',
-  'tpl.export': 'Export Templates',
-  'tpl.save': 'Save',
-  'tpl.rename': 'Rename',
-  'tpl.delete': 'Delete',
-  'tpl.notSelected': 'Not selected',
-  'tpl.inputName': 'Enter template name',
-  'tpl.imported': 'Imported {count} templates',
-  'tpl.importFailed': 'Import failed: invalid file format',
-  'tpl.exportFailed': 'Export failed',
-  'tpl.importFileAria': 'Import template file',
+    // Template related
+    'tpl.import': 'Import Templates',
+    'tpl.export': 'Export Templates',
+    'tpl.save': 'Save',
+    'tpl.rename': 'Rename',
+    'tpl.delete': 'Delete',
+    'tpl.notSelected': 'Not selected',
+    'tpl.inputName': 'Enter template name',
+    'tpl.imported': 'Imported {count} templates',
+    'tpl.importFailed': 'Import failed: invalid file format',
+    'tpl.exportFailed': 'Export failed',
+    'tpl.importFileAria': 'Import template file',
 
     // Upload
     'upload.title': 'Upload Accounts JSON',

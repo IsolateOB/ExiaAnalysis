@@ -186,9 +186,9 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
             fullWidth
           />
 
-          {/* 筛选条件 */}
-          <Box display="flex" gap={2} flexWrap="wrap">
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+          {/* 筛选条件：5 等分占满行 */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', columnGap: 2, rowGap: 2 }}>
+            <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.class')}</InputLabel>
               <Select
                 value={filters.class}
@@ -202,7 +202,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.element')}</InputLabel>
               <Select
                 value={filters.element}
@@ -218,7 +218,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.burst')}</InputLabel>
               <Select
                 value={filters.use_burst_skill}
@@ -232,7 +232,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.corporation')}</InputLabel>
               <Select
                 value={filters.corporation}
@@ -248,7 +248,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.weapon')}</InputLabel>
               <Select
                 value={filters.weapon_type}
@@ -293,7 +293,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                   >
                     <ListItemText
                       primary={lang === 'zh' ? character.name_cn : character.name_en}
-                      secondary={`${t('option.element.' + character.element)} | ${t('option.burst.' + (character.use_burst_skill === 'AllStep' ? 'AllStep' : character.use_burst_skill))} | ${t('option.class.' + character.class)} | ${t('option.corporation.' + character.corporation)} | ${t('option.weapon.' + character.weapon_type)} | ${character.original_rare}`}
+                      secondary={`${t('option.element.' + character.element)} | ${t('option.burst.' + (character.use_burst_skill === 'AllStep' ? 'AllStep' : character.use_burst_skill))} | ${t('option.class.' + character.class)} | ${t('option.corporation.' + character.corporation)} | ${t('option.weapon.' + character.weapon_type)}`}
                     />
                   </ListItem>
                 ))}

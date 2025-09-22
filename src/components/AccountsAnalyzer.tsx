@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Box, Stack, Divider, Chip, TableSortLabel } from '@mui/material'
+import { Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Box, Stack, Divider, Chip, TableSortLabel, Tooltip } from '@mui/material'
 import { Character, AttributeCoefficients } from '../types'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 import { useI18n } from '../i18n'
@@ -175,17 +175,14 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                 </TableSortLabel>
               </TableCell>
               <TableCell align="center" sx={{ minWidth: 160 }}>{t('character')}</TableCell>
-                <TableCell align="center" sx={{ minWidth: 120 }}>
-                {lang === 'zh' ? (
-                  <>
-                    {t('aelLabel')}
-                    <br />
-                    ({t('aelAbbr')})
-                  </>
-                ) : (
-                  t('aelAbbr')
-                )}
-                </TableCell>
+              <TableCell align="center" sx={{ minWidth: 120 }}>
+                <Tooltip
+                  arrow
+                  title={<Box sx={{ whiteSpace: 'pre-line' }}>{t('ael.tooltip')}</Box>}
+                >
+                  <Box component="span" sx={{ cursor: 'help' }}>{t('aelAbbr')}</Box>
+                </Tooltip>
+              </TableCell>
               <TableCell align="center" sx={{ minWidth: 110 }}>{t('strength')}</TableCell>
               <TableCell align="center" sx={{ minWidth: 120 }}>
                 <TableSortLabel
