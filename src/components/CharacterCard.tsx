@@ -45,7 +45,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   // 与头部一致的网格列定义：确保详情区第2列与头部“总系数”列完全对齐
   const headerGridTemplate = React.useMemo(() => (
     hideMetrics
-      ? { xs: 'minmax(120px,1fr) 80px 48px', sm: 'minmax(140px,1fr) 96px 56px', md: 'minmax(160px,0.7fr) 120px 64px' }
+      ? { xs: 'minmax(120px,1fr) 70px 48px', sm: 'minmax(140px,1fr) 90px 56px', md: 'minmax(160px,0.7fr) 110px 64px' }
       : { xs: 'minmax(120px,1fr) 80px minmax(140px,1.1fr) 48px', sm: 'minmax(140px,1fr) 96px minmax(160px,1.2fr) 56px', md: 'minmax(160px,0.7fr) 120px minmax(170px,1.2fr) 64px' }
   ), [hideMetrics])
 
