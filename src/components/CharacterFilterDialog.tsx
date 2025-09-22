@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 import { Character, CharacterFilter } from '../types'
 import { fetchNikkeList } from '../services/nikkeList'
+import { useI18n } from '../i18n'
 
 interface CharacterFilterDialogProps {
   open: boolean
@@ -32,6 +33,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   onSelectCharacter,
   initialElement,
 }) => {
+  const { t, lang } = useI18n()
   const [filters, setFilters] = useState<CharacterFilter>({
     name: '',
     class: '',
@@ -171,108 +173,108 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>选择角色</DialogTitle>
+      <DialogTitle>{t('filter.selectCharacter')}</DialogTitle>
       <DialogContent>
         <Box display="flex" flexDirection="column" gap={2} sx={{ mt: 1 }}>
           {/* 搜索框 */}
           <TextField
             size="small"
-            label="角色名称"
+            label={t('filter.name')}
             value={filters.name}
             onChange={(e) => handleFilterChange('name', e.target.value)}
-            placeholder="搜索角色名称..."
+            placeholder={t('filter.searchPlaceholder')}
             fullWidth
           />
 
           {/* 筛选条件 */}
           <Box display="flex" gap={2} flexWrap="wrap">
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>职业</InputLabel>
+              <InputLabel>{t('filter.class')}</InputLabel>
               <Select
                 value={filters.class}
                 onChange={(e) => handleFilterChange('class', e.target.value)}
-                label="职业"
+                label={t('filter.class')}
               >
-                <MenuItem value="">全部</MenuItem>
-                <MenuItem value="Attacker">火力型</MenuItem>
-                <MenuItem value="Defender">防御型</MenuItem>
-                <MenuItem value="Supporter">支援型</MenuItem>
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="Attacker">{t('option.class.Attacker')}</MenuItem>
+                <MenuItem value="Defender">{t('option.class.Defender')}</MenuItem>
+                <MenuItem value="Supporter">{t('option.class.Supporter')}</MenuItem>
               </Select>
             </FormControl>
 
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>代码</InputLabel>
+              <InputLabel>{t('filter.element')}</InputLabel>
               <Select
                 value={filters.element}
                 onChange={(e) => handleFilterChange('element', e.target.value)}
-                label="代码"
+                label={t('filter.element')}
               >
-                <MenuItem value="">全部</MenuItem>
-                <MenuItem value="Iron">铁甲</MenuItem>
-                <MenuItem value="Fire">燃烧</MenuItem>
-                <MenuItem value="Water">水冷</MenuItem>
-                <MenuItem value="Wind">风压</MenuItem>
-                <MenuItem value="Electronic">电击</MenuItem>
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="Iron">{t('option.element.Iron')}</MenuItem>
+                <MenuItem value="Fire">{t('option.element.Fire')}</MenuItem>
+                <MenuItem value="Water">{t('option.element.Water')}</MenuItem>
+                <MenuItem value="Wind">{t('option.element.Wind')}</MenuItem>
+                <MenuItem value="Electronic">{t('option.element.Electronic')}</MenuItem>
               </Select>
             </FormControl>
 
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>爆裂阶段</InputLabel>
+              <InputLabel>{t('filter.burst')}</InputLabel>
               <Select
                 value={filters.use_burst_skill}
                 onChange={(e) => handleFilterChange('use_burst_skill', e.target.value)}
-                label="爆裂阶段"
+                label={t('filter.burst')}
               >
-                <MenuItem value="">全部</MenuItem>
-                <MenuItem value="Step1">I阶段</MenuItem>
-                <MenuItem value="Step2">II阶段</MenuItem>
-                <MenuItem value="Step3">III阶段</MenuItem>
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="Step1">{t('option.burst.Step1')}</MenuItem>
+                <MenuItem value="Step2">{t('option.burst.Step2')}</MenuItem>
+                <MenuItem value="Step3">{t('option.burst.Step3')}</MenuItem>
               </Select>
             </FormControl>
 
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>企业</InputLabel>
+              <InputLabel>{t('filter.corporation')}</InputLabel>
               <Select
                 value={filters.corporation}
                 onChange={(e) => handleFilterChange('corporation', e.target.value)}
-                label="企业"
+                label={t('filter.corporation')}
               >
-                <MenuItem value="">全部</MenuItem>
-                <MenuItem value="ELYSION">极乐净土</MenuItem>
-                <MenuItem value="MISSILIS">米西利斯</MenuItem>
-                <MenuItem value="TETRA">泰特拉</MenuItem>
-                <MenuItem value="PILGRIM">朝圣者</MenuItem>
-                <MenuItem value="ABNORMAL">反常</MenuItem>
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="ELYSION">{t('option.corporation.ELYSION')}</MenuItem>
+                <MenuItem value="MISSILIS">{t('option.corporation.MISSILIS')}</MenuItem>
+                <MenuItem value="TETRA">{t('option.corporation.TETRA')}</MenuItem>
+                <MenuItem value="PILGRIM">{t('option.corporation.PILGRIM')}</MenuItem>
+                <MenuItem value="ABNORMAL">{t('option.corporation.ABNORMAL')}</MenuItem>
               </Select>
             </FormControl>
 
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>武器类型</InputLabel>
+              <InputLabel>{t('filter.weapon')}</InputLabel>
               <Select
                 value={filters.weapon_type}
                 onChange={(e) => handleFilterChange('weapon_type', e.target.value)}
-                label="武器类型"
+                label={t('filter.weapon')}
               >
-                <MenuItem value="">全部</MenuItem>
-                <MenuItem value="AR">AR</MenuItem>
-                <MenuItem value="SMG">SMG</MenuItem>
-                <MenuItem value="SG">SG</MenuItem>
-                <MenuItem value="SR">SR</MenuItem>
-                <MenuItem value="MG">MG</MenuItem>
-                <MenuItem value="RL">RL</MenuItem>
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="AR">{t('option.weapon.AR')}</MenuItem>
+                <MenuItem value="SMG">{t('option.weapon.SMG')}</MenuItem>
+                <MenuItem value="SG">{t('option.weapon.SG')}</MenuItem>
+                <MenuItem value="SR">{t('option.weapon.SR')}</MenuItem>
+                <MenuItem value="MG">{t('option.weapon.MG')}</MenuItem>
+                <MenuItem value="RL">{t('option.weapon.RL')}</MenuItem>
               </Select>
             </FormControl>
           </Box>
 
           <Typography variant="subtitle2">
-            筛选结果 ({filteredCharacters.length})
+            {t('filter.results')} ({filteredCharacters.length})
           </Typography>
 
           {/* 结果列表 */}
           <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
             { (loading || (open && nikkeList.length === 0)) ? (
               <Typography color="textSecondary" sx={{ textAlign: 'center', py: 4 }}>
-                加载角色数据中...
+                {t('filter.loading')}
               </Typography>
             ) : filteredCharacters.length > 0 ? (
               <List>
@@ -285,29 +287,25 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                         size="small"
                         onClick={() => handleSelectCharacter(character)}
                       >
-                        选择
+                        {t('filter.choose')}
                       </Button>
                     }
                   >
                     <ListItemText
-                      primary={character.name_cn}
-                      secondary={`${translations.class[character.class]} | ${
-                        translations.element[character.element]
-                      } | ${translations.corporation[character.corporation]} | ${
-                        character.weapon_type
-                      } | ${character.original_rare}`}
+                      primary={lang === 'zh' ? character.name_cn : character.name_en}
+                      secondary={`${t('option.element.' + character.element)} | ${t('option.burst.' + (character.use_burst_skill === 'AllStep' ? 'AllStep' : character.use_burst_skill))} | ${t('option.class.' + character.class)} | ${t('option.corporation.' + character.corporation)} | ${t('option.weapon.' + character.weapon_type)} | ${character.original_rare}`}
                     />
                   </ListItem>
                 ))}
               </List>
             ) : (
-              <Typography color="textSecondary">未找到匹配的角色</Typography>
+              <Typography color="textSecondary">{t('filter.notFound')}</Typography>
             )}
           </Box>
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>取消</Button>
+        <Button onClick={onClose}>{t('filter.cancel')}</Button>
       </DialogActions>
     </Dialog>
   )

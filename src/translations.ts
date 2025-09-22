@@ -1,0 +1,247 @@
+// 基于 ExiaInvasion 的结构，提供 zh/en 文案；可按需逐步扩展
+export type Lang = 'zh' | 'en'
+
+const TRANSLATIONS: Record<Lang, Record<string, string>> = {
+  zh: {
+    // 通用
+    appTitle: 'ExiaAnalysis',
+    zh: '中文',
+    en: '英语',
+
+    // Header
+    langLabel: '中文',
+
+    // 分析页
+    accountAnalysis: '账号分析',
+    account: '账号',
+    synchro: '同步器',
+    character: '角色',
+    aelLabel: '攻优突破分',
+    aelAbbr: 'AEL',
+    strength: '综合强度',
+    damage: '伤害',
+    baseline: '基线',
+    setBaseline: '设为基线',
+    baselineDamage: '基线伤害',
+    sortSynchroTip: '点击按同步器排序',
+    sortDamageTip: '点击按伤害排序',
+
+    // 侧栏/构建
+    teamBuilder: '队伍构建',
+
+  // 模板（Template）相关
+  'tpl.import': '导入模板',
+  'tpl.export': '导出模板',
+  'tpl.save': '保存',
+  'tpl.rename': '重命名',
+  'tpl.delete': '删除',
+  'tpl.notSelected': '未选择',
+  'tpl.inputName': '输入模板名称',
+  'tpl.imported': '已导入 {count} 个模板',
+  'tpl.importFailed': '导入模板失败：文件格式不正确',
+  'tpl.exportFailed': '导出模板失败',
+  'tpl.importFileAria': '导入模板文件',
+
+    // 上传
+    'upload.title': '上传账号 JSON',
+    'upload.uploading': '正在上传...',
+    'upload.retry': '重新上传',
+    'upload.hint': '点击或拖拽上传',
+    'upload.onlyOneJson': '仅支持单个 JSON（多账号）',
+    'upload.onlyJson': '请上传 JSON 文件',
+    'upload.readError': '文件读取失败',
+    'upload.parseError': '文件解析失败',
+    'common.remove': '移除',
+
+    // 筛选弹窗（部分）
+    'filter.selectCharacter': '选择角色',
+    'filter.name': '角色名称',
+    'filter.searchPlaceholder': '搜索角色名称...',
+    'filter.class': '职业',
+    'filter.element': '代码',
+    'filter.burst': '爆裂阶段',
+    'filter.corporation': '企业',
+    'filter.weapon': '武器类型',
+    'filter.all': '全部',
+    'filter.results': '筛选结果',
+    'filter.loading': '加载角色数据中...',
+    'filter.notFound': '未找到匹配的角色',
+    'filter.cancel': '取消',
+    'filter.choose': '选择',
+
+    // 角色卡片（部分）
+    'card.add': '添加角色',
+    'card.totalCoeff': '总系数',
+    'card.ael': '攻优突破分(AEL)',
+    'card.strength': '综合强度',
+    'card.collapse': '收起详情',
+    'card.expand': '展开详情',
+    'card.base': '基线',
+    'card.target': '目标',
+    'card.axis': '属性系数',
+    'card.axisAtk': '基础攻击',
+    'card.axisDef': '基础防御',
+    'card.axisHP': '基础生命',
+    'card.entryCoeff': '词条系数',
+
+    // 词条/属性标签
+    'stat.elementAdvantage': '优越',
+    'stat.atkElemLbScore': 'AEL',
+    'stat.attack': '攻击',
+    'stat.ammo': '装弹',
+    'stat.chargeSpeed': '蓄速',
+    'stat.chargeDamage': '蓄伤',
+    'stat.critical': '暴击',
+    'stat.criticalDamage': '暴伤',
+    'stat.hit': '命中',
+    'stat.defense': '防御',
+    'stat.hp': '生命',
+
+    // 下拉选项
+    'option.class.Attacker': '火力型',
+    'option.class.Defender': '防御型',
+    'option.class.Supporter': '支援型',
+    'option.element.Electronic': '电击',
+    'option.element.Fire': '燃烧',
+    'option.element.Wind': '风压',
+    'option.element.Water': '水冷',
+    'option.element.Iron': '铁甲',
+    'option.burst.Step1': 'I阶段',
+    'option.burst.Step2': 'II阶段',
+    'option.burst.Step3': 'III阶段',
+    'option.burst.AllStep': '全阶段',
+    'option.corporation.ELYSION': '极乐净土',
+    'option.corporation.MISSILIS': '米西利斯',
+    'option.corporation.TETRA': '泰特拉',
+    'option.corporation.PILGRIM': '朝圣者',
+    'option.corporation.ABNORMAL': '反常',
+    'option.weapon.AR': 'AR',
+    'option.weapon.SMG': 'SMG',
+    'option.weapon.SG': 'SG',
+    'option.weapon.SR': 'SR',
+    'option.weapon.MG': 'MG',
+    'option.weapon.RL': 'RL',
+  },
+  en: {
+    // General
+    appTitle: 'ExiaAnalysis',
+    zh: 'Chinese',
+    en: 'English',
+
+    // Header
+    langLabel: 'EN',
+
+    // Analyzer
+    accountAnalysis: 'Account Analysis',
+    account: 'Account',
+    synchro: 'Synchro',
+    character: 'Character',
+    aelLabel: 'AEL',
+    aelAbbr: 'AEL',
+    strength: 'Overall Strength',
+    damage: 'Damage',
+    baseline: 'Baseline',
+    setBaseline: 'Set Baseline',
+    baselineDamage: 'Baseline Damage',
+    sortSynchroTip: 'Click to sort by Synchro',
+    sortDamageTip: 'Click to sort by Damage',
+
+    // Sidebar/Builder
+    teamBuilder: 'Team Builder',
+
+  // Template related
+  'tpl.import': 'Import Templates',
+  'tpl.export': 'Export Templates',
+  'tpl.save': 'Save',
+  'tpl.rename': 'Rename',
+  'tpl.delete': 'Delete',
+  'tpl.notSelected': 'Not selected',
+  'tpl.inputName': 'Enter template name',
+  'tpl.imported': 'Imported {count} templates',
+  'tpl.importFailed': 'Import failed: invalid file format',
+  'tpl.exportFailed': 'Export failed',
+  'tpl.importFileAria': 'Import template file',
+
+    // Upload
+    'upload.title': 'Upload Accounts JSON',
+    'upload.uploading': 'Uploading...',
+    'upload.retry': 'Re-upload',
+    'upload.hint': 'Click or drag to upload',
+    'upload.onlyOneJson': 'Only one JSON (multi-accounts) supported',
+    'upload.onlyJson': 'Please upload a JSON file',
+    'upload.readError': 'File reading failed',
+    'upload.parseError': 'Parse failed',
+    'common.remove': 'Remove',
+
+    // Filter dialog (partial)
+    'filter.selectCharacter': 'Select Character',
+    'filter.name': 'Character Name',
+    'filter.searchPlaceholder': 'Search character name...',
+    'filter.class': 'Class',
+    'filter.element': 'Element',
+    'filter.burst': 'Burst Stage',
+    'filter.corporation': 'Manufacturer',
+    'filter.weapon': 'Weapon Type',
+    'filter.all': 'All',
+    'filter.results': 'Results',
+    'filter.loading': 'Loading characters...',
+    'filter.notFound': 'No matching characters',
+    'filter.cancel': 'Cancel',
+    'filter.choose': 'Select',
+
+    // Character card (partial)
+    'card.add': 'Add Character',
+    'card.totalCoeff': 'Total Coeff',
+    'card.ael': 'AEL',
+    'card.strength': 'Overall Strength',
+    'card.collapse': 'Collapse',
+    'card.expand': 'Expand',
+    'card.base': 'Baseline',
+    'card.target': 'Target',
+    'card.axis': 'Attribute Coeff',
+    'card.axisAtk': 'Base Attack',
+    'card.axisDef': 'Base Defense',
+    'card.axisHP': 'Base HP',
+    'card.entryCoeff': 'Entry Coeff',
+
+    // Stat labels
+    'stat.elementAdvantage': 'Elem',
+    'stat.atkElemLbScore': 'AEL',
+    'stat.attack': 'Atk',
+    'stat.ammo': 'Ammo',
+    'stat.chargeSpeed': 'Chg Spd',
+    'stat.chargeDamage': 'Chg DMG',
+    'stat.critical': 'Crit%',
+    'stat.criticalDamage': 'Crit DMG',
+    'stat.hit': 'Hit%',
+    'stat.defense': 'Def',
+    'stat.hp': 'HP',
+
+    // Dropdown options
+    'option.class.Attacker': 'Attacker',
+    'option.class.Defender': 'Defender',
+    'option.class.Supporter': 'Supporter',
+    'option.element.Electronic': 'Electronic',
+    'option.element.Fire': 'Fire',
+    'option.element.Wind': 'Wind',
+    'option.element.Water': 'Water',
+    'option.element.Iron': 'Iron',
+    'option.burst.Step1': 'Step I',
+    'option.burst.Step2': 'Step II',
+    'option.burst.Step3': 'Step III',
+    'option.burst.AllStep': 'All Steps',
+    'option.corporation.ELYSION': 'ELYSION',
+    'option.corporation.MISSILIS': 'MISSILIS',
+    'option.corporation.TETRA': 'TETRA',
+    'option.corporation.PILGRIM': 'PILGRIM',
+    'option.corporation.ABNORMAL': 'ABNORMAL',
+    'option.weapon.AR': 'AR',
+    'option.weapon.SMG': 'SMG',
+    'option.weapon.SG': 'SG',
+    'option.weapon.SR': 'SR',
+    'option.weapon.MG': 'MG',
+    'option.weapon.RL': 'RL',
+  }
+}
+
+export default TRANSLATIONS

@@ -13,6 +13,7 @@ import FileUploadIcon from '@mui/icons-material/FileUpload'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import { fetchNikkeList } from '../services/nikkeList'
+import { useI18n } from '../i18n'
 
 interface TeamBuilderProps {
   baselineData?: any
@@ -148,6 +149,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   onTeamRatioChange,
   onTeamSelectionChange,
 }) => {
+  const { t } = useI18n()
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
     Array.from({ length: 5 }, (_, index) => ({
       position: index + 1,
@@ -398,7 +400,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       URL.revokeObjectURL(url)
     } catch (e) {
       console.error('导出模板失败', e)
-      window.alert('导出模板失败')
+      window.alert(t('tpl.exportFailed'))
     }
   }
 
@@ -407,7 +409,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     try {
       const text = await file.text()
       const data = JSON.parse(text)
-      const arr: any[] = Array.isArray(data) ? data : (data && Array.isArray(data.templates) ? data.templates : [])
+  const arr: any[] = Array.isArray(data) ? data : (data && Array.isArray(data.templates) ? data.templates : [])
       if (!Array.isArray(arr)) throw new Error('格式不正确')
       const existing = listTemplates()
       const ids = new Set(existing.map(t => t.id))
@@ -429,10 +431,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       // 逐个保存（saveTemplate 会合并进 localStorage）
       toSave.forEach(saveTemplate)
       refreshTemplates()
-      window.alert(`已导入 ${toSave.length} 个模板`)
+      window.alert(t('tpl.imported').replace('{count}', String(toSave.length)))
     } catch (e) {
       console.error('导入模板失败', e)
-      window.alert('导入模板失败：文件格式不正确')
+      window.alert(t('tpl.importFailed'))
     }
   }
 
@@ -555,18 +557,18 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb' }}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
           <Button variant="outlined" size="small" startIcon={<FileUploadIcon />} onClick={() => importInputRef.current?.click()}>
-            导入模板
+            {t('tpl.import')}
           </Button>
           <input
             type="file"
             accept="application/json,.json"
             ref={importInputRef}
             hidden
-            aria-label="导入模板文件"
+            aria-label={t('tpl.importFileAria')}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportTemplates(f); e.currentTarget.value = '' } }}
           />
           <Button variant="outlined" size="small" startIcon={<FileDownloadIcon />} onClick={handleExportTemplates}>
-            导出模板
+            {t('tpl.export')}
           </Button>
         </Stack>
         <Stack direction="row" spacing={1} alignItems="center">
@@ -583,22 +585,23 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
           renderValue={(val) => {
             const id = String(val || '')
-            const t = templates.find(tp => tp.id === id)
-            const name = t?.name || '未选择'
+            const item = templates.find(tp => tp.id === id)
+            const name = item?.name || ''
+            const display = name || t('tpl.notSelected')
             return (
-              <Typography noWrap title={name} sx={{ maxWidth: '100%' }}>{name}</Typography>
+              <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>{display}</Typography>
             )
           }}
           MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
         >
-          <MenuItem value=""><em>未选择</em></MenuItem>
-          {templates.map(t => (
-            <MenuItem key={t.id} value={t.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {isRenaming && renameId === t.id ? (
+          <MenuItem value=""><em>{t('tpl.notSelected')}</em></MenuItem>
+          {templates.map((tpl) => (
+            <MenuItem key={tpl.id} value={tpl.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {isRenaming && renameId === tpl.id ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e)=>e.stopPropagation()}>
                   <TextField
                     size="small"
-                    placeholder="输入模板名称"
+                    placeholder={t('tpl.inputName')}
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); confirmRename() }; if (e.key === 'Escape') { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') } }}
@@ -616,21 +619,21 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
               ) : (
                 <>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" noWrap title={t.name}>{t.name}</Typography>
+                    <Typography variant="body2" noWrap title={tpl.name}>{tpl.name}</Typography>
                   </Box>
-                  <Tooltip title="重命名">
+                  <Tooltip title={t('tpl.rename')}>
                     <IconButton
                       size="small"
-                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(t.id) }}
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(tpl.id) }}
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title="删除">
+                  <Tooltip title={t('tpl.delete')}>
                     <IconButton
                       size="small"
                       color="error"
-                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(t.id) }}
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(tpl.id) }}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -646,7 +649,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             startIcon={<SaveIcon />}
             onClick={handleCreateTemplate}
             disabled={templates.length >= 200}
-          >保存</Button>
+          >{t('tpl.save')}</Button>
         </Stack>
       </Box>
   <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>

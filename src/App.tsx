@@ -5,6 +5,7 @@ import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload
 import AccountsAnalyzer from './components/AccountsAnalyzer'
 import type { Character, AttributeCoefficients } from './types'
 import Header from './components/Header'
+import { useI18n } from './i18n'
 
 // 创建主题
 const theme = createTheme({
@@ -81,6 +82,7 @@ const theme = createTheme({
 })
 
 const App: React.FC = () => {
+  const { t } = useI18n()
   const [accounts, setAccounts] = useState<any[]>([])
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
@@ -110,7 +112,7 @@ const App: React.FC = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
   <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-  <Header title="ExiaAnalysis" />
+  <Header title={t('appTitle')} />
         <Container maxWidth={false} disableGutters sx={{ flex: 1, pt: 0, pb: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ display: 'flex', gap: 0, flex: 1, minHeight: 0 }}>
             {/* 左侧固定侧栏 */}
@@ -136,7 +138,7 @@ const App: React.FC = () => {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <SingleJsonUpload onAccountsLoaded={(p: AccountsPayload) => setAccounts(p.accounts)} />
                 <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>队伍构建</Typography>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{t('teamBuilder')}</Typography>
                   <TeamBuilder
                     onTeamSelectionChange={(chars, coeffs) => {
                       setTeamChars(chars); setCoeffsMap(coeffs)

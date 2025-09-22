@@ -4,6 +4,7 @@ import { Add, Delete } from '@mui/icons-material'
 import { Character, AttributeCoefficients, RawAttributeScores, AttributeKey } from '../types'
 import { ExpandMore } from '@mui/icons-material'
 import { Collapse, Divider, Tooltip } from '@mui/material'
+import { useI18n } from '../i18n'
 
 interface CharacterCardProps {
   character?: Character
@@ -38,22 +39,31 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   targetRaw,
   hideMetrics = false,
 }) => {
+  const { t, lang } = useI18n()
   const [openDetails, setOpenDetails] = React.useState(false)
 
-    const labels: Record<string, string> = {
-    IncElementDmg: '优越',
-    StatAtk: '攻击',
-    StatAmmoLoad: '装弹',
-    StatChargeTime: '蓄速',
-    StatChargeDamage: '蓄伤',
-    StatCritical: '暴击',
-    StatCriticalDamage: '暴伤',
-    StatAccuracyCircle: '命中',
-    StatDef: '防御',
-    hp: '生命',
-      axisAttack: '基础攻击轴',
-      axisDefense: '基础防御轴',
-      axisHP: '基础生命轴',
+  // 与头部一致的网格列定义：确保详情区第2列与头部“总系数”列完全对齐
+  const headerGridTemplate = React.useMemo(() => (
+    hideMetrics
+      ? { xs: 'minmax(120px,1fr) 80px 48px', sm: 'minmax(140px,1fr) 96px 56px', md: 'minmax(160px,0.7fr) 120px 64px' }
+      : { xs: 'minmax(120px,1fr) 80px minmax(140px,1.1fr) 48px', sm: 'minmax(140px,1fr) 96px minmax(160px,1.2fr) 56px', md: 'minmax(160px,0.7fr) 120px minmax(170px,1.2fr) 64px' }
+  ), [hideMetrics])
+
+  // 词条/属性标签使用 i18n（参考 translations.js 的缩写约定）
+  const labelFor = (k: string): string => {
+    switch (k) {
+      case 'IncElementDmg': return t('stat.elementAdvantage')
+      case 'StatAtk': return t('stat.attack')
+      case 'StatAmmoLoad': return t('stat.ammo')
+      case 'StatChargeTime': return t('stat.chargeSpeed')
+      case 'StatChargeDamage': return t('stat.chargeDamage')
+      case 'StatCritical': return t('stat.critical')
+      case 'StatCriticalDamage': return t('stat.criticalDamage')
+      case 'StatAccuracyCircle': return t('stat.hit')
+      case 'StatDef': return t('stat.defense')
+      case 'hp': return t('stat.hp')
+      default: return k
+    }
   }
 
   const percentKeys: Exclude<AttributeKey, 'hp'>[] = [
@@ -117,7 +127,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Add sx={{ fontSize: 20, color: 'text.secondary' }} />
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            添加角色
+            {t('card.add')}
           </Typography>
         </Box>
       </Box>
@@ -131,9 +141,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   <Box
     sx={{
       display: 'grid',
-      gridTemplateColumns: hideMetrics
-        ? { xs: 'minmax(120px,1fr) 64px 48px', sm: 'minmax(140px,1fr) 80px 56px', md: 'minmax(160px,0.7fr) 100px 64px' }
-        : { xs: 'minmax(120px,1fr) 64px minmax(140px,1.1fr) 48px', sm: 'minmax(140px,1fr) 80px minmax(160px,1.2fr) 56px', md: 'minmax(160px,0.7fr) 100px minmax(170px,1.2fr) 64px' },
+      gridTemplateColumns: headerGridTemplate,
       alignItems: 'center',
       columnGap: 0.25,
       width: '100%',
@@ -141,14 +149,20 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
     }}
   >
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minWidth: 0 }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{character.name_cn}</Typography>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{lang === 'zh' ? character.name_cn : character.name_en}</Typography>
           <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
-            {translations.element[character.element]} · {translations.burstSkill[character.use_burst_skill]} · {translations.class[character.class]}
+            {lang === 'zh' ? translations.element[character.element] : character.element}
+            {' '}·{' '}
+            {lang === 'zh' ? translations.burstSkill[character.use_burst_skill] : (
+              character.use_burst_skill === 'Step1' ? 'Step I' : character.use_burst_skill === 'Step2' ? 'Step II' : character.use_burst_skill === 'Step3' ? 'Step III' : 'All Steps'
+            )}
+            {' '}·{' '}
+            {lang === 'zh' ? translations.class[character.class] : character.class}
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <TextField
-            label="总系数"
+            label={t('card.totalCoeff')}
             type="number"
             size="small"
             value={damageCoefficient}
@@ -156,20 +170,30 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
               const value = parseFloat(e.target.value)
               onDamageCoefficientChange?.(isNaN(value) ? 0 : Math.round(value * 100) / 100)
             }}
-            slotProps={{ input: { inputProps: { step: 0.01, min: 0, max: 99.99 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-            sx={{ width: { xs: 64, md: 72 } }}
+            slotProps={{
+              inputLabel: { shrink: true, sx: { whiteSpace: 'nowrap' } },
+              input: {
+                inputProps: { step: 0.01, min: 0, max: 99.99 },
+                sx: {
+                  '& input': { textAlign: 'right' },
+                  'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+                  'input[type=number]': { MozAppearance: 'textfield' }
+                }
+              }
+            }}
+            sx={{ width: '100%' }}
           />
         </Box>
         {!hideMetrics && (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: { xs: 140, md: 170 } }}>
-            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>攻优突破分(AEL)</Typography>
-            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>综合强度</Typography>
+            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>{t('card.ael')}</Typography>
+            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>{t('card.strength')}</Typography>
             <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)}→${targetScore.toFixed(2)}`}</Typography>
             <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
           </Box>
         )}
-  <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', minWidth: { xs: 44, md: 56 }, flexShrink: 0 }}>
-          <Tooltip title={openDetails ? '收起详情' : '展开详情'}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', minWidth: { xs: 44, md: 56 }, flexShrink: 0 }}>
+          <Tooltip title={openDetails ? t('card.collapse') : t('card.expand')}>
             <IconButton size="small" onClick={() => setOpenDetails(v => !v)} sx={{ p: 0.2, m: 0 }}>
               <ExpandMore sx={{ fontSize: 20, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </IconButton>
@@ -186,23 +210,17 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
       {/* 详情折叠区 */}
       <Collapse in={openDetails} timeout="auto" unmountOnExit>
         <Divider sx={{ mx: 1 }} />
-        <Box sx={{ p: 1.25 }}>
-          {/* 基础三轴表 */}
-          <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: '100px 1fr 1fr 90px', alignItems: 'center', gap: 0.5, mb: 1 }}>
-            <Box />
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>属性系数</Typography>
+  <Box sx={{ px: 0, py: 1.25 }}>
+          {/* 基础三轴（仅显示系数列），与 Total Coeff 对齐：110px + 100px；去掉表头，使用 shrink 标签 */}
+          <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: headerGridTemplate, alignItems: 'center', columnGap: 0.25, rowGap: 1, mb: 1 }}>
             {[
-              { label: '基础攻击', key: 'axisAttack', baseB: baselineRaw?.baseAttack, baseT: targetRaw?.baseAttack },
-              { label: '基础防御', key: 'axisDefense', baseB: baselineRaw?.baseDefense, baseT: targetRaw?.baseDefense },
-              { label: '基础生命', key: 'axisHP', baseB: baselineRaw?.baseHP, baseT: targetRaw?.baseHP },
+              { label: t('card.axisAtk'), key: 'axisAttack', baseB: baselineRaw?.baseAttack, baseT: targetRaw?.baseAttack },
+              { label: t('card.axisDef'), key: 'axisDefense', baseB: baselineRaw?.baseDefense, baseT: targetRaw?.baseDefense },
+              { label: t('card.axisHP'), key: 'axisHP', baseB: baselineRaw?.baseHP, baseT: targetRaw?.baseHP },
             ].map(row => (
               <React.Fragment key={row.key}>
-                <Typography variant="body2" sx={{ fontSize: '1rem' }}>{row.label}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{row.baseB != null ? Math.round(row.baseB).toString() : '-'}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{row.baseT != null ? Math.round(row.baseT).toString() : '-'}</Typography>
-                <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="body2" sx={{ fontSize: '1rem', gridColumn: '1 / 2' }}>{row.label}</Typography>
+                <Box sx={{ textAlign: 'center', gridColumn: '2 / 3' }}>
                   {coefficients && (
                     <TextField
                       type="number"
@@ -213,27 +231,34 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                         if (!onCoefficientsChange) return
                         onCoefficientsChange({ ...coefficients, [row.key]: isNaN(v) ? 0 : v } as AttributeCoefficients)
                       }}
-                      slotProps={{ input: { inputProps: { step: 0.1 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-                      sx={{ width: 72 }}
+                      label={t('card.axis')}
+                      slotProps={{
+                        inputLabel: { shrink: true, sx: { whiteSpace: 'nowrap' } },
+                        input: {
+                          inputProps: { step: 0.1 },
+                          sx: {
+                            '& input': { textAlign: 'right' },
+                            'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+                            'input[type=number]': { MozAppearance: 'textfield' }
+                          }
+                        }
+                      }}
+                      sx={{ width: '100%' }}
                     />
                   )}
                 </Box>
+                {/* 占位以强制每行只占用前两列，随后换行 */}
+                <Box sx={{ gridColumn: '3 / -1' }} />
               </React.Fragment>
             ))}
           </Box>
 
-          {/* 百分比词条表 */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '110px 1fr 1fr 90px', alignItems: 'center', gap: 0.5 }}>
-            <Box />
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>基线</Typography>
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>目标</Typography>
-            <Typography variant="caption" sx={{ textAlign: 'center' }}>词条系数</Typography>
+          {/* 百分比词条（仅显示系数列），与 Total Coeff 对齐：110px + 100px；去掉表头，使用 shrink 标签 */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: headerGridTemplate, alignItems: 'center', columnGap: 0.25, rowGap: 1 }}>
             {percentKeys.map((k) => (
               <React.Fragment key={k}>
-                <Typography variant="body2" sx={{ fontSize: '1rem' }}>{labels[k]}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{baselineRaw?.totals?.[k] != null ? `${baselineRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
-                <Typography variant="body2" sx={{ textAlign: 'center', fontSize: '1rem' }}>{targetRaw?.totals?.[k] != null ? `${targetRaw?.totals?.[k].toFixed(2)}%` : '-'}</Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <Typography variant="body2" sx={{ fontSize: '1rem', gridColumn: '1 / 2' }}>{labelFor(k)}</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center', gridColumn: '2 / 3' }}>
                   {coefficients && (
                     <TextField
                       type="number"
@@ -245,11 +270,24 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                         const next = { ...coefficients, [k]: isNaN(v) ? 0 : v }
                         onCoefficientsChange(next)
                       }}
-                      slotProps={{ input: { inputProps: { step: 0.1 }, sx: { 'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, 'input[type=number]': { MozAppearance: 'textfield' } } } }}
-                      sx={{ width: 72 }}
+                      label={t('card.entryCoeff')}
+                      slotProps={{
+                        inputLabel: { shrink: true, sx: { whiteSpace: 'nowrap' } },
+                        input: {
+                          inputProps: { step: 0.1 },
+                          sx: {
+                            '& input': { textAlign: 'right' },
+                            'input::-webkit-outer-spin-button, input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+                            'input[type=number]': { MozAppearance: 'textfield' }
+                          }
+                        }
+                      }}
+                      sx={{ width: '100%' }}
                     />
                   )}
                 </Box>
+                {/* 占位以强制每行只占用前两列，随后换行 */}
+                <Box sx={{ gridColumn: '3 / -1' }} />
               </React.Fragment>
             ))}
           </Box>

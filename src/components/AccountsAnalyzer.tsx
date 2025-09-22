@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react'
 import { Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Box, Stack, Divider, Chip, TableSortLabel } from '@mui/material'
 import { Character, AttributeCoefficients } from '../types'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
+import { useI18n } from '../i18n'
 
 interface AccountsAnalyzerProps {
   accounts: any[]
@@ -10,6 +11,7 @@ interface AccountsAnalyzerProps {
 }
 
 const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], teamCharacters = [], coefficientsMap = {} }) => {
+  const { t, lang } = useI18n()
   const [baselineIndex, setBaselineIndex] = useState<number | null>(null)
   const [baselineDamage, setBaselineDamage] = useState<number>(0)
   // 排序：支持按同步器与伤害排序
@@ -59,7 +61,8 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
               strength = s.finalAtk + s.finalDef + s.finalHP
             } catch {}
           }
-          arr.push({ id: ch.id, name: ch.name_cn, ael: Number.isFinite(ael) ? ael : 0, strength })
+          const displayName = (typeof (ch as any).name_en === 'string') ? (lang === 'zh' ? (ch as any).name_cn : (ch as any).name_en) : (ch as any).name_cn
+          arr.push({ id: ch.id, name: displayName, ael: Number.isFinite(ael) ? ael : 0, strength })
         }
         out[accIndex] = arr
       }
@@ -67,7 +70,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
     }
     run()
     return () => { cancelled = true }
-  }, [accounts, selected, coefficientsMap])
+  }, [accounts, selected, coefficientsMap, lang])
 
   // 计算：相对于基线账号的“团队强度比”——改为加权几何平均，抗极端且对称（互为倒数）
   const computeScale = (idx: number) => {
@@ -151,7 +154,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
 
   return (
     <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <Typography variant="h6" sx={{ fontSize: '1rem' }}>账号分析</Typography>
+      <Typography variant="h6" sx={{ fontSize: '1rem' }}>{t('accountAnalysis')}</Typography>
       <TableContainer sx={{ flex: 1, fontSize: '1rem', '& th, & td': { fontSize: 'inherit' } }}>
         <Table size="small" stickyHeader sx={{
           '& td, & th': { borderRight: '1px solid #cbd5e1' },
@@ -159,7 +162,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
         }}>
           <TableHead sx={{ '& th': { borderBottom: '2px solid #94a3b8' } }}>
             <TableRow>
-              <TableCell align="center" sx={{ minWidth: 170 }}>账号</TableCell>
+              <TableCell align="center" sx={{ minWidth: 170 }}>{t('account')}</TableCell>
               <TableCell align="center" sx={{ minWidth: 110 }}>
                 <TableSortLabel
                   active={sortBy === 'synchro'}
@@ -167,17 +170,23 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                   onClick={() => toggleSort('synchro')}
                 >
                   <Box component="span" sx={{ fontWeight: sortBy === 'synchro' ? 600 : 400, color: sortBy === 'synchro' ? 'primary.main' : 'inherit' }}>
-                    同步器
+                    {t('synchro')}
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center" sx={{ minWidth: 160 }}>角色</TableCell>
+              <TableCell align="center" sx={{ minWidth: 160 }}>{t('character')}</TableCell>
                 <TableCell align="center" sx={{ minWidth: 120 }}>
-                攻优突破分
-                <br />
-                (AEL)
+                {lang === 'zh' ? (
+                  <>
+                    {t('aelLabel')}
+                    <br />
+                    ({t('aelAbbr')})
+                  </>
+                ) : (
+                  t('aelAbbr')
+                )}
                 </TableCell>
-              <TableCell align="center" sx={{ minWidth: 110 }}>综合强度</TableCell>
+              <TableCell align="center" sx={{ minWidth: 110 }}>{t('strength')}</TableCell>
               <TableCell align="center" sx={{ minWidth: 120 }}>
                 <TableSortLabel
                   active={sortBy === 'damage'}
@@ -185,11 +194,11 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                   onClick={() => toggleSort('damage')}
                 >
                   <Box component="span" sx={{ fontWeight: sortBy === 'damage' ? 600 : 400, color: sortBy === 'damage' ? 'primary.main' : 'inherit' }}>
-                    伤害
+                    {t('damage')}
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center">基线</TableCell>
+              <TableCell align="center">{t('baseline')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -237,7 +246,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                       <TextField
                         type="text"
                         size="small"
-                        label="基线伤害"
+                        label={t('baselineDamage')}
                         value={baselineInput}
                         inputMode="numeric"
                         onChange={(e) => {
@@ -269,14 +278,14 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                   </TableCell>
                   <TableCell align="center">
                     {isBaseline ? (
-                      <Chip label="基线" color="primary" size="small" />
+                      <Chip label={t('baseline')} color="primary" size="small" />
                     ) : (
                       <Button
                         variant="outlined"
                         size="small"
                         onClick={() => { setBaselineIndex(index); if (baselineIndex !== index) { setBaselineDamage(0); setBaselineInput('') } }}
                       >
-                        设为<br />基线
+                        {t('setBaseline')}
                       </Button>
                     )}
                   </TableCell>

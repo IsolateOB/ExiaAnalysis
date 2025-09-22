@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react'
 import { Box, Typography, Button, Alert, LinearProgress } from '@mui/material'
 import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon } from '@mui/icons-material'
+import { useI18n } from '../i18n'
 
 export interface AccountsPayload {
   accounts: any[]
@@ -11,6 +12,7 @@ interface SingleJsonUploadProps {
 }
 
 const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded }) => {
+  const { t } = useI18n()
   const [isUploading, setIsUploading] = useState(false)
   const [fileName, setFileName] = useState<string | undefined>()
   const [error, setError] = useState<string | undefined>()
@@ -35,13 +37,13 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
         const accounts = parseAccounts(json)
         onAccountsLoaded({ accounts })
       } catch (e: any) {
-        setError('文件解析失败: ' + (e?.message || 'unknown'))
+        setError(t('upload.parseError') + ': ' + (e?.message || 'unknown'))
       } finally {
         setIsUploading(false)
       }
     }
     reader.onerror = () => {
-      setError('文件读取失败')
+      setError(t('upload.readError'))
       setIsUploading(false)
     }
     reader.readAsText(file)
@@ -64,7 +66,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
     if (f && (f.type === 'application/json' || f.name.endsWith('.json'))) {
       loadFile(f)
     } else {
-      setError('请上传 JSON 文件')
+      setError(t('upload.onlyJson'))
     }
   }
 
@@ -74,7 +76,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>上传账号 JSON</Typography>
+  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('upload.title')}</Typography>
       <Box
         onDragOver={handleDragOver}
         onDrop={handleDrop}
@@ -92,23 +94,23 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
         {isUploading ? (
           <Box sx={{ width: '100%', textAlign: 'center' }}>
             <LinearProgress sx={{ mb: 1 }} />
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>正在上传...</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>{t('upload.uploading')}</Typography>
           </Box>
         ) : error ? (
           <Box sx={{ textAlign: 'center' }}>
             <Alert severity="error" sx={{ mb: 1, fontSize: '0.8rem' }}>{error}</Alert>
-            <Button variant="outlined" size="small" onClick={(e) => { e.stopPropagation(); clear() }} sx={{ fontSize: '0.7rem' }}>重新上传</Button>
+            <Button variant="outlined" size="small" onClick={(e) => { e.stopPropagation(); clear() }} sx={{ fontSize: '0.7rem' }}>{t('upload.retry')}</Button>
           </Box>
         ) : fileName ? (
           <Box sx={{ textAlign: 'center', maxWidth: '100%' }}>
             <Typography variant="body2" noWrap sx={{ mb: 1, color: '#1976d2', fontSize: '0.8rem', maxWidth: '100%' }}>✓ {fileName}</Typography>
-            <Button variant="outlined" size="small" startIcon={<DeleteIcon />} onClick={(e) => { e.stopPropagation(); clear() }} sx={{ fontSize: '0.7rem' }}>移除</Button>
+            <Button variant="outlined" size="small" startIcon={<DeleteIcon />} onClick={(e) => { e.stopPropagation(); clear() }} sx={{ fontSize: '0.7rem' }}>{t('common.remove')}</Button>
           </Box>
         ) : (
           <Box sx={{ textAlign: 'center' }}>
             <CloudUploadIcon sx={{ fontSize: 32, color: '#ccc', mb: 0.5 }} />
-            <Typography variant="body2" sx={{ mb: 0.5, fontSize: '0.8rem' }}>点击或拖拽上传</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>仅支持单个 JSON（多账号）</Typography>
+            <Typography variant="body2" sx={{ mb: 0.5, fontSize: '0.8rem' }}>{t('upload.hint')}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>{t('upload.onlyOneJson')}</Typography>
           </Box>
         )}
       </Box>
