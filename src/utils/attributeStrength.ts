@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import { AttributeCoefficients, Character, RawAttributeScores } from '../types'
 
 // 默认系数

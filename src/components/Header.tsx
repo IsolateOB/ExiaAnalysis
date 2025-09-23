@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React from 'react'
 import { AppBar, Toolbar, Typography, Box, Switch, FormControlLabel } from '@mui/material'
 import { useI18n } from '../i18n'
@@ -6,7 +9,6 @@ interface HeaderProps {
   title?: string
 }
 
-// 参考 ExiaInvasion 管理页：顶部 AppBar + Toolbar，左侧预留图标位，右侧可扩展操作位
 const Header: React.FC<HeaderProps> = ({ title = 'ExiaAnalysis' }) => {
   const { lang, toggleLang, t } = useI18n()
   return (

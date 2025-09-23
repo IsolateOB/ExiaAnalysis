@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React, { createContext, useContext, useMemo, useState, ReactNode, useCallback } from 'react'
 import TRANSLATIONS, { Lang } from './translations'
 

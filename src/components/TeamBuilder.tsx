@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, Divider, MenuItem, Select } from '@mui/material'
 import { Character, TeamCharacter, AttributeCoefficients } from '../types'

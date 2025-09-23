@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React, { useCallback, useState } from 'react'
 import { Box, Typography, Button, Alert, LinearProgress } from '@mui/material'
 import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon } from '@mui/icons-material'

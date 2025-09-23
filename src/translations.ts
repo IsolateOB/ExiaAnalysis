@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 // 基于 ExiaInvasion 的结构，提供 zh/en 文案；可按需逐步扩展
 export type Lang = 'zh' | 'en'
 

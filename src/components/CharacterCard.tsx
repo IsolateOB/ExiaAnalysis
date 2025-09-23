@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React from 'react'
 import { Typography, Box, IconButton, TextField } from '@mui/material'
 import { Add, Delete } from '@mui/icons-material'

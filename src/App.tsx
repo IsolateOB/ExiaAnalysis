@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React, { useState } from 'react'
 import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography } from '@mui/material'
 import TeamBuilder from './components/TeamBuilder'

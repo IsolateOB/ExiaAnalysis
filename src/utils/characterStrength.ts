@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import { Character } from '../types'
 
 // 计算角色强度的工具函数

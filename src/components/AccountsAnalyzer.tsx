@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 import React, { useMemo, useState, useEffect } from 'react'
 import { Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Box, Stack, Divider, Chip, TableSortLabel, Tooltip } from '@mui/material'
 import { Character, AttributeCoefficients } from '../types'
