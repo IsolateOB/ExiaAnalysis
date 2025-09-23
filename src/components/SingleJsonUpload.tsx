@@ -3,7 +3,7 @@
  */
 import React, { useCallback, useState } from 'react'
 import { Box, Typography, Button, Alert, LinearProgress } from '@mui/material'
-import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon } from '@mui/icons-material'
+import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon, HelpOutline as HelpOutlineIcon } from '@mui/icons-material'
 import { useI18n } from '../i18n'
 
 export interface AccountsPayload {
@@ -79,7 +79,26 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('upload.title')}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('upload.title')}</Typography>
+        <Box
+          component="a"
+          href="https://github.com/IsolateOB/ExiaAnalysis/README.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            color: 'primary.main',
+            textDecoration: 'none',
+            '&:hover': { textDecoration: 'underline' }
+          }}
+        >
+          <HelpOutlineIcon fontSize="small" />
+          <Typography variant="caption" sx={{ color: 'inherit' }}>{t('upload.helpLink')}</Typography>
+        </Box>
+      </Box>
       <Box
         onDragOver={handleDragOver}
         onDrop={handleDrop}

@@ -48,6 +48,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // 上传
     'upload.title': '上传账号 JSON',
+    'upload.helpLink': '如何获取 JSON 文件？',
     'upload.uploading': '正在上传...',
     'upload.retry': '重新上传',
     'upload.hint': '点击或拖拽上传',
@@ -169,6 +170,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // Upload
     'upload.title': 'Upload Accounts JSON',
+  'upload.helpLink': 'How to get the JSON file?',
     'upload.uploading': 'Uploading...',
     'upload.retry': 'Re-upload',
     'upload.hint': 'Click or drag to upload',
