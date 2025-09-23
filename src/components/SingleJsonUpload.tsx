@@ -83,7 +83,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
         <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('upload.title')}</Typography>
         <Box
           component="a"
-          href="https://github.com/IsolateOB/ExiaAnalysis/README.md"
+          href="https://github.com/IsolateOB/ExiaAnalysis?tab=readme-ov-file#exiaanalysis"
           target="_blank"
           rel="noopener noreferrer"
           sx={{
