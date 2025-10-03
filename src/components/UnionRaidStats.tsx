@@ -173,7 +173,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     
     // 如果有突袭数据,则填充出刀信息
     if (raidData?.participate_data) {
-      raidData.participate_data.forEach((entry: any) => {
+      // 倒序处理,让最新的记录排在前面
+      const sortedData = [...raidData.participate_data].reverse()
+      sortedData.forEach((entry: any) => {
         // 过滤难度
         if (entry.difficulty !== difficulty) return
         
@@ -354,7 +356,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                 </TableSortLabel>
               </TableCell>
               <TableCell align="center" rowSpan={2} sx={{ 
-                minWidth: 120, 
+                minWidth: 100, 
                 zIndex: 4, 
                 top: 0,
                 borderBottom: '2px solid #94a3b8 !important',
@@ -430,7 +432,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
               <TableRow key={row.name} hover sx={{ '& td': { borderBottom: '2px solid #cbd5e1' } }}>
                 <TableCell align="center">{idx + 1}</TableCell>
                 <TableCell sx={{ borderRight: '2px solid #94a3b8 !important' }}>{row.name}</TableCell>
-                <TableCell align="center" sx={{ minWidth: 120, borderRight: '2px solid #94a3b8 !important' }}>{row.synchroLevel}</TableCell>
+                <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>{row.synchroLevel}</TableCell>
                 <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>
                   {row.strikes.filter((s: any) => s === null).length}
                 </TableCell>
