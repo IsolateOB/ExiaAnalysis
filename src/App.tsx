@@ -123,7 +123,7 @@ const App: React.FC = () => {
             {/* 左侧固定侧栏 */}
             <Box
               sx={{
-                width: { xs: '100%', md: 410 },
+                width: { xs: '100%', md: 400 },
                 flexShrink: 0,
                 alignSelf: 'stretch',
                 position: 'sticky',
