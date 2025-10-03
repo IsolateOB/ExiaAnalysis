@@ -36,6 +36,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
   const [countdown, setCountdown] = useState<number>(30) // 刷新倒计时
   const lastFetchKeyRef = useRef<string>('') // 用于避免重复请求
   const fetchIntervalRef = useRef<NodeJS.Timeout | null>(null) // 保存定时器引用
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null) // 保存倒计时定时器引用
+  const hasInitializedRef = useRef<boolean>(false) // 标记是否已经初始化过
 
   // 1. 加载角色数据(如果没有提供则自己获取)
   useEffect(() => {
@@ -99,16 +101,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         throw new Error(json.msg || 'API error')
       }
       
-      // 调试输出: 查看后端返回的数据
-      console.log('=== 联盟突袭数据调试 ===')
-      console.log('accounts 数组中的名称:', accounts.map(a => a.name))
-      console.log('participate_data 数量:', json.data?.participate_data?.length || 0)
-      if (json.data?.participate_data) {
-        console.log('participate_data 中的 nickname:', 
-          [...new Set(json.data.participate_data.map((p: any) => p.nickname))])
-      }
-      console.log('========================')
-      
       setRaidData(json.data)
       lastFetchKeyRef.current = `${cookie}_${areaId}` // 记录已获取
       setCountdown(30) // 重置倒计时
@@ -117,54 +109,68 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     }
   }
 
+  // 3. 当账号数据加载后,立即获取突袭数据并启动定时器
   useEffect(() => {
-    if (Object.keys(nikkeMap).length > 0 && accounts.length > 0) {
-      fetchRaidData() // 立即执行一次
+    // 只在第一次有账号数据且有nikkeMap时初始化
+    if (Object.keys(nikkeMap).length > 0 && accounts.length > 0 && !hasInitializedRef.current) {
+      hasInitializedRef.current = true
       
-      // 设置30秒刷新定时器
+      // 立即获取数据
+      fetchRaidData()
+      
+      // 启动30秒刷新定时器
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current)
+      }
       fetchIntervalRef.current = setInterval(fetchRaidData, 30000)
       
-      // 清理定时器
-      return () => {
-        if (fetchIntervalRef.current) {
-          clearInterval(fetchIntervalRef.current)
-        }
+      // 启动倒计时
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+      }
+      countdownIntervalRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) return 30
+          return prev - 1
+        })
+      }, 1000)
+    }
+    
+    // 当账号数据清空时,重置状态
+    if (accounts.length === 0 && hasInitializedRef.current) {
+      hasInitializedRef.current = false
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current)
+        fetchIntervalRef.current = null
+      }
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+      }
+      setCountdown(30)
+      setRaidData(null)
+    }
+  }, [accounts.length, Object.keys(nikkeMap).length])
+
+  // 4. 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current)
+      }
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
       }
     }
-  }, [accounts, nikkeMap, t])
+  }, [])
 
-  // 3. 倒计时逻辑 - 只在有账号数据时启动
-  useEffect(() => {
-    if (!accounts.length) {
-      setCountdown(30) // 重置倒计时
-      return
-    }
-    
-    const countdownInterval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) return 30
-        return prev - 1
-      })
-    }, 1000)
-    
-    return () => clearInterval(countdownInterval)
-  }, [accounts.length])
-
-  // 4. 手动刷新
+  // 5. 手动刷新
   const handleManualRefresh = () => {
-    // 清除现有定时器
-    if (fetchIntervalRef.current) {
-      clearInterval(fetchIntervalRef.current)
-    }
-    
-    // 立即刷新
     fetchRaidData()
-    
-    // 重新设置定时器
-    fetchIntervalRef.current = setInterval(fetchRaidData, 30000)
+    setCountdown(30) // 重置倒计时
   }
 
-  // 5. 构建表格数据
+  // 6. 构建表格数据
   const tableData = useMemo(() => {
     // 先初始化所有账号的数据结构(即使没有突袭数据也要显示)
     const accountMap: Record<string, any> = {}
@@ -211,7 +217,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     return Object.values(accountMap)
   }, [raidData, accounts, nikkeMap, lang, difficulty])
 
-  // 4. 计算剩余刀数
+  // 7. 计算剩余刀数
   const remainingStrikes = useMemo(() => {
     const total = accounts.length * 3
     const used = tableData.reduce((sum, row: any) => {
@@ -220,7 +226,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     return total - used
   }, [tableData, accounts.length])
 
-  // 5. 排序
+  // 8. 排序
   const sortedData = useMemo(() => {
     if (!sortBy) return tableData
     const sign = sortOrder === 'asc' ? 1 : -1

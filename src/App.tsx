@@ -190,9 +190,11 @@ const App: React.FC = () => {
                 overflow: 'hidden',
               }}
             >
-              {currentPage === 'analysis' ? (
+              {/* 始终渲染两个组件，通过 display 控制显示 */}
+              <Box sx={{ display: currentPage === 'analysis' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
                 <AccountsAnalyzer accounts={accounts} teamCharacters={teamChars} coefficientsMap={coeffsMap} />
-              ) : (
+              </Box>
+              <Box sx={{ display: currentPage === 'unionRaid' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
                 <UnionRaidStats 
                   accounts={accounts} 
                   onCopyTeam={(characters) => {
@@ -205,7 +207,7 @@ const App: React.FC = () => {
                     handleStatusChange(t('unionRaid.teamCopied') || '队伍已复制到构建器', 'success')
                   }}
                 />
-              )}
+              </Box>
             </Box>
           </Box>
         </Container>
