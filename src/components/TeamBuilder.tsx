@@ -578,8 +578,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* 模板管理（导入导出 + 选择 + 保存为模板） */}
-      <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb' }}>
+      {/* 模板管理（导入导出 + 选择 + 保存为模板）- 固定部分 */}
+      <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
           <Button variant="outlined" size="small" startIcon={<FileUploadIcon />} onClick={() => importInputRef.current?.click()}>
             {t('tpl.import')}
@@ -677,7 +677,9 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           >{t('tpl.save')}</Button>
         </Stack>
       </Box>
-  <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
+      
+      {/* 角色列表 - 可滚动部分 */}
+      <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
         <Stack spacing={1}>
         {team.map((teamChar) => {
           const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }

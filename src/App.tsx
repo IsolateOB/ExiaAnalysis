@@ -135,12 +135,14 @@ const App: React.FC = () => {
                 px: 2,
                 pb: 2,
                 pt: 4,
-                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
                 // 避免滚动条出现时，左侧内容区域的抖动
                 scrollbarGutter: 'stable both-edges',
               }}
             >
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
                 {/* 页面切换 */}
                 <Box>
                   <ToggleButtonGroup
@@ -156,8 +158,14 @@ const App: React.FC = () => {
                 </Box>
                 
                 <SingleJsonUpload onAccountsLoaded={(p: AccountsPayload) => setAccounts(p.accounts)} />
-                <Box>
+              </Box>
+              
+              {/* TeamBuilder 占据剩余空间并内部滚动 */}
+              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ flexShrink: 0 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{t('teamBuilder')}</Typography>
+                </Box>
+                <Box sx={{ flex: 1, minHeight: 0 }}>
                   <TeamBuilder
                     externalTeam={teamChars}
                     onTeamSelectionChange={(chars, coeffs) => {

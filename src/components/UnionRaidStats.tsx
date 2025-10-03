@@ -99,6 +99,16 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         throw new Error(json.msg || 'API error')
       }
       
+      // 调试输出: 查看后端返回的数据
+      console.log('=== 联盟突袭数据调试 ===')
+      console.log('accounts 数组中的名称:', accounts.map(a => a.name))
+      console.log('participate_data 数量:', json.data?.participate_data?.length || 0)
+      if (json.data?.participate_data) {
+        console.log('participate_data 中的 nickname:', 
+          [...new Set(json.data.participate_data.map((p: any) => p.nickname))])
+      }
+      console.log('========================')
+      
       setRaidData(json.data)
       lastFetchKeyRef.current = `${cookie}_${areaId}` // 记录已获取
       setCountdown(30) // 重置倒计时
@@ -151,8 +161,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
 
   // 5. 构建表格数据
   const tableData = useMemo(() => {
-    if (!raidData?.participate_data) return []
-    
+    // 先初始化所有账号的数据结构(即使没有突袭数据也要显示)
     const accountMap: Record<string, any> = {}
     accounts.forEach(acc => {
       accountMap[acc.name] = {
@@ -162,32 +171,35 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
       }
     })
     
-    // 按账号名称分组突袭数据
-    raidData.participate_data.forEach((entry: any) => {
-      // 过滤难度
-      if (entry.difficulty !== difficulty) return
-      
-      const nickname = entry.nickname
-      if (!accountMap[nickname]) return
-      
-      // 按 step 排序确定是第几刀（step 1-5，每个账号最多3次出击）
-      const strikeIndex = accountMap[nickname].strikes.findIndex((s: any) => s === null)
-      if (strikeIndex === -1) return
-      
-      // 解析队伍显示名称
-      const squadNames = (entry.squad || []).map((s: any) => {
-        const baseId = tidToBaseId(s.tid)
-        const nikke = nikkeMap[baseId]
-        return lang === 'zh' ? (nikke?.name_cn || '?') : (nikke?.name_en || '?')
+    // 如果有突袭数据,则填充出刀信息
+    if (raidData?.participate_data) {
+      raidData.participate_data.forEach((entry: any) => {
+        // 过滤难度
+        if (entry.difficulty !== difficulty) return
+        
+        const nickname = entry.nickname
+        // 只处理 JSON 中存在的账号(忽略联盟中其他成员)
+        if (!accountMap[nickname]) return
+        
+        // 按 step 排序确定是第几刀（step 1-5，每个账号最多3次出击）
+        const strikeIndex = accountMap[nickname].strikes.findIndex((s: any) => s === null)
+        if (strikeIndex === -1) return
+        
+        // 解析队伍显示名称
+        const squadNames = (entry.squad || []).map((s: any) => {
+          const baseId = tidToBaseId(s.tid)
+          const nikke = nikkeMap[baseId]
+          return lang === 'zh' ? (nikke?.name_cn || '?') : (nikke?.name_en || '?')
+        })
+        
+        accountMap[nickname].strikes[strikeIndex] = {
+          boss: `${entry.level}-${stepToRoman[entry.step] || entry.step}`,
+          squad: squadNames.join(', '),
+          squadData: entry.squad || [], // 保存原始数据用于复制
+          damage: Number(entry.total_damage || 0)
+        }
       })
-      
-      accountMap[nickname].strikes[strikeIndex] = {
-        boss: `${entry.level}-${stepToRoman[entry.step] || entry.step}`,
-        squad: squadNames.join(', '),
-        squadData: entry.squad || [], // 保存原始数据用于复制
-        damage: Number(entry.total_damage || 0)
-      }
-    })
+    }
     
     return Object.values(accountMap)
   }, [raidData, accounts, nikkeMap, lang, difficulty])
@@ -319,9 +331,12 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
           '& td:last-child, & th:last-child': { borderRight: 'none' },
         }}>
           <TableHead>
-            <TableRow>
-              <TableCell align="center" sx={{ minWidth: 60, borderBottom: '2px solid #94a3b8' }} rowSpan={2}>{t('unionRaid.index')}</TableCell>
-              <TableCell align="center" sx={{ minWidth: 120, borderBottom: '2px solid #94a3b8' }} rowSpan={2}>
+            <TableRow sx={{ 
+              '& th': { 
+                borderBottom: '2px solid #94a3b8'
+              } 
+            }}>
+              <TableCell align="center" sx={{ minWidth: 180 }} colSpan={2}>
                 <TableSortLabel
                   active={sortBy === 'name'}
                   direction={sortBy === 'name' ? sortOrder : 'asc'}
@@ -332,7 +347,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center" sx={{ minWidth: 100, borderBottom: '2px solid #94a3b8' }} rowSpan={2}>
+              <TableCell align="center" sx={{ minWidth: 120 }}>
                 <TableSortLabel
                   active={sortBy === 'synchro'}
                   direction={sortBy === 'synchro' ? sortOrder : 'asc'}
@@ -343,30 +358,18 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell colSpan={1} align="center" sx={{ minWidth: 60 }}>
+              <TableCell align="center" sx={{ minWidth: 100 }}>
                 {t('unionRaid.remaining')}
               </TableCell>
-              <TableCell colSpan={3} align="center">
-                {t('unionRaid.strike1')}
-              </TableCell>
-              <TableCell colSpan={3} align="center">
-                {t('unionRaid.strike2')}
-              </TableCell>
-              <TableCell colSpan={3} align="center">
-                {t('unionRaid.strike3')}
-              </TableCell>
-            </TableRow>
-            <TableRow sx={{ '& th': { borderBottom: '2px solid #94a3b8' } }}>
-              <TableCell align="center">
-                {remainingStrikes}
-              </TableCell>
-              {[1, 2, 3].map(i => (
-                <React.Fragment key={i}>
-                  <TableCell align="center">{t('unionRaid.boss')}</TableCell>
-                  <TableCell>{t('unionRaid.squad')}</TableCell>
-                  <TableCell align="right">{t('damage')}</TableCell>
-                </React.Fragment>
-              ))}
+              <TableCell align="center" sx={{ minWidth: 80 }}>{t('unionRaid.boss')}</TableCell>
+              <TableCell sx={{ minWidth: 180 }}>{t('unionRaid.squad')}</TableCell>
+              <TableCell align="right" sx={{ minWidth: 100 }}>{t('damage')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 80 }}>{t('unionRaid.boss')}</TableCell>
+              <TableCell sx={{ minWidth: 180 }}>{t('unionRaid.squad')}</TableCell>
+              <TableCell align="right" sx={{ minWidth: 100 }}>{t('damage')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 80 }}>{t('unionRaid.boss')}</TableCell>
+              <TableCell sx={{ minWidth: 180 }}>{t('unionRaid.squad')}</TableCell>
+              <TableCell align="right" sx={{ minWidth: 100 }}>{t('damage')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -374,28 +377,50 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
               <TableRow key={row.name} hover sx={{ '& td': { borderBottom: '2px solid #cbd5e1' } }}>
                 <TableCell align="center">{idx + 1}</TableCell>
                 <TableCell>{row.name}</TableCell>
-                <TableCell align="center">{row.synchroLevel}</TableCell>
-                <TableCell align="center">
+                <TableCell align="center" sx={{ minWidth: 120 }}>{row.synchroLevel}</TableCell>
+                <TableCell align="center" sx={{ minWidth: 100 }}>
                   {row.strikes.filter((s: any) => s === null).length}
                 </TableCell>
                 {row.strikes.map((strike: any, si: number) => (
                   <React.Fragment key={si}>
                     <TableCell align="center">{strike?.boss || '-'}</TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem', maxWidth: 150 }}>
+                    <TableCell sx={{ fontSize: '0.75rem', minWidth: 180, position: 'relative' }}>
                       {strike?.squad ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                            {strike.squad.split(', ').map((name: string, i: number) => (
-                              <Box key={i} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</Box>
-                            ))}
-                          </Box>
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: 0.25,
+                            position: 'relative',
+                            '&:hover .copy-icon': {
+                              opacity: 1
+                            }
+                          }}
+                        >
+                          {strike.squad.split(', ').map((name: string, i: number) => (
+                            <Box key={i} sx={{ whiteSpace: 'nowrap' }}>{name}</Box>
+                          ))}
                           <Tooltip title={t('unionRaid.copyTeam') || '复制队伍'}>
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              className="copy-icon"
+                              size="small"
                               onClick={() => handleCopyTeam(strike.squadData)}
-                              sx={{ padding: '2px' }}
+                              sx={{
+                                position: 'absolute',
+                                top: -4,
+                                right: -4,
+                                padding: '2px',
+                                opacity: 0,
+                                transition: 'opacity 0.2s',
+                                backgroundColor: 'background.paper',
+                                boxShadow: 1,
+                                '&:hover': {
+                                  backgroundColor: 'primary.main',
+                                  color: 'white'
+                                }
+                              }}
                             >
-                              <ContentCopyIcon fontSize="small" />
+                              <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
                             </IconButton>
                           </Tooltip>
                         </Box>
