@@ -4,6 +4,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // 处理 OPTIONS 请求 (CORS 预检)
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Game-Cookie')
+    return res.status(200).end()
+  }
+
   // 只允许 POST 请求
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
