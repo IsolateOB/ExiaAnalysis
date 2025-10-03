@@ -198,7 +198,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center" sx={{ minWidth: 100 }}>{t('baseline')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 110 }}>{t('baseline')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
