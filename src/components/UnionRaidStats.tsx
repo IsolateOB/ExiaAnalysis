@@ -172,44 +172,43 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
 
   // 6. 构建表格数据
   const tableData = useMemo(() => {
-    // 创建 openid -> account 的映射(通过 game_uid 匹配)
-    const openidToAccount: Record<string, any> = {}
-    accounts.forEach(acc => {
-      // 从 cookie 中提取 game_uid
-      const gameUidMatch = acc.cookie?.match(/game_uid=(\d+)/)
-      const gameUid = gameUidMatch ? gameUidMatch[1] : acc.game_uid
-      if (gameUid) {
-        openidToAccount[gameUid] = acc
-      }
-    })
-    
-    // 初始化所有账号的数据结构
+    // 初始化所有账号的数据结构,使用 game_openid 作为键
     const accountMap: Record<string, any> = {}
     accounts.forEach(acc => {
-      // 使用 game_uid 作为唯一标识
-      const gameUidMatch = acc.cookie?.match(/game_uid=(\d+)/)
-      const gameUid = gameUidMatch ? gameUidMatch[1] : acc.game_uid
-      const key = gameUid || acc.name // 如果没有 game_uid,回退到使用 name
+      // 从 cookie 中提取 game_openid
+      const gameOpenidMatch = acc.cookie?.match(/game_openid=(\d+)/)
+      const gameOpenid = gameOpenidMatch ? gameOpenidMatch[1] : null
+      const key = gameOpenid || acc.name // 如果没有 game_openid,回退到使用 name
       
       accountMap[key] = {
         name: acc.name,
-        gameUid: gameUid,
+        gameOpenid: gameOpenid,
         synchroLevel: acc.synchroLevel || acc.SynchroLevel || 0,
         strikes: [null, null, null] // 最多3刀
       }
     })
     
+    console.log('=== 联盟突袭匹配调试 ===')
+    console.log('accountMap keys (game_openid):', Object.keys(accountMap))
+    
     // 如果有突袭数据,则填充出刀信息
     if (raidData?.participate_data) {
       // 倒序处理,让最新的记录排在前面
       const sortedData = [...raidData.participate_data].reverse()
+      console.log('participate_data openids:', sortedData.map((e: any) => e.openid))
+      
       sortedData.forEach((entry: any) => {
         // 过滤难度
         if (entry.difficulty !== difficulty) return
         
         const openid = entry.openid
-        // 通过 openid 匹配 game_uid
-        if (!accountMap[openid]) return
+        // 通过 openid 匹配 game_uid (它们应该是相同的)
+        if (!accountMap[openid]) {
+          console.log(`未找到匹配: openid=${openid}, nickname=${entry.nickname}`)
+          return
+        }
+        
+        console.log(`匹配成功: openid=${openid}, nickname=${entry.nickname}`)
         
         // 按 step 排序确定是第几刀（step 1-5，每个账号最多3次出击）
         const strikeIndex = accountMap[openid].strikes.findIndex((s: any) => s === null)
@@ -230,6 +229,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         }
       })
     }
+    console.log('========================')
     
     return Object.values(accountMap)
   }, [raidData, accounts, nikkeMap, lang, difficulty])
