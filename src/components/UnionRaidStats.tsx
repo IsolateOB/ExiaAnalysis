@@ -188,15 +188,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
       }
     })
     
-    console.log('=== 联盟突袭匹配调试 ===')
-    console.log('accountMap keys (game_openid):', Object.keys(accountMap))
-    
     // 如果有突袭数据,则填充出刀信息
     if (raidData?.participate_data) {
       // 倒序处理,让最新的记录排在前面
       const sortedData = [...raidData.participate_data].reverse()
-      console.log('participate_data openids:', sortedData.map((e: any) => e.openid))
-      
       sortedData.forEach((entry: any) => {
         // 过滤难度
         if (entry.difficulty !== difficulty) return
@@ -204,11 +199,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         const openid = entry.openid
         // 通过 openid 匹配 game_uid (它们应该是相同的)
         if (!accountMap[openid]) {
-          console.log(`未找到匹配: openid=${openid}, nickname=${entry.nickname}`)
           return
         }
-        
-        console.log(`匹配成功: openid=${openid}, nickname=${entry.nickname}`)
         
         // 按 step 排序确定是第几刀（step 1-5，每个账号最多3次出击）
         const strikeIndex = accountMap[openid].strikes.findIndex((s: any) => s === null)
@@ -229,8 +221,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         }
       })
     }
-    console.log('========================')
-    
     return Object.values(accountMap)
   }, [raidData, accounts, nikkeMap, lang, difficulty])
 

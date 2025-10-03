@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import { AttributeCoefficients, Character, RawAttributeScores } from '../types'
+import { numberData } from '../data/number'
 
 // 默认系数
 export const defaultCoefficients: AttributeCoefficients = {
@@ -18,27 +19,6 @@ export const defaultCoefficients: AttributeCoefficients = {
   axisAttack: 1, // 基础攻击轴属性系数默认 1
   axisDefense: 0, // 默认忽略防御基础轴
   axisHP: 0, // 默认忽略生命基础轴
-}
-
-// 读取 number.json（兼容相对/绝对/file 协议路径）
-const loadNumberJson = async (): Promise<any | null> => {
-  let res: Response | undefined
-  try {
-    try {
-      res = await fetch('./number.json')
-      if (res.ok) return await res.json()
-    } catch {}
-    try {
-      res = await fetch('/number.json')
-      if (res.ok) return await res.json()
-    } catch {}
-    try {
-      const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-      res = await fetch(`${baseUrl}/number.json`)
-      if (res.ok) return await res.json()
-    } catch {}
-  } catch {}
-  return null
 }
 
 // 从 JSON 账号数据中聚合装备词条
@@ -121,7 +101,7 @@ const getBaseNumbers = (numData: any, characterData: any, character: Character) 
   const idx = Math.max(0, (level || 1) - 1)
 
   const atkList = numData?.[`${clazz}_level_attack_list`] || []
-  // 注意：number.json 中有的使用 defence（英式），有的使用 defense（美式），两者都要兼容
+  // 注意：numberData 中有的使用 defence（英式），有的使用 defense（美式），两者都要兼容
   const defList =
     numData?.[`${clazz}_level_defense_list`] ||
     numData?.[`${clazz}_level_defence_list`] ||
@@ -154,16 +134,15 @@ const getBaseNumbers = (numData: any, characterData: any, character: Character) 
 }
 
 // 计算原始属性分（不乘系数）
-export const computeRawAttributeScores = async (
+export const computeRawAttributeScores = (
   characterData: any,
   character: Character,
   rootData?: any
-): Promise<RawAttributeScores> => {
+): RawAttributeScores => {
   const totals = aggregateEquipStats(characterData)
   const breakthroughCoeff = getBreakthroughCoeff(characterData)
-  const numData = await loadNumberJson()
-  const { syncAtk, syncDef, syncHP, itemAtk, itemDef, itemHP } = getBaseNumbers(numData, { ...rootData, ...characterData }, character)
-  // 新算法：基础值不再预乘突破；突破作为最终外部乘区单独放大，防止同步器部分与突破重复嵌套
+  const { syncAtk, syncDef, syncHP, itemAtk, itemDef, itemHP } = getBaseNumbers(numberData, { ...rootData, ...characterData }, character)
+  // 新算法：基础值不再预乘突破;突破作为最终外部乘区单独放大,防止同步器部分与突破重复嵌套
   const baseAttack = syncAtk + itemAtk
   const baseDefense = syncDef + itemDef
   const baseHP = syncHP + itemHP

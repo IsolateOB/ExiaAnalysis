@@ -33,46 +33,41 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
   const [perAccount, setPerAccount] = useState<Record<number, PerChar[]>>({})
 
   useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      const out: Record<number, PerChar[]> = {}
-      for (let accIndex = 0; accIndex < accounts.length; accIndex++) {
-        const acc = accounts[accIndex]
-        const arr: PerChar[] = []
-        for (let pos = 0; pos < 5; pos++) {
-          const ch = selected[pos]
-          if (!ch) { arr.push({ id: -1, name: '-', ael: 0, strength: 0 }); continue }
-          const coeff = coefficientsMap?.[pos + 1] || getDefaultCoefficients()
-          // 找到该账号中的对应角色数据
-          let target: any = null
-          if (acc?.elements) {
-            for (const list of Object.values(acc.elements) as any[]) {
-              if (Array.isArray(list)) {
-                const f = list.find((x: any) => String(x.id) === String(ch.id))
-                if (f) { target = f; break }
-              }
+    const out: Record<number, PerChar[]> = {}
+    for (let accIndex = 0; accIndex < accounts.length; accIndex++) {
+      const acc = accounts[accIndex]
+      const arr: PerChar[] = []
+      for (let pos = 0; pos < 5; pos++) {
+        const ch = selected[pos]
+        if (!ch) { arr.push({ id: -1, name: '-', ael: 0, strength: 0 }); continue }
+        const coeff = coefficientsMap?.[pos + 1] || getDefaultCoefficients()
+        // 找到该账号中的对应角色数据
+        let target: any = null
+        if (acc?.elements) {
+          for (const list of Object.values(acc.elements) as any[]) {
+            if (Array.isArray(list)) {
+              const f = list.find((x: any) => String(x.id) === String(ch.id))
+              if (f) { target = f; break }
             }
           }
-          // AEL 直接读取
-          const ael = Number(target?.AtkElemLbScore || target?.atkElemLbScore || 0)
-          // 强度计算
-          let strength = 0
-          if (target) {
-            try {
-              const raw = await computeRawAttributeScores(target, ch, acc)
-              const s = computeWeightedStrength(raw, coeff)
-              strength = s.finalAtk + s.finalDef + s.finalHP
-            } catch {}
-          }
-          const displayName = (typeof (ch as any).name_en === 'string') ? (lang === 'zh' ? (ch as any).name_cn : (ch as any).name_en) : (ch as any).name_cn
-          arr.push({ id: ch.id, name: displayName, ael: Number.isFinite(ael) ? ael : 0, strength })
         }
-        out[accIndex] = arr
+        // AEL 直接读取
+        const ael = Number(target?.AtkElemLbScore || target?.atkElemLbScore || 0)
+        // 强度计算
+        let strength = 0
+        if (target) {
+          try {
+            const raw = computeRawAttributeScores(target, ch, acc)
+            const s = computeWeightedStrength(raw, coeff)
+            strength = s.finalAtk + s.finalDef + s.finalHP
+          } catch {}
+        }
+        const displayName = (typeof (ch as any).name_en === 'string') ? (lang === 'zh' ? (ch as any).name_cn : (ch as any).name_en) : (ch as any).name_cn
+        arr.push({ id: ch.id, name: displayName, ael: Number.isFinite(ael) ? ael : 0, strength })
       }
-      if (!cancelled) setPerAccount(out)
+      out[accIndex] = arr
     }
-    run()
-    return () => { cancelled = true }
+    setPerAccount(out)
   }, [accounts, selected, coefficientsMap, lang])
 
   // 计算：相对于基线账号的“团队强度比”——改为加权几何平均，抗极端且对称（互为倒数）
