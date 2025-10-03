@@ -2,10 +2,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useState } from 'react'
-import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography } from '@mui/material'
+import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material'
 import TeamBuilder from './components/TeamBuilder'
 import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
+import UnionRaidStats from './components/UnionRaidStats'
 import type { Character, AttributeCoefficients } from './types'
 import Header from './components/Header'
 import { useI18n } from './i18n'
@@ -89,6 +90,7 @@ const App: React.FC = () => {
   const [accounts, setAccounts] = useState<any[]>([])
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
+  const [currentPage, setCurrentPage] = useState<'analysis' | 'unionRaid'>('analysis')
   const [notification, setNotification] = useState<{
     open: boolean
     message: string
@@ -139,10 +141,25 @@ const App: React.FC = () => {
               }}
             >
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* 页面切换 */}
+                <Box>
+                  <ToggleButtonGroup
+                    value={currentPage}
+                    exclusive
+                    onChange={(_, val) => val && setCurrentPage(val)}
+                    size="small"
+                    fullWidth
+                  >
+                    <ToggleButton value="analysis">{t('page.analysis')}</ToggleButton>
+                    <ToggleButton value="unionRaid">{t('page.unionRaid')}</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+                
                 <SingleJsonUpload onAccountsLoaded={(p: AccountsPayload) => setAccounts(p.accounts)} />
                 <Box>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{t('teamBuilder')}</Typography>
                   <TeamBuilder
+                    externalTeam={teamChars}
                     onTeamSelectionChange={(chars, coeffs) => {
                       setTeamChars(chars); setCoeffsMap(coeffs)
                     }}
@@ -151,7 +168,7 @@ const App: React.FC = () => {
               </Box>
             </Box>
 
-            {/* 右侧内容区域：角色分析面板 */}
+            {/* 右侧内容区域：角色分析面板或联盟突袭统计 */}
             <Box
               sx={{
                 flex: 1,
@@ -165,7 +182,22 @@ const App: React.FC = () => {
                 overflow: 'hidden',
               }}
             >
-              <AccountsAnalyzer accounts={accounts} teamCharacters={teamChars} coefficientsMap={coeffsMap} />
+              {currentPage === 'analysis' ? (
+                <AccountsAnalyzer accounts={accounts} teamCharacters={teamChars} coefficientsMap={coeffsMap} />
+              ) : (
+                <UnionRaidStats 
+                  accounts={accounts} 
+                  onCopyTeam={(characters) => {
+                    // 将角色数组填充到5个位置
+                    const teamArray: (Character | undefined)[] = Array(5).fill(undefined)
+                    characters.forEach((char, idx) => {
+                      if (idx < 5) teamArray[idx] = char
+                    })
+                    setTeamChars(teamArray)
+                    handleStatusChange(t('unionRaid.teamCopied') || '队伍已复制到构建器', 'success')
+                  }}
+                />
+              )}
             </Box>
           </Box>
         </Container>

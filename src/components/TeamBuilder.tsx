@@ -25,6 +25,8 @@ interface TeamBuilderProps {
   onTeamRatioChange?: (scale: number, ratioLabel: string) => void
   // 新增：将当前选择与系数暴露给父级（给 AccountsAnalyzer 使用）
   onTeamSelectionChange?: (chars: (Character | undefined)[], coeffs: { [position: number]: AttributeCoefficients }) => void
+  // 新增：外部设置队伍(用于复制功能)
+  externalTeam?: (Character | undefined)[]
 }
 
 // 计算角色强度的工具函数
@@ -64,7 +66,7 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
     
     // 首先尝试相对路径
     try {
-  atkResponse = await fetch('./number.json')
+      atkResponse = await fetch('./number.json')
       if (atkResponse.ok) {
         atkData = await atkResponse.json()
       }
@@ -75,7 +77,7 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
     // 如果相对路径失败，尝试绝对路径
     if (!atkData) {
       try {
-  atkResponse = await fetch('/number.json')
+        atkResponse = await fetch('/number.json')
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
@@ -88,7 +90,7 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
     if (!atkData) {
       try {
         const baseUrl = window.location.href.replace(/\/[^\/]*$/, '')
-  atkResponse = await fetch(`${baseUrl}/number.json`)
+        atkResponse = await fetch(`${baseUrl}/number.json`)
         if (atkResponse.ok) {
           atkData = await atkResponse.json()
         }
@@ -116,7 +118,7 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
       
       // 获取item攻击力
       let itemAttack = 0
-  const itemArray = atkData.item_atk || []
+      const itemArray = atkData.item_atk || []
       if (characterData.item_rare === 'SSR') {
         // SSR按照SR最高等级计算（9688）
         itemAttack = 9688
@@ -129,8 +131,8 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
       
       // 计算最终攻击力
       const baseAttack = syncAttack * breakthroughCoeff + itemAttack
-  const attackWithStatAtk = baseAttack * (1 + 0.9 * totalStatAtk / 100)
-  const finalStrength = attackWithStatAtk * (1 + totalIncElementDmg / 100)
+      const attackWithStatAtk = baseAttack * (1 + 0.9 * totalStatAtk / 100)
+      const finalStrength = attackWithStatAtk * (1 + totalIncElementDmg / 100)
       
       return finalStrength
     }
@@ -151,6 +153,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   onTeamStrengthChange,
   onTeamRatioChange,
   onTeamSelectionChange,
+  externalTeam,
 }) => {
   const { t } = useI18n()
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
@@ -236,6 +239,24 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return () => { cancelled = true }
   }, [])
 
+  // 监听外部队伍变化(用于复制功能)
+  const isInternalUpdate = useRef(false)
+  useEffect(() => {
+    if (!externalTeam || externalTeam.length === 0) return
+    if (isInternalUpdate.current) {
+      isInternalUpdate.current = false
+      return
+    }
+    
+    const newTeam = externalTeam.map((char, index) => ({
+      position: index + 1,
+      character: char,
+      damageCoefficient: 1.0,
+      attributeCoefficients: getDefaultCoefficients()
+    }))
+    setTeam(newTeam)
+  }, [externalTeam])
+
   const characterFromList = useMemo(() => {
     const map = new Map<string, Character>()
     nikkeList.forEach((n) => {
@@ -251,31 +272,31 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const calculateAllStrengths = async () => {
       const newStrengths: {[position: number]: {baseline: number, target: number}} = {}
       const newRaw: {[position: number]: { baseline?: any, target?: any }} = {}
-  let totalBaselineStrength = 0
-  let totalTargetStrength = 0
-  let ratioWeightedSum = 0
-  let weightSum = 0
+      let totalBaselineStrength = 0
+      let totalTargetStrength = 0
+      let ratioWeightedSum = 0
+      let weightSum = 0
       
       // 计算系数总和，用于归一化
       const totalCoefficient = team.reduce((sum, teamChar) => {
         return sum + (teamChar.damageCoefficient || 0)
       }, 0)
       
-    for (const teamChar of team) {
+      for (const teamChar of team) {
         if (teamChar.character) {
-      const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
-      const characterId = teamChar.character.id?.toString()
-      const baselineCharData = findCharacterDataById(characterId, baselineData)
-      const targetCharData = findCharacterDataById(characterId, targetData)
-      const baselineRaw = baselineCharData ? await computeRawAttributeScores(baselineCharData, teamChar.character, baselineData) : undefined
-      const targetRaw = targetCharData ? await computeRawAttributeScores(targetCharData, teamChar.character, targetData) : undefined
-      newRaw[teamChar.position] = { baseline: baselineRaw, target: targetRaw }
+          const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
+          const characterId = teamChar.character.id?.toString()
+          const baselineCharData = findCharacterDataById(characterId, baselineData)
+          const targetCharData = findCharacterDataById(characterId, targetData)
+          const baselineRaw = baselineCharData ? await computeRawAttributeScores(baselineCharData, teamChar.character, baselineData) : undefined
+          const targetRaw = targetCharData ? await computeRawAttributeScores(targetCharData, teamChar.character, targetData) : undefined
+          newRaw[teamChar.position] = { baseline: baselineRaw, target: targetRaw }
           const baselineWeighted = baselineRaw ? computeWeightedStrength(baselineRaw, coeffs) : undefined
           const targetWeighted = targetRaw ? computeWeightedStrength(targetRaw, coeffs) : undefined
           const baselineValue = baselineWeighted ? (baselineWeighted.finalAtk + baselineWeighted.finalDef + baselineWeighted.finalHP) : 0
           const targetValue = targetWeighted ? (targetWeighted.finalAtk + targetWeighted.finalDef + targetWeighted.finalHP) : 0
-      const strengths = { baseline: baselineValue, target: targetValue }
-      newStrengths[teamChar.position] = strengths
+          const strengths = { baseline: baselineValue, target: targetValue }
+          newStrengths[teamChar.position] = strengths
           
           // 如果系数总和为0，则所有角色都不贡献输出
           if (totalCoefficient > 0) {
@@ -295,15 +316,15 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         }
       }
       
-  setCharacterStrengths(newStrengths)
-  setRawMap(newRaw)
-      
-  // 回调：绝对值（用于信息展示）
-  onTeamStrengthChange?.(totalBaselineStrength, totalTargetStrength)
-  // 回调：比值（用于伤害计算和展示），按角色比值加权平均
-  const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
-  const label = scale > 0 ? `${scale.toFixed(2)} : 1` : '—'
-  onTeamRatioChange?.(scale, label)
+      setCharacterStrengths(newStrengths)
+      setRawMap(newRaw)
+          
+      // 回调：绝对值（用于信息展示）
+      onTeamStrengthChange?.(totalBaselineStrength, totalTargetStrength)
+      // 回调：比值（用于伤害计算和展示），按角色比值加权平均
+      const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
+      const label = scale > 0 ? `${scale.toFixed(2)} : 1` : '—'
+      onTeamRatioChange?.(scale, label)
     }
     
     calculateAllStrengths()
@@ -314,10 +335,11 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       const base = coefficientsMap[t.position] || getDefaultCoefficients()
       coeffsWithWeight[t.position] = { ...base, damageWeight: t.damageCoefficient || 0 }
     }
+    isInternalUpdate.current = true
     onTeamSelectionChange?.(team.map(t => t.character), coeffsWithWeight)
   }, [team, baselineData, targetData, onTeamStrengthChange, coefficientsMap])
 
-  const handleAddCharacter = (position: number) => {
+    const handleAddCharacter = (position: number) => {
     setSelectedPosition(position)
     setFilterDialogOpen(true)
   }

@@ -14,6 +14,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     // Header
     langLabel: '中文',
 
+    // 页面切换
+    'page.analysis': '账号分析',
+    'page.unionRaid': '联盟突袭统计',
+
     // 分析页
     accountAnalysis: '账号分析',
     account: '账号',
@@ -32,6 +36,26 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // 侧栏/构建
     teamBuilder: '队伍构建',
+
+    // 联盟突袭统计
+    'unionRaid.title': '联盟突袭统计',
+    'unionRaid.difficulty.normal': '普通',
+    'unionRaid.difficulty.hard': '困难',
+    'unionRaid.copyTeam': '复制队伍到构建器',
+    'unionRaid.teamCopied': '队伍已复制到构建器',
+    'unionRaid.index': '序号',
+    'unionRaid.remaining': '剩余刀',
+    'unionRaid.remainingCount': '刀数',
+    'unionRaid.strikes': '刀',
+    'unionRaid.strike1': '第1刀',
+    'unionRaid.strike2': '第2刀',
+    'unionRaid.strike3': '第3刀',
+    'unionRaid.boss': 'Boss',
+    'unionRaid.squad': '队伍',
+    'unionRaid.noData': '暂无联盟突袭数据',
+    'unionRaid.noCookieOrArea': '缺少 cookie 或 area_id 信息',
+    'unionRaid.fetchError': '获取联盟突袭数据失败',
+    'unionRaid.refresh': '立即刷新',
 
     // 模板（Template）相关
     'tpl.import': '导入模板',
@@ -136,6 +160,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     // Header
     langLabel: 'EN',
 
+    // Page switch
+    'page.analysis': 'Account Analysis',
+    'page.unionRaid': 'Union Raid Stats',
+
     // Analyzer
     accountAnalysis: 'Account Analysis',
     account: 'Account',
@@ -154,6 +182,26 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // Sidebar/Builder
     teamBuilder: 'Team Builder',
+
+    // Union Raid Stats
+    'unionRaid.title': 'Union Raid Statistics',
+    'unionRaid.difficulty.normal': 'Normal',
+    'unionRaid.difficulty.hard': 'Hard',
+    'unionRaid.copyTeam': 'Copy Team to Builder',
+    'unionRaid.teamCopied': 'Team copied to builder',
+    'unionRaid.index': '#',
+    'unionRaid.remaining': 'Remaining Strikes',
+    'unionRaid.remainingCount': 'Count',
+    'unionRaid.strikes': 'Left',
+    'unionRaid.strike1': 'Strike 1',
+    'unionRaid.strike2': 'Strike 2',
+    'unionRaid.strike3': 'Strike 3',
+    'unionRaid.boss': 'Boss',
+    'unionRaid.squad': 'Squad',
+    'unionRaid.noData': 'No union raid data available',
+    'unionRaid.noCookieOrArea': 'Missing cookie or area_id',
+    'unionRaid.fetchError': 'Failed to fetch union raid data',
+    'unionRaid.refresh': 'Refresh now',
 
     // Template related
     'tpl.import': 'Import Templates',
