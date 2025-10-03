@@ -2,6 +2,9 @@
   "name": "exia-analysis",
   "version": "1.1.0",
   "description": "ExiaAnalysis 网页版",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

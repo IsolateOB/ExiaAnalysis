@@ -4,6 +4,8 @@
       "runtime": "@vercel/node@3.2.17"
     }
   },
+  "buildCommand": "npm run build",
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/api/game/:path*",
