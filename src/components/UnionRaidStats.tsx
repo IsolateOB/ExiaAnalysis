@@ -133,8 +133,13 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     }
   }, [accounts, nikkeMap, t])
 
-  // 3. 倒计时逻辑
+  // 3. 倒计时逻辑 - 只在有账号数据时启动
   useEffect(() => {
+    if (!accounts.length) {
+      setCountdown(30) // 重置倒计时
+      return
+    }
+    
     const countdownInterval = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) return 30
@@ -143,7 +148,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     }, 1000)
     
     return () => clearInterval(countdownInterval)
-  }, [])
+  }, [accounts.length])
 
   // 4. 手动刷新
   const handleManualRefresh = () => {
@@ -263,14 +268,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     return (
       <Box sx={{ p: 2 }}>
         <Alert severity="error">{error}</Alert>
-      </Box>
-    )
-  }
-
-  if (!raidData) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">{t('unionRaid.noData')}</Typography>
       </Box>
     )
   }

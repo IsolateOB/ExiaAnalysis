@@ -161,7 +161,7 @@ const App: React.FC = () => {
               </Box>
               
               {/* TeamBuilder 占据剩余空间并内部滚动 */}
-              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', mt: 2 }}>
                 <Box sx={{ flexShrink: 0 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{t('teamBuilder')}</Typography>
                 </Box>
