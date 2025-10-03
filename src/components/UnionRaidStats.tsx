@@ -328,15 +328,21 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
       <TableContainer sx={{ flex: 1, fontSize: '1rem', '& th, & td': { fontSize: 'inherit' } }}>
         <Table stickyHeader size="small" sx={{
           '& td, & th': { borderRight: '1px solid #cbd5e1' },
-          '& td:last-child, & th:last-child': { borderRight: 'none' },
+          '& td:last-child, & th:last-child': { borderRight: 'none !important' },
         }}>
           <TableHead>
+            {/* 第一层表头 */}
             <TableRow sx={{ 
               '& th': { 
-                borderBottom: '2px solid #94a3b8'
+                borderBottom: '1px solid #cbd5e1'
               } 
             }}>
-              <TableCell align="center" sx={{ minWidth: 180 }} colSpan={2}>
+              <TableCell align="center" colSpan={2} rowSpan={2} sx={{ 
+                zIndex: 4, 
+                top: 0, 
+                borderBottom: '2px solid #94a3b8 !important',
+                borderRight: '2px solid #94a3b8 !important'
+              }}>
                 <TableSortLabel
                   active={sortBy === 'name'}
                   direction={sortBy === 'name' ? sortOrder : 'asc'}
@@ -347,7 +353,13 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center" sx={{ minWidth: 120 }}>
+              <TableCell align="center" rowSpan={2} sx={{ 
+                minWidth: 120, 
+                zIndex: 4, 
+                top: 0,
+                borderBottom: '2px solid #94a3b8 !important',
+                borderRight: '2px solid #94a3b8 !important'
+              }}>
                 <TableSortLabel
                   active={sortBy === 'synchro'}
                   direction={sortBy === 'synchro' ? sortOrder : 'asc'}
@@ -358,27 +370,68 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                   </Box>
                 </TableSortLabel>
               </TableCell>
-              <TableCell align="center" sx={{ minWidth: 100 }}>
+              <TableCell align="center" sx={{ 
+                minWidth: 100, 
+                zIndex: 3, 
+                top: 0,
+                borderRight: '2px solid #94a3b8 !important'
+              }}>
                 {t('unionRaid.remaining')}
               </TableCell>
-              <TableCell align="center" sx={{ minWidth: 80 }}>{t('unionRaid.boss')}</TableCell>
-              <TableCell sx={{ minWidth: 180 }}>{t('unionRaid.squad')}</TableCell>
-              <TableCell align="right" sx={{ minWidth: 100 }}>{t('damage')}</TableCell>
-              <TableCell align="center" sx={{ minWidth: 80 }}>{t('unionRaid.boss')}</TableCell>
-              <TableCell sx={{ minWidth: 180 }}>{t('unionRaid.squad')}</TableCell>
-              <TableCell align="right" sx={{ minWidth: 100 }}>{t('damage')}</TableCell>
-              <TableCell align="center" sx={{ minWidth: 80 }}>{t('unionRaid.boss')}</TableCell>
-              <TableCell sx={{ minWidth: 180 }}>{t('unionRaid.squad')}</TableCell>
-              <TableCell align="right" sx={{ minWidth: 100 }}>{t('damage')}</TableCell>
+              <TableCell align="center" colSpan={3} sx={{ 
+                zIndex: 3, 
+                top: 0,
+                borderRight: '2px solid #94a3b8 !important'
+              }}>{t('unionRaid.strike1')}</TableCell>
+              <TableCell align="center" colSpan={3} sx={{ 
+                zIndex: 3, 
+                top: 0,
+                borderRight: '2px solid #94a3b8 !important'
+              }}>{t('unionRaid.strike2')}</TableCell>
+              <TableCell align="center" colSpan={3} sx={{ zIndex: 3, top: 0 }}>{t('unionRaid.strike3')}</TableCell>
+            </TableRow>
+            {/* 第二层表头 */}
+            <TableRow sx={{ 
+              '& th': { 
+                borderBottom: '2px solid #94a3b8'
+              } 
+            }}>
+              <TableCell align="center" sx={{ 
+                minWidth: 100, 
+                zIndex: 3, 
+                top: '37px',
+                borderRight: '2px solid #94a3b8 !important'
+              }}>
+                {remainingStrikes}
+              </TableCell>
+              <TableCell align="center" sx={{ minWidth: 80, zIndex: 3, top: '37px' }}>{t('unionRaid.boss')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 180, zIndex: 3, top: '37px' }}>{t('unionRaid.squad')}</TableCell>
+              <TableCell align="center" sx={{ 
+                minWidth: 100, 
+                zIndex: 3, 
+                top: '37px',
+                borderRight: '2px solid #94a3b8 !important'
+              }}>{t('damage')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 80, zIndex: 3, top: '37px' }}>{t('unionRaid.boss')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 180, zIndex: 3, top: '37px' }}>{t('unionRaid.squad')}</TableCell>
+              <TableCell align="center" sx={{ 
+                minWidth: 100, 
+                zIndex: 3, 
+                top: '37px',
+                borderRight: '2px solid #94a3b8 !important'
+              }}>{t('damage')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 80, zIndex: 3, top: '37px' }}>{t('unionRaid.boss')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 180, zIndex: 3, top: '37px' }}>{t('unionRaid.squad')}</TableCell>
+              <TableCell align="center" sx={{ minWidth: 100, zIndex: 3, top: '37px' }}>{t('damage')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedData.map((row: any, idx: number) => (
               <TableRow key={row.name} hover sx={{ '& td': { borderBottom: '2px solid #cbd5e1' } }}>
                 <TableCell align="center">{idx + 1}</TableCell>
-                <TableCell>{row.name}</TableCell>
-                <TableCell align="center" sx={{ minWidth: 120 }}>{row.synchroLevel}</TableCell>
-                <TableCell align="center" sx={{ minWidth: 100 }}>
+                <TableCell sx={{ borderRight: '2px solid #94a3b8 !important' }}>{row.name}</TableCell>
+                <TableCell align="center" sx={{ minWidth: 120, borderRight: '2px solid #94a3b8 !important' }}>{row.synchroLevel}</TableCell>
+                <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>
                   {row.strikes.filter((s: any) => s === null).length}
                 </TableCell>
                 {row.strikes.map((strike: any, si: number) => (
@@ -426,7 +479,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                         </Box>
                       ) : '-'}
                     </TableCell>
-                    <TableCell align="right">{strike ? strike.damage.toLocaleString() : '-'}</TableCell>
+                    <TableCell align="right" sx={{ 
+                      borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined 
+                    }}>{strike ? strike.damage.toLocaleString() : '-'}</TableCell>
                   </React.Fragment>
                 ))}
               </TableRow>
