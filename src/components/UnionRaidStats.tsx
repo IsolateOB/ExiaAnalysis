@@ -172,11 +172,28 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
 
   // 6. 构建表格数据
   const tableData = useMemo(() => {
-    // 先初始化所有账号的数据结构(即使没有突袭数据也要显示)
+    // 创建 openid -> account 的映射(通过 game_uid 匹配)
+    const openidToAccount: Record<string, any> = {}
+    accounts.forEach(acc => {
+      // 从 cookie 中提取 game_uid
+      const gameUidMatch = acc.cookie?.match(/game_uid=(\d+)/)
+      const gameUid = gameUidMatch ? gameUidMatch[1] : acc.game_uid
+      if (gameUid) {
+        openidToAccount[gameUid] = acc
+      }
+    })
+    
+    // 初始化所有账号的数据结构
     const accountMap: Record<string, any> = {}
     accounts.forEach(acc => {
-      accountMap[acc.name] = {
+      // 使用 game_uid 作为唯一标识
+      const gameUidMatch = acc.cookie?.match(/game_uid=(\d+)/)
+      const gameUid = gameUidMatch ? gameUidMatch[1] : acc.game_uid
+      const key = gameUid || acc.name // 如果没有 game_uid,回退到使用 name
+      
+      accountMap[key] = {
         name: acc.name,
+        gameUid: gameUid,
         synchroLevel: acc.synchroLevel || acc.SynchroLevel || 0,
         strikes: [null, null, null] // 最多3刀
       }
@@ -190,12 +207,12 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         // 过滤难度
         if (entry.difficulty !== difficulty) return
         
-        const nickname = entry.nickname
-        // 只处理 JSON 中存在的账号(忽略联盟中其他成员)
-        if (!accountMap[nickname]) return
+        const openid = entry.openid
+        // 通过 openid 匹配 game_uid
+        if (!accountMap[openid]) return
         
         // 按 step 排序确定是第几刀（step 1-5，每个账号最多3次出击）
-        const strikeIndex = accountMap[nickname].strikes.findIndex((s: any) => s === null)
+        const strikeIndex = accountMap[openid].strikes.findIndex((s: any) => s === null)
         if (strikeIndex === -1) return
         
         // 解析队伍显示名称
@@ -205,7 +222,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
           return lang === 'zh' ? (nikke?.name_cn || '?') : (nikke?.name_en || '?')
         })
         
-        accountMap[nickname].strikes[strikeIndex] = {
+        accountMap[openid].strikes[strikeIndex] = {
           boss: `${entry.level}-${stepToRoman[entry.step] || entry.step}`,
           squad: squadNames.join(', '),
           squadData: entry.squad || [], // 保存原始数据用于复制
