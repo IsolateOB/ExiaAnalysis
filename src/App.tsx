@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react'
 import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material'
 import TeamBuilder from './components/TeamBuilder'
-import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload'
+import SingleJsonUpload, { AccountsJsonShape, AccountsPayload } from './components/SingleJsonUpload'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
 import UnionRaidStats from './components/UnionRaidStats'
 import type { Character, AttributeCoefficients } from './types'
@@ -91,6 +91,8 @@ const App: React.FC = () => {
   const { t } = useI18n()
   const [accounts, setAccounts] = useState<any[]>([])
   const [uploadedFileName, setUploadedFileName] = useState<string | undefined>(undefined)
+  const [accountsOriginalData, setAccountsOriginalData] = useState<any>(null)
+  const [accountsShape, setAccountsShape] = useState<AccountsJsonShape>('array')
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [currentPage, setCurrentPage] = useState<'analysis' | 'unionRaid'>('analysis')
@@ -127,6 +129,12 @@ const App: React.FC = () => {
       if (typeof parsed.fileName === 'string') {
         setUploadedFileName(parsed.fileName)
       }
+      if (Object.prototype.hasOwnProperty.call(parsed, 'originalData')) {
+        setAccountsOriginalData(parsed.originalData ?? null)
+      }
+      if (typeof parsed.shape === 'string') {
+        setAccountsShape(parsed.shape as AccountsJsonShape)
+      }
     } catch (error) {
       console.error('Failed to load accounts from storage:', error)
     }
@@ -141,16 +149,28 @@ const App: React.FC = () => {
     try {
       window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify({
         accounts,
-        fileName: uploadedFileName ?? null
+        fileName: uploadedFileName ?? null,
+        originalData: accountsOriginalData ?? null,
+        shape: accountsShape ?? 'array'
       }))
     } catch (error) {
       console.error('Failed to persist accounts:', error)
     }
-  }, [accounts, uploadedFileName])
+  }, [accounts, uploadedFileName, accountsOriginalData, accountsShape])
 
   const handleAccountsLoaded = (payload: AccountsPayload) => {
     setAccounts(payload.accounts)
     setUploadedFileName(payload.fileName || undefined)
+    if (payload.originalData !== undefined) {
+      setAccountsOriginalData(payload.originalData ?? null)
+    } else if (!payload.accounts.length) {
+      setAccountsOriginalData(null)
+    }
+    if (payload.shape) {
+      setAccountsShape(payload.shape)
+    } else if (!payload.accounts.length) {
+      setAccountsShape('array')
+    }
     if (!payload.accounts.length) {
       setTeamChars([])
       setCoeffsMap({})
@@ -244,6 +264,9 @@ const App: React.FC = () => {
               <Box sx={{ display: currentPage === 'unionRaid' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
                 <UnionRaidStats 
                   accounts={accounts} 
+                  originalAccountsData={accountsOriginalData}
+                  accountsShape={accountsShape}
+                  uploadedFileName={uploadedFileName}
                   onCopyTeam={(characters) => {
                     // 将角色数组填充到5个位置
                     const teamArray: (Character | undefined)[] = Array(5).fill(undefined)
@@ -253,6 +276,7 @@ const App: React.FC = () => {
                     setTeamChars(teamArray)
                     handleStatusChange(t('unionRaid.teamCopied') || '队伍已复制到构建器', 'success')
                   }}
+                  onNotify={handleStatusChange}
                 />
               </Box>
             </Box>

@@ -16,7 +16,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // 页面切换
     'page.analysis': '账号分析',
-    'page.unionRaid': '联盟突袭统计',
+    'page.unionRaid': '联盟突袭',
 
     // 分析页
     accountAnalysis: '账号分析',
@@ -44,7 +44,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.copyTeam': '复制队伍到构建器',
     'unionRaid.teamCopied': '队伍已复制到构建器',
     'unionRaid.index': '序号',
-    'unionRaid.remaining': '剩余刀',
+    'unionRaid.remaining': '剩余',
     'unionRaid.remainingCount': '刀数',
     'unionRaid.strikes': '刀',
     'unionRaid.strike1': '第1刀',
@@ -62,6 +62,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.fetchError': '获取联盟突袭数据失败',
     'unionRaid.fetchRetry': '获取数据失败，{seconds}秒后重新获取',
     'unionRaid.refresh': '立即刷新',
+    'unionRaid.exportJson': '导出规划 JSON',
+    'unionRaid.exportSuccess': '已导出包含规划的 JSON 文件',
+    'unionRaid.exportFailed': '导出包含规划的 JSON 失败',
+    'unionRaid.exportNoData': '暂无账号可导出',
   'unionRaid.plan.actualLabel': '实际',
   'unionRaid.plan.planLabel': '规划',
   'unionRaid.plan.addCharacter': '添加角色',
@@ -175,7 +179,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // Page switch
     'page.analysis': 'Account Analysis',
-    'page.unionRaid': 'Union Raid Stats',
+    'page.unionRaid': 'Union Raid',
 
     // Analyzer
     accountAnalysis: 'Account Analysis',
@@ -203,7 +207,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.copyTeam': 'Copy Team to Builder',
     'unionRaid.teamCopied': 'Team copied to builder',
     'unionRaid.index': '#',
-    'unionRaid.remaining': 'Remaining Strikes',
+    'unionRaid.remaining': ' Remaining',
     'unionRaid.remainingCount': 'Count',
     'unionRaid.strikes': 'Left',
     'unionRaid.strike1': 'Strike 1',
@@ -221,6 +225,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.fetchError': 'Failed to fetch union raid data',
     'unionRaid.fetchRetry': 'Failed to fetch data, retrying in {seconds}s',
     'unionRaid.refresh': 'Refresh now',
+    'unionRaid.exportJson': 'Export planning JSON',
+    'unionRaid.exportSuccess': 'Exported JSON with planning data',
+    'unionRaid.exportFailed': 'Failed to export planning JSON',
+    'unionRaid.exportNoData': 'No accounts available to export',
   'unionRaid.plan.actualLabel': 'Actual',
   'unionRaid.plan.planLabel': 'Planning',
   'unionRaid.plan.addCharacter': 'Add Character',

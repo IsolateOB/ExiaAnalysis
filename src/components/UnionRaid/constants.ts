@@ -19,6 +19,7 @@ export const STEP_FILTER_OPTIONS: Record<1 | 2, number[]> = {
 }
 
 export const PLAN_STORAGE_KEY = 'union-raid-plans'
+export const ACCOUNT_PLANNING_FIELD = 'unionRaidPlanning'
 
 export const STEP_TO_ROMAN: Record<number, string> = {
   1: 'I',

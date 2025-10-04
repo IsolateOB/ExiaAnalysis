@@ -36,6 +36,7 @@ import {
 } from './constants'
 import {
   NUMERIC_VALUE_INPUT_STYLE,
+  NUMERIC_VALUE_RIGHT_PADDING,
   NUMERIC_VALUE_SX,
   SORT_LABEL_SX,
   getCellMatchHighlightColor,
@@ -559,9 +560,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                           ...highlightSx
                         }}
                       >
-                        <Stack spacing={actual ? 2.5 : 1.75} alignItems="flex-end" sx={{ pt: actual ? 0 : 1.25 }}>
+                        <Stack spacing={actual ? 4 : 2} alignItems="flex-end" sx={{ pt: actual ? 0 : 1.25 }}>
                           {actual && (
-                            <Box sx={{ textAlign: 'right', width: '100%', pr: 0 }}>
+                            <Box sx={{ textAlign: 'right', width: '100%', paddingRight: NUMERIC_VALUE_RIGHT_PADDING }}>
                               <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
                                 {t('unionRaid.plan.actualLabel')}
                               </Typography>

@@ -152,7 +152,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
 
   return (
     <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <Typography variant="h6" sx={{ fontSize: '1rem' }}>{t('accountAnalysis')}</Typography>
+  <Typography variant="h6" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>{t('accountAnalysis')}</Typography>
       <TableContainer sx={{ flex: 1, fontSize: '1rem', '& th, & td': { fontSize: 'inherit' } }}>
         <Table size="small" stickyHeader sx={{
           '& td, & th': { borderRight: '1px solid #cbd5e1' },

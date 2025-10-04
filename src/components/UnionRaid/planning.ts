@@ -1,4 +1,4 @@
-import { STEP_OPTIONS } from './constants'
+import { ACCOUNT_PLANNING_FIELD, STEP_OPTIONS } from './constants'
 import type { ActualStrike, PlanSlot, StrikeView } from './types'
 
 export const createEmptyPlanSlot = (): PlanSlot => ({
@@ -68,6 +68,34 @@ export const ensurePlanArray = (plans?: (Partial<PlanSlot> | null)[]): PlanSlot[
     output.push(createEmptyPlanSlot())
   }
   return output.slice(0, 3)
+}
+
+export const serializePlanSlots = (plans?: PlanSlot[]): (Partial<PlanSlot> | null)[] => {
+  const normalized = ensurePlanArray(plans as unknown as (Partial<PlanSlot> | null)[] | undefined)
+  return normalized.map(plan => {
+    if (!planHasData(plan)) return null
+    return {
+      step: plan.step,
+      characterIds: [...plan.characterIds],
+      predictedDamage: plan.predictedDamage,
+      predictedDamageInput: plan.predictedDamageInput
+    }
+  })
+}
+
+export const extractRawPlanArray = (account: any): (Partial<PlanSlot> | null)[] | null => {
+  if (!account || typeof account !== 'object') return null
+  const raw = account[ACCOUNT_PLANNING_FIELD]
+  if (!raw) return null
+  if (Array.isArray(raw)) return raw as (Partial<PlanSlot> | null)[]
+  if (raw && typeof raw === 'object' && Array.isArray(raw.plans)) {
+    return raw.plans as (Partial<PlanSlot> | null)[]
+  }
+  return null
+}
+
+export const planArrayHasData = (plans?: PlanSlot[]): boolean => {
+  return ensurePlanArray(plans as unknown as (Partial<PlanSlot> | null)[] | undefined).some(planHasData)
 }
 
 export const arraysEqual = (a: number[], b: number[]) => {

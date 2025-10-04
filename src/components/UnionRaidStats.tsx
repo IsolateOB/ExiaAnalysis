@@ -12,10 +12,12 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Alert
+  Alert,
+  Button
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import type { SelectChangeEvent } from '@mui/material/Select'
 import type { Character } from '../types'
 import { useI18n } from '../i18n'
@@ -30,26 +32,41 @@ import {
   ensurePlanArray,
   buildStrikeViews,
   createEmptyPlanSlot,
-  tidToBaseId
+  tidToBaseId,
+  serializePlanSlots
 } from './UnionRaid/planning'
 import {
   LEVEL_FILTER_OPTIONS,
   STEP_FILTER_OPTIONS,
   STEP_OPTIONS,
-  STEP_TO_ROMAN
+  STEP_TO_ROMAN,
+  ACCOUNT_PLANNING_FIELD
 } from './UnionRaid/constants'
 import { getAccountKey, getCharacterName, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
+import type { AccountsJsonShape } from './SingleJsonUpload'
 
 interface UnionRaidStatsProps {
   accounts: any[]
   nikkeList?: Character[]
   onCopyTeam?: (characters: Character[]) => void
+  originalAccountsData?: any
+  accountsShape?: AccountsJsonShape
+  uploadedFileName?: string
+  onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
 }
 
 const countRemainingStrikes = (row: any) => Math.max(3 - (row.actualCount || 0), 0)
 
-const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, onCopyTeam }) => {
+const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
+  accounts,
+  nikkeList,
+  onCopyTeam,
+  originalAccountsData,
+  accountsShape = 'array',
+  uploadedFileName,
+  onNotify
+}) => {
   const { t, lang } = useI18n()
   const [fatalError, setFatalError] = useState<string>()
   const [fetchStatus, setFetchStatus] = useState<string | null>(null)
@@ -460,6 +477,96 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     onCopyTeam(characters)
   }, [nikkeMap, onCopyTeam])
 
+  const handleExportPlanning = useCallback(() => {
+    if (!accounts || accounts.length === 0) {
+      const msg = t('unionRaid.exportNoData') || 'No accounts available to export'
+      onNotify?.(msg, 'warning')
+      return
+    }
+
+    const cloneJson = (value: any) => {
+      if (value === null || value === undefined) return value
+      try {
+        return JSON.parse(JSON.stringify(value))
+      } catch {
+        return value
+      }
+    }
+
+    const attachPlanning = (account: any) => {
+      const key = getAccountKey(account)
+      if (!key) {
+        return {
+          ...account,
+          [ACCOUNT_PLANNING_FIELD]: serializePlanSlots(ensurePlanArray())
+        }
+      }
+      const plans = planningState[key] ?? ensurePlanArray()
+      return {
+        ...account,
+        [ACCOUNT_PLANNING_FIELD]: serializePlanSlots(plans)
+      }
+    }
+
+    const mergeAccountsArray = (source: any[]) => {
+      if (!Array.isArray(source)) return []
+      return source.map(acc => attachPlanning(acc))
+    }
+
+    try {
+      const normalizedShape = accountsShape ?? 'array'
+      let payload: any
+
+      if (originalAccountsData) {
+        const base = cloneJson(originalAccountsData)
+        if (normalizedShape === 'object' && base && typeof base === 'object' && Array.isArray((base as any).accounts)) {
+          (base as any).accounts = mergeAccountsArray((base as any).accounts)
+          payload = base
+        } else if (normalizedShape === 'single' && base && typeof base === 'object' && !Array.isArray(base)) {
+          const key = getAccountKey(base)
+          const plans = key ? (planningState[key] ?? ensurePlanArray()) : ensurePlanArray()
+          payload = {
+            ...base,
+            [ACCOUNT_PLANNING_FIELD]: serializePlanSlots(plans)
+          }
+        } else if (Array.isArray(base)) {
+          payload = mergeAccountsArray(base)
+        } else {
+          payload = mergeAccountsArray(accounts)
+        }
+      } else {
+        payload = mergeAccountsArray(accounts)
+      }
+
+      const jsonText = JSON.stringify(payload, null, 2)
+      const baseFile = uploadedFileName?.replace(/\.json$/i, '') || 'union-raid'
+      const exportName = `${baseFile}-with-planning.json`
+      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = exportName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      onNotify?.(t('unionRaid.exportSuccess') || 'JSON exported successfully', 'success')
+    } catch (error: any) {
+      console.error('Failed to export union raid planning JSON:', error)
+      const message = `${t('unionRaid.exportFailed') || 'Failed to export JSON'}${error?.message ? `: ${error.message}` : ''}`
+      onNotify?.(message, 'error')
+    }
+  }, [
+    accounts,
+    accountsShape,
+    originalAccountsData,
+    planningState,
+    uploadedFileName,
+    onNotify,
+    t
+  ])
+
   const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '等级' : 'Level')
   const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
   const allLabelText = t('unionRaid.filter.all') || (lang === 'zh' ? '全部' : 'All')
@@ -483,63 +590,28 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
 
   return (
     <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Typography variant="h6" sx={{ fontSize: '1rem' }}>{t('unionRaid.title')}</Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Typography variant="h6" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>{t('unionRaid.title')}</Typography>
           <ToggleButtonGroup
             value={difficulty}
             exclusive
             onChange={handleDifficultyChange}
             size="small"
+            sx={{
+              height: 40,
+              '& .MuiToggleButton-root': {
+                height: '100%',
+                minWidth: 88,
+                py: 0,
+                display: 'flex',
+                alignItems: 'center'
+              }
+            }}
           >
             <ToggleButton value={1}>{t('unionRaid.difficulty.normal')}</ToggleButton>
             <ToggleButton value={2}>{t('unionRaid.difficulty.hard')}</ToggleButton>
           </ToggleButtonGroup>
-          <Tooltip title={t('unionRaid.refresh') || '刷新'}>
-            <Box
-              onClick={handleManualRefresh}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                px: 1.5,
-                py: 0.5,
-                border: '1px solid',
-                borderColor: 'primary.main',
-                borderRadius: 1,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                minWidth: 68,
-                '&:hover': {
-                  backgroundColor: 'primary.main',
-                  '& .MuiTypography-root': {
-                    color: 'white'
-                  },
-                  '& .MuiSvgIcon-root': {
-                    color: 'white'
-                  }
-                }
-              }}
-            >
-              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 28, textAlign: 'right' }}>
-                {countdown}s
-              </Typography>
-              <RefreshIcon fontSize="small" color="primary" />
-            </Box>
-          </Tooltip>
-          {fetchStatus && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'error.main', whiteSpace: 'nowrap' }}>
-              <WarningAmberIcon sx={{ fontSize: '1rem' }} />
-              <Typography variant="body2" sx={{ color: 'inherit' }}>
-                {fetchStatus}
-              </Typography>
-            </Box>
-          )}
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 150, textAlign: 'right' }}>
-            {statsLabel}
-          </Typography>
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel id="union-raid-level-select-label">{levelLabelText}</InputLabel>
             <Select
@@ -575,6 +647,61 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
               ))}
             </Select>
           </FormControl>
+          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 150, textAlign: 'left' }}>
+            {statsLabel}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {fetchStatus && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'error.main', whiteSpace: 'nowrap' }}>
+              <WarningAmberIcon sx={{ fontSize: '1rem' }} />
+              <Typography variant="body2" sx={{ color: 'inherit' }}>
+                {fetchStatus}
+              </Typography>
+            </Box>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<FileDownloadIcon />}
+            onClick={handleExportPlanning}
+            disabled={!accounts || accounts.length === 0}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            {t('unionRaid.exportJson') || 'Export JSON'}
+          </Button>
+          <Tooltip title={t('unionRaid.refresh') || '刷新'}>
+            <Box
+              onClick={handleManualRefresh}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 1.5,
+                py: 0.5,
+                border: '1px solid',
+                borderColor: 'primary.main',
+                borderRadius: 1,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                minWidth: 68,
+                '&:hover': {
+                  backgroundColor: 'primary.main',
+                  '& .MuiTypography-root': {
+                    color: 'white'
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: 'white'
+                  }
+                }
+              }}
+            >
+              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 28, textAlign: 'right' }}>
+                {countdown}s
+              </Typography>
+              <RefreshIcon fontSize="small" color="primary" />
+            </Box>
+          </Tooltip>
         </Box>
       </Box>
 

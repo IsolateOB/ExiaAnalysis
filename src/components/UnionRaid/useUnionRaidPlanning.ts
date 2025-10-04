@@ -4,10 +4,16 @@ import {
   arePlansEqual,
   ensurePlanArray,
   hydratePlanSlot,
-  createEmptyPlanSlot
+  createEmptyPlanSlot,
+  extractRawPlanArray
 } from './planning'
 import type { PlanSlot } from './types'
 import { getAccountKey } from './helpers'
+
+const planArraysEqual = (a: PlanSlot[], b: PlanSlot[]) => {
+  if (a.length !== b.length) return false
+  return a.every((plan, idx) => arePlansEqual(plan, b[idx]))
+}
 
 export const useUnionRaidPlanning = (accounts: any[]) => {
   const [planningState, setPlanningState] = useState<Record<string, PlanSlot[]>>({})
@@ -49,22 +55,21 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
       accounts.forEach(acc => {
         const key = getAccountKey(acc)
         if (!key) return
-        const existing = prev[key]
-        if (!existing) {
-          next[key] = ensurePlanArray()
-          changed = true
-          return
-        }
+        const prevHasKey = Object.prototype.hasOwnProperty.call(prev, key)
+        const prevPlans = ensurePlanArray(prev[key])
+        const accountRawPlans = extractRawPlanArray(acc)
 
-        const normalized = ensurePlanArray(existing)
-        const sameLength = existing.length === normalized.length
-        const sameContent = sameLength && normalized.every((plan, idx) => arePlansEqual(plan, existing[idx]))
-
-        if (sameContent) {
-          next[key] = existing
+        if (accountRawPlans) {
+          const accountPlans = ensurePlanArray(accountRawPlans)
+          next[key] = accountPlans
+          if (!planArraysEqual(prevPlans, accountPlans)) {
+            changed = true
+          }
         } else {
-          next[key] = normalized
-          changed = true
+          next[key] = prevPlans
+          if (!prevHasKey) {
+            changed = true
+          }
         }
       })
 
