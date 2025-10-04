@@ -2,7 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, Paper, Alert, ToggleButtonGroup, ToggleButton, IconButton, Tooltip } from '@mui/material'
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, Paper, Alert, ToggleButtonGroup, ToggleButton, IconButton, Tooltip, FormControl, InputLabel } from '@mui/material'
+import MenuItem from '@mui/material/MenuItem'
+import Select, { SelectChangeEvent } from '@mui/material/Select'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import type { Character } from '../types'
@@ -33,6 +35,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
   const [sortBy, setSortBy] = useState<'name' | 'synchro' | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [difficulty, setDifficulty] = useState<1 | 2>(1) // 1=普通, 2=困难
+  const [selectedLevel, setSelectedLevel] = useState<number | 'all'>('all')
+  const [selectedStep, setSelectedStep] = useState<number | 'all'>('all')
   const [countdown, setCountdown] = useState<number>(30) // 刷新倒计时
   const lastFetchKeyRef = useRef<string>('') // 用于避免重复请求
   const fetchIntervalRef = useRef<NodeJS.Timeout | null>(null) // 保存定时器引用
@@ -109,6 +113,35 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     }
   }
 
+  const { levelOptions, stepOptions } = useMemo(() => {
+    if (!raidData?.participate_data) {
+      return { levelOptions: [] as number[], stepOptions: [] as number[] }
+    }
+
+    const filteredByDifficulty = raidData.participate_data.filter((entry: any) => entry.difficulty === difficulty)
+    const levelSet = new Set<number>(filteredByDifficulty.map((entry: any) => Number(entry.level)))
+    const levels = Array.from(levelSet).sort((a, b) => a - b)
+    const filteredByLevel = selectedLevel === 'all'
+      ? filteredByDifficulty
+      : filteredByDifficulty.filter((entry: any) => entry.level === selectedLevel)
+    const stepSet = new Set<number>(filteredByLevel.map((entry: any) => Number(entry.step)))
+    const steps = Array.from(stepSet).sort((a, b) => a - b)
+
+    return { levelOptions: levels, stepOptions: steps }
+  }, [raidData, difficulty, selectedLevel])
+
+  useEffect(() => {
+    if (selectedLevel !== 'all' && !levelOptions.includes(selectedLevel)) {
+      setSelectedLevel('all')
+    }
+  }, [levelOptions, selectedLevel])
+
+  useEffect(() => {
+    if (selectedStep !== 'all' && !stepOptions.includes(selectedStep)) {
+      setSelectedStep('all')
+    }
+  }, [stepOptions, selectedStep])
+
   // 3. 当账号数据加载后,立即获取突袭数据并启动定时器
   useEffect(() => {
     // 只在第一次有账号数据且有nikkeMap时初始化
@@ -170,6 +203,28 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     setCountdown(30) // 重置倒计时
   }
 
+  const handleDifficultyChange = (_: React.MouseEvent<HTMLElement>, val: 1 | 2 | null) => {
+    if (!val) return
+    setDifficulty(val)
+    setSelectedLevel('all')
+    setSelectedStep('all')
+  }
+
+  const handleLevelChange = (event: SelectChangeEvent<string>) => {
+    const value = event.target.value
+    if (value === 'all') {
+      setSelectedLevel('all')
+    } else {
+      setSelectedLevel(Number(value))
+    }
+    setSelectedStep('all')
+  }
+
+  const handleStepChange = (event: SelectChangeEvent<string>) => {
+    const value = event.target.value
+    setSelectedStep(value === 'all' ? 'all' : Number(value))
+  }
+
   // 6. 构建表格数据
   const tableData = useMemo(() => {
     // 初始化所有账号的数据结构,使用 game_openid 作为键
@@ -193,8 +248,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
       // 倒序处理,让最新的记录排在前面
       const sortedData = [...raidData.participate_data].reverse()
       sortedData.forEach((entry: any) => {
-        // 过滤难度
-        if (entry.difficulty !== difficulty) return
+  // 过滤难度、等级和 Boss
+  if (entry.difficulty !== difficulty) return
+  if (selectedLevel !== 'all' && Number(entry.level) !== selectedLevel) return
+  if (selectedStep !== 'all' && Number(entry.step) !== selectedStep) return
         
         const openid = entry.openid
         // 通过 openid 匹配 game_uid (它们应该是相同的)
@@ -222,7 +279,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
       })
     }
     return Object.values(accountMap)
-  }, [raidData, accounts, nikkeMap, lang, difficulty])
+  }, [raidData, accounts, nikkeMap, lang, difficulty, selectedLevel, selectedStep])
 
   // 7. 计算剩余刀数
   const remainingStrikes = useMemo(() => {
@@ -277,6 +334,15 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     onCopyTeam(characters)
   }
 
+  const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '等级' : 'Level')
+  const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
+  const allLabelText = t('unionRaid.filter.all') || (lang === 'zh' ? '全部' : 'All')
+  const bossLabel = t('unionRaid.boss') || 'Boss'
+  const levelSelectValue = selectedLevel === 'all' ? 'all' : String(selectedLevel)
+  const stepSelectValue = selectedStep === 'all' ? 'all' : String(selectedStep)
+  const formatLevelOption = (level: number) => String(level)
+  const formatStepOption = (step: number) => stepToRoman[step] || String(step)
+
   if (error) {
     return (
       <Box sx={{ p: 2 }}>
@@ -289,8 +355,17 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         {/* 左侧: Title + 倒计时和刷新按钮 */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Typography variant="h6" sx={{ fontSize: '1rem' }}>{t('unionRaid.title')}</Typography>
+          <ToggleButtonGroup
+            value={difficulty}
+            exclusive
+            onChange={handleDifficultyChange}
+            size="small"
+          >
+            <ToggleButton value={1}>{t('unionRaid.difficulty.normal')}</ToggleButton>
+            <ToggleButton value={2}>{t('unionRaid.difficulty.hard')}</ToggleButton>
+          </ToggleButtonGroup>
           <Tooltip title={t('unionRaid.refresh') || '刷新'}>
             <Box
               onClick={handleManualRefresh}
@@ -325,16 +400,45 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
           </Tooltip>
         </Box>
         
-        {/* 右侧: 难度切换 */}
-        <ToggleButtonGroup
-          value={difficulty}
-          exclusive
-          onChange={(_, val) => val && setDifficulty(val)}
-          size="small"
-        >
-          <ToggleButton value={1}>{t('unionRaid.difficulty.normal')}</ToggleButton>
-          <ToggleButton value={2}>{t('unionRaid.difficulty.hard')}</ToggleButton>
-        </ToggleButtonGroup>
+        {/* 右侧: 难度与筛选 */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="union-raid-level-select-label">{levelLabelText}</InputLabel>
+            <Select
+              labelId="union-raid-level-select-label"
+              id="union-raid-level-select"
+              value={levelSelectValue}
+              label={levelLabelText}
+              onChange={handleLevelChange}
+              MenuProps={{ disableAutoFocusItem: true }}
+            >
+              <MenuItem value="all">{allLabelText}</MenuItem>
+              {levelOptions.map(level => (
+                <MenuItem key={level} value={String(level)}>
+                  {formatLevelOption(level)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel id="union-raid-step-select-label">{stepLabelText}</InputLabel>
+            <Select
+              labelId="union-raid-step-select-label"
+              id="union-raid-step-select"
+              value={stepSelectValue}
+              label={stepLabelText}
+              onChange={handleStepChange}
+              MenuProps={{ disableAutoFocusItem: true }}
+            >
+              <MenuItem value="all">{allLabelText}</MenuItem>
+              {stepOptions.map(step => (
+                <MenuItem key={step} value={String(step)}>
+                  {formatStepOption(step)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
       </Box>
       
       <TableContainer sx={{ flex: 1, fontSize: '1rem', '& th, & td': { fontSize: 'inherit' } }}>
