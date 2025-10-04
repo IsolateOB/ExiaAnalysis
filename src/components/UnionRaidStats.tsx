@@ -18,6 +18,8 @@ interface UnionRaidStatsProps {
   onCopyTeam?: (characters: Character[]) => void
 }
 
+type SortKey = 'name' | 'synchro' | 'remaining'
+
 // 简化 tid 到基础 id（倒数第二位改为0，最后一位改为1）
 const tidToBaseId = (tid: number): number => {
   const tidStr = String(tid)
@@ -28,12 +30,14 @@ const tidToBaseId = (tid: number): number => {
 // 罗马数字映射
 const stepToRoman: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' }
 
+const countRemainingStrikes = (row: any) => row.strikes.filter((s: any) => s === null).length
+
 const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, onCopyTeam }) => {
   const { t, lang } = useI18n()
   const [error, setError] = useState<string>()
   const [raidData, setRaidData] = useState<any>(null)
   const [nikkeMap, setNikkeMap] = useState<Record<number, any>>({})
-  const [sortBy, setSortBy] = useState<'name' | 'synchro' | null>(null)
+  const [sortBy, setSortBy] = useState<SortKey | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [difficulty, setDifficulty] = useState<1 | 2>(1) // 1=普通, 2=困难
   const [selectedLevel, setSelectedLevel] = useState<number | 'all'>('all')
@@ -306,16 +310,33 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     return [...tableData].sort((a: any, b: any) => {
       if (sortBy === 'name') return sign * a.name.localeCompare(b.name)
       if (sortBy === 'synchro') return sign * (a.synchroLevel - b.synchroLevel)
+      if (sortBy === 'remaining') {
+        const remainingA = countRemainingStrikes(a)
+        const remainingB = countRemainingStrikes(b)
+        if (remainingA !== remainingB) {
+          return sortOrder === 'asc' ? remainingA - remainingB : remainingB - remainingA
+        }
+        if (a.synchroLevel !== b.synchroLevel) {
+          return a.synchroLevel - b.synchroLevel
+        }
+        return a.name.localeCompare(b.name)
+      }
       return 0
     })
   }, [tableData, sortBy, sortOrder])
 
-  const handleSort = (key: 'name' | 'synchro') => {
+  const defaultSortOrder: Record<SortKey, 'asc' | 'desc'> = {
+    name: 'asc',
+    synchro: 'asc',
+    remaining: 'desc'
+  }
+
+  const handleSort = (key: SortKey) => {
     if (sortBy === key) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
       setSortBy(key)
-      setSortOrder('asc')
+      setSortOrder(defaultSortOrder[key])
     }
   }
 
@@ -508,7 +529,15 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                 top: 0,
                 borderRight: '2px solid #94a3b8 !important'
               }}>
-                {t('unionRaid.remaining')}
+                <TableSortLabel
+                  active={sortBy === 'remaining'}
+                  direction={sortBy === 'remaining' ? sortOrder : 'desc'}
+                  onClick={() => handleSort('remaining')}
+                >
+                  <Box component="span" sx={{ fontWeight: sortBy === 'remaining' ? 600 : 400, color: sortBy === 'remaining' ? 'primary.main' : 'inherit' }}>
+                    {t('unionRaid.remaining')}
+                  </Box>
+                </TableSortLabel>
               </TableCell>
               <TableCell align="center" colSpan={3} sx={{ 
                 zIndex: 3, 
@@ -558,95 +587,98 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
             </TableRow>
           </TableHead>
           <TableBody>
-            {sortedData.map((row: any, idx: number) => (
-              <TableRow key={row.name} hover sx={{ '& td': { borderBottom: '2px solid #cbd5e1' } }}>
-                <TableCell align="center">{idx + 1}</TableCell>
-                <TableCell sx={{ borderRight: '2px solid #94a3b8 !important' }}>{row.name}</TableCell>
-                <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>{row.synchroLevel}</TableCell>
-                <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>
-                  {row.strikes.filter((s: any) => s === null).length}
-                </TableCell>
-                {row.strikes.map((strike: any, si: number) => {
-                  const highlight = isFilterActive && Boolean(strike?.matchesFilters)
-                  return (
-                    <React.Fragment key={si}>
-                      <TableCell
-                        align="center"
-                        sx={{
-                          ...(highlight ? {
-                            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
-                            fontWeight: 600
-                          } : {})
-                        }}
-                      >
-                        {strike?.boss || '-'}
-                      </TableCell>
-                      <TableCell
-                        sx={{
-                          fontSize: '0.75rem',
-                          minWidth: 180,
-                          position: 'relative',
-                          ...(highlight ? { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12) } : {})
-                        }}
-                      >
-                        {strike?.squad ? (
-                        <Box 
-                          sx={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: 0.25,
-                            position: 'relative',
-                            '&:hover .copy-icon': {
-                              opacity: 1
-                            }
+            {sortedData.map((row: any, idx: number) => {
+              const remainingCount = countRemainingStrikes(row)
+              return (
+                <TableRow key={row.gameOpenid || row.name} hover sx={{ '& td': { borderBottom: '2px solid #cbd5e1' } }}>
+                  <TableCell align="center">{idx + 1}</TableCell>
+                  <TableCell sx={{ borderRight: '2px solid #94a3b8 !important' }}>{row.name}</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>{row.synchroLevel}</TableCell>
+                  <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>
+                    {remainingCount}
+                  </TableCell>
+                  {row.strikes.map((strike: any, si: number) => {
+                    const highlight = isFilterActive && Boolean(strike?.matchesFilters)
+                    return (
+                      <React.Fragment key={si}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            ...(highlight ? {
+                              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                              fontWeight: 600
+                            } : {})
                           }}
                         >
-                          {strike.squad.split(', ').map((name: string, i: number) => (
-                            <Box key={i} sx={{ whiteSpace: 'nowrap' }}>{name}</Box>
-                          ))}
-                          <Tooltip title={t('unionRaid.copyTeam') || '复制队伍'}>
-                            <IconButton
-                              className="copy-icon"
-                              size="small"
-                              onClick={() => handleCopyTeam(strike.squadData)}
-                              sx={{
-                                position: 'absolute',
-                                top: -4,
-                                right: -4,
-                                padding: '2px',
-                                opacity: 0,
-                                transition: 'opacity 0.2s',
-                                backgroundColor: 'background.paper',
-                                boxShadow: 1,
-                                '&:hover': {
-                                  backgroundColor: 'primary.main',
-                                  color: 'white'
+                          {strike?.boss || '-'}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontSize: '0.75rem',
+                            minWidth: 180,
+                            position: 'relative',
+                            ...(highlight ? { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12) } : {})
+                          }}
+                        >
+                          {strike?.squad ? (
+                            <Box 
+                              sx={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: 0.25,
+                                position: 'relative',
+                                '&:hover .copy-icon': {
+                                  opacity: 1
                                 }
                               }}
                             >
-                              <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell
-                        align="right"
-                        sx={{ 
-                          borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined,
-                          ...(highlight ? {
-                            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
-                            fontWeight: 600
-                          } : {})
-                        }}
-                      >
-                        {strike ? strike.damage.toLocaleString() : '-'}
-                      </TableCell>
-                    </React.Fragment>
-                  )
-                })}
-              </TableRow>
-            ))}
+                              {strike.squad.split(', ').map((name: string, i: number) => (
+                                <Box key={i} sx={{ whiteSpace: 'nowrap' }}>{name}</Box>
+                              ))}
+                              <Tooltip title={t('unionRaid.copyTeam') || '复制队伍'}>
+                                <IconButton
+                                  className="copy-icon"
+                                  size="small"
+                                  onClick={() => handleCopyTeam(strike.squadData)}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    right: -4,
+                                    padding: '2px',
+                                    opacity: 0,
+                                    transition: 'opacity 0.2s',
+                                    backgroundColor: 'background.paper',
+                                    boxShadow: 1,
+                                    '&:hover': {
+                                      backgroundColor: 'primary.main',
+                                      color: 'white'
+                                    }
+                                  }}
+                                >
+                                  <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ 
+                            borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined,
+                            ...(highlight ? {
+                              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                              fontWeight: 600
+                            } : {})
+                          }}
+                        >
+                          {strike ? strike.damage.toLocaleString() : '-'}
+                        </TableCell>
+                      </React.Fragment>
+                    )
+                  })}
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
       </TableContainer>
