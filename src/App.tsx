@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material'
 import TeamBuilder from './components/TeamBuilder'
 import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload'
@@ -85,9 +85,12 @@ const theme = createTheme({
   },
 })
 
+const ACCOUNTS_STORAGE_KEY = 'exia-analysis-accounts'
+
 const App: React.FC = () => {
   const { t } = useI18n()
   const [accounts, setAccounts] = useState<any[]>([])
+  const [uploadedFileName, setUploadedFileName] = useState<string | undefined>(undefined)
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [currentPage, setCurrentPage] = useState<'analysis' | 'unionRaid'>('analysis')
@@ -111,6 +114,47 @@ const App: React.FC = () => {
 
   const handleCloseNotification = () => {
     setNotification(prev => ({ ...prev, open: false }))
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(ACCOUNTS_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (!parsed || !Array.isArray(parsed.accounts)) return
+      setAccounts(parsed.accounts)
+      if (typeof parsed.fileName === 'string') {
+        setUploadedFileName(parsed.fileName)
+      }
+    } catch (error) {
+      console.error('Failed to load accounts from storage:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!accounts || accounts.length === 0) {
+      window.localStorage.removeItem(ACCOUNTS_STORAGE_KEY)
+      return
+    }
+    try {
+      window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify({
+        accounts,
+        fileName: uploadedFileName ?? null
+      }))
+    } catch (error) {
+      console.error('Failed to persist accounts:', error)
+    }
+  }, [accounts, uploadedFileName])
+
+  const handleAccountsLoaded = (payload: AccountsPayload) => {
+    setAccounts(payload.accounts)
+    setUploadedFileName(payload.fileName || undefined)
+    if (!payload.accounts.length) {
+      setTeamChars([])
+      setCoeffsMap({})
+    }
   }
 
   return (
@@ -157,7 +201,10 @@ const App: React.FC = () => {
                   </ToggleButtonGroup>
                 </Box>
                 
-                <SingleJsonUpload onAccountsLoaded={(p: AccountsPayload) => setAccounts(p.accounts)} />
+                <SingleJsonUpload 
+                  onAccountsLoaded={handleAccountsLoaded}
+                  persistedFileName={uploadedFileName}
+                />
               </Box>
               
               {/* TeamBuilder 占据剩余空间并内部滚动 */}

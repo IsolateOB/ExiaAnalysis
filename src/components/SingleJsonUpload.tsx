@@ -1,20 +1,22 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Typography, Button, Alert, LinearProgress } from '@mui/material'
 import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon, HelpOutline as HelpOutlineIcon } from '@mui/icons-material'
 import { useI18n } from '../i18n'
 
 export interface AccountsPayload {
   accounts: any[]
+  fileName?: string
 }
 
 interface SingleJsonUploadProps {
   onAccountsLoaded: (payload: AccountsPayload) => void
+  persistedFileName?: string
 }
 
-const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded }) => {
+const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, persistedFileName }) => {
   const { t } = useI18n()
   const [isUploading, setIsUploading] = useState(false)
   const [fileName, setFileName] = useState<string | undefined>()
@@ -38,7 +40,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
         const text = String(reader.result || '')
         const json = JSON.parse(text)
         const accounts = parseAccounts(json)
-        onAccountsLoaded({ accounts })
+        onAccountsLoaded({ accounts, fileName: file.name })
       } catch (e: any) {
         setError(t('upload.parseError') + ': ' + (e?.message || 'unknown'))
       } finally {
@@ -75,7 +77,19 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded })
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation() }
 
-  const clear = () => { setFileName(undefined); setError(undefined); onAccountsLoaded({ accounts: [] }) }
+  const clear = () => { setFileName(undefined); setError(undefined); onAccountsLoaded({ accounts: [], fileName: undefined }) }
+
+  const previousPersistedFileNameRef = useRef<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (isUploading) return
+    if (persistedFileName) {
+      setFileName(persistedFileName)
+    } else if (!persistedFileName && previousPersistedFileNameRef.current && fileName) {
+      setFileName(undefined)
+    }
+    previousPersistedFileNameRef.current = persistedFileName
+  }, [persistedFileName, isUploading, fileName])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

@@ -60,7 +60,15 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.noData': '暂无联盟突袭数据',
     'unionRaid.noCookieOrArea': '缺少 cookie 或 area_id 信息',
     'unionRaid.fetchError': '获取联盟突袭数据失败',
+    'unionRaid.fetchRetry': '获取数据失败，{seconds}秒后重新获取',
     'unionRaid.refresh': '立即刷新',
+  'unionRaid.plan.actualLabel': '实际',
+  'unionRaid.plan.planLabel': '规划',
+  'unionRaid.plan.addCharacter': '添加角色',
+  'unionRaid.plan.noPlan': '尚未规划队伍',
+  'unionRaid.plan.characterLimit': '最多选择5名角色',
+  'unionRaid.plan.predictedDamage': '预测伤害',
+  'unionRaid.plan.none': '无',
 
     // 模板（Template）相关
     'tpl.import': '导入模板',
@@ -211,7 +219,15 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.noData': 'No union raid data available',
     'unionRaid.noCookieOrArea': 'Missing cookie or area_id',
     'unionRaid.fetchError': 'Failed to fetch union raid data',
+    'unionRaid.fetchRetry': 'Failed to fetch data, retrying in {seconds}s',
     'unionRaid.refresh': 'Refresh now',
+  'unionRaid.plan.actualLabel': 'Actual',
+  'unionRaid.plan.planLabel': 'Planning',
+  'unionRaid.plan.addCharacter': 'Add Character',
+  'unionRaid.plan.noPlan': 'No planned squad yet',
+  'unionRaid.plan.characterLimit': 'Up to 5 characters',
+  'unionRaid.plan.predictedDamage': 'Estimated Damage',
+  'unionRaid.plan.none': 'None',
 
     // Template related
     'tpl.import': 'Import Templates',
