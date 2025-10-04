@@ -7,6 +7,7 @@ import MenuItem from '@mui/material/MenuItem'
 import Select, { SelectChangeEvent } from '@mui/material/Select'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import { alpha } from '@mui/material/styles'
 import type { Character } from '../types'
 import { useI18n } from '../i18n'
 import { fetchNikkeList } from '../services/nikkeList'
@@ -226,7 +227,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
   }
 
   // 6. 构建表格数据
-  const tableData = useMemo(() => {
+  const { tableData, matchedStrikeCount } = useMemo(() => {
     // 初始化所有账号的数据结构,使用 game_openid 作为键
     const accountMap: Record<string, any> = {}
     accounts.forEach(acc => {
@@ -244,14 +245,17 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
     })
     
     // 如果有突袭数据,则填充出刀信息
+    let matchCount = 0
+
     if (raidData?.participate_data) {
       // 倒序处理,让最新的记录排在前面
       const sortedData = [...raidData.participate_data].reverse()
       sortedData.forEach((entry: any) => {
-  // 过滤难度、等级和 Boss
-  if (entry.difficulty !== difficulty) return
-  if (selectedLevel !== 'all' && Number(entry.level) !== selectedLevel) return
-  if (selectedStep !== 'all' && Number(entry.step) !== selectedStep) return
+        // 仅按难度过滤, 等级与 Boss 仅用于标记
+        if (entry.difficulty !== difficulty) return
+        const matchesLevel = selectedLevel === 'all' || Number(entry.level) === selectedLevel
+        const matchesStep = selectedStep === 'all' || Number(entry.step) === selectedStep
+        const matchesFilters = matchesLevel && matchesStep
         
         const openid = entry.openid
         // 通过 openid 匹配 game_uid (它们应该是相同的)
@@ -274,11 +278,16 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
           boss: `${entry.level}-${stepToRoman[entry.step] || entry.step}`,
           squad: squadNames.join(', '),
           squadData: entry.squad || [], // 保存原始数据用于复制
-          damage: Number(entry.total_damage || 0)
+          damage: Number(entry.total_damage || 0),
+          matchesFilters
+        }
+
+        if (matchesFilters) {
+          matchCount += 1
         }
       })
     }
-    return Object.values(accountMap)
+    return { tableData: Object.values(accountMap), matchedStrikeCount: matchCount }
   }, [raidData, accounts, nikkeMap, lang, difficulty, selectedLevel, selectedStep])
 
   // 7. 计算剩余刀数
@@ -337,11 +346,15 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
   const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '等级' : 'Level')
   const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
   const allLabelText = t('unionRaid.filter.all') || (lang === 'zh' ? '全部' : 'All')
-  const bossLabel = t('unionRaid.boss') || 'Boss'
   const levelSelectValue = selectedLevel === 'all' ? 'all' : String(selectedLevel)
   const stepSelectValue = selectedStep === 'all' ? 'all' : String(selectedStep)
   const formatLevelOption = (level: number) => String(level)
   const formatStepOption = (step: number) => stepToRoman[step] || String(step)
+  const isFilterActive = selectedLevel !== 'all' || selectedStep !== 'all'
+  const statsTemplateKey = isFilterActive
+    ? 'unionRaid.filter.stats.filtered'
+    : 'unionRaid.filter.stats.total'
+  const statsLabel = (t(statsTemplateKey) || statsTemplateKey).replace('{count}', String(matchedStrikeCount))
 
   if (error) {
     return (
@@ -402,6 +415,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
         
         {/* 右侧: 难度与筛选 */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 150, textAlign: 'right' }}>
+            {statsLabel}
+          </Typography>
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel id="union-raid-level-select-label">{levelLabelText}</InputLabel>
             <Select
@@ -550,11 +566,30 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                 <TableCell align="center" sx={{ minWidth: 100, borderRight: '2px solid #94a3b8 !important' }}>
                   {row.strikes.filter((s: any) => s === null).length}
                 </TableCell>
-                {row.strikes.map((strike: any, si: number) => (
-                  <React.Fragment key={si}>
-                    <TableCell align="center">{strike?.boss || '-'}</TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem', minWidth: 180, position: 'relative' }}>
-                      {strike?.squad ? (
+                {row.strikes.map((strike: any, si: number) => {
+                  const highlight = isFilterActive && Boolean(strike?.matchesFilters)
+                  return (
+                    <React.Fragment key={si}>
+                      <TableCell
+                        align="center"
+                        sx={{
+                          ...(highlight ? {
+                            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                            fontWeight: 600
+                          } : {})
+                        }}
+                      >
+                        {strike?.boss || '-'}
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontSize: '0.75rem',
+                          minWidth: 180,
+                          position: 'relative',
+                          ...(highlight ? { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12) } : {})
+                        }}
+                      >
+                        {strike?.squad ? (
                         <Box 
                           sx={{ 
                             display: 'flex', 
@@ -593,13 +628,23 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({ accounts, nikkeList, on
                             </IconButton>
                           </Tooltip>
                         </Box>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell align="right" sx={{ 
-                      borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined 
-                    }}>{strike ? strike.damage.toLocaleString() : '-'}</TableCell>
-                  </React.Fragment>
-                ))}
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{ 
+                          borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined,
+                          ...(highlight ? {
+                            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                            fontWeight: 600
+                          } : {})
+                        }}
+                      >
+                        {strike ? strike.damage.toLocaleString() : '-'}
+                      </TableCell>
+                    </React.Fragment>
+                  )
+                })}
               </TableRow>
             ))}
           </TableBody>
