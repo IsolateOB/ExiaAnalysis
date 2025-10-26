@@ -6,13 +6,9 @@ import { Box, Typography, Button, Alert, LinearProgress } from '@mui/material'
 import { CloudUpload as CloudUploadIcon, Delete as DeleteIcon, HelpOutline as HelpOutlineIcon } from '@mui/icons-material'
 import { useI18n } from '../i18n'
 
-export type AccountsJsonShape = 'array' | 'object' | 'single'
-
 export interface AccountsPayload {
   accounts: any[]
   fileName?: string
-  originalData?: any
-  shape?: AccountsJsonShape
 }
 
 interface SingleJsonUploadProps {
@@ -26,44 +22,6 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
   const [fileName, setFileName] = useState<string | undefined>()
   const [error, setError] = useState<string | undefined>()
 
-  const cloneJson = (value: any) => {
-    if (value === null || value === undefined) return value
-    try {
-      return JSON.parse(JSON.stringify(value))
-    } catch {
-      return value
-    }
-  }
-
-  const parseAccountsPayload = (data: any): { accounts: any[]; shape: AccountsJsonShape; originalData: any } => {
-    if (Array.isArray(data)) {
-      return {
-        accounts: data,
-        shape: 'array',
-        originalData: cloneJson(data)
-      }
-    }
-    if (data && typeof data === 'object') {
-      if (Array.isArray(data.accounts)) {
-        return {
-          accounts: data.accounts,
-          shape: 'object',
-          originalData: cloneJson(data)
-        }
-      }
-      return {
-        accounts: [data],
-        shape: 'single',
-        originalData: cloneJson(data)
-      }
-    }
-    return {
-      accounts: [],
-      shape: 'array',
-      originalData: []
-    }
-  }
-
   const loadFile = useCallback((file: File) => {
     setIsUploading(true)
     setError(undefined)
@@ -72,9 +30,15 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
     reader.onload = () => {
       try {
         const text = String(reader.result || '')
-  const json = JSON.parse(text)
-  const { accounts, shape, originalData } = parseAccountsPayload(json)
-  onAccountsLoaded({ accounts, fileName: file.name, shape, originalData })
+        const json = JSON.parse(text)
+        const accounts = Array.isArray(json)
+          ? json
+          : (json && Array.isArray(json.accounts))
+            ? json.accounts
+            : json && typeof json === 'object'
+              ? [json]
+              : []
+        onAccountsLoaded({ accounts, fileName: file.name })
       } catch (e: any) {
         setError(t('upload.parseError') + ': ' + (e?.message || 'unknown'))
       } finally {
@@ -86,7 +50,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
       setIsUploading(false)
     }
     reader.readAsText(file)
-  }, [onAccountsLoaded, parseAccountsPayload])
+  }, [onAccountsLoaded, t])
 
   const handleClickUpload = () => {
     const input = document.createElement('input')
@@ -114,7 +78,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
   const clear = () => {
     setFileName(undefined)
     setError(undefined)
-    onAccountsLoaded({ accounts: [], fileName: undefined, originalData: undefined, shape: undefined })
+    onAccountsLoaded({ accounts: [], fileName: undefined })
   }
 
   const previousPersistedFileNameRef = useRef<string | undefined>(undefined)

@@ -18,6 +18,7 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
 import type { SelectChangeEvent } from '@mui/material/Select'
 import type { Character } from '../types'
 import { useI18n } from '../i18n'
@@ -39,19 +40,15 @@ import {
   LEVEL_FILTER_OPTIONS,
   STEP_FILTER_OPTIONS,
   STEP_OPTIONS,
-  STEP_TO_ROMAN,
-  ACCOUNT_PLANNING_FIELD
+  STEP_TO_ROMAN
 } from './UnionRaid/constants'
-import { getAccountKey, getCharacterName, sortCharacterIdsByBurst } from './UnionRaid/helpers'
+import { getAccountKey, getCharacterName, getGameUid, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
-import type { AccountsJsonShape } from './SingleJsonUpload'
 
 interface UnionRaidStatsProps {
   accounts: any[]
   nikkeList?: Character[]
   onCopyTeam?: (characters: Character[]) => void
-  originalAccountsData?: any
-  accountsShape?: AccountsJsonShape
   uploadedFileName?: string
   onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
 }
@@ -62,8 +59,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   accounts,
   nikkeList,
   onCopyTeam,
-  originalAccountsData,
-  accountsShape = 'array',
   uploadedFileName,
   onNotify
 }) => {
@@ -83,11 +78,12 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const hasInitializedRef = useRef<boolean>(false)
   const fetchRaidDataRef = useRef<() => Promise<void> | void>(() => {})
+  const planningFileInputRef = useRef<HTMLInputElement | null>(null)
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false)
   const [dialogInitialElement, setDialogInitialElement] = useState<string | undefined>(undefined)
   const [activePlanContext, setActivePlanContext] = useState<{ accountKey: string; planIndex: number } | null>(null)
 
-  const { planningState, mutatePlanSlot } = useUnionRaidPlanning(accounts)
+  const { planningState, mutatePlanSlot, importPlanningData } = useUnionRaidPlanning(accounts)
 
   useEffect(() => {
     if (nikkeList && nikkeList.length > 0) {
@@ -477,6 +473,79 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     onCopyTeam(characters)
   }, [nikkeMap, onCopyTeam])
 
+  const handleImportPlanningClick = useCallback(() => {
+    planningFileInputRef.current?.click()
+  }, [])
+
+  const handlePlanningFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = event.target
+    const file = inputEl.files?.[0]
+
+    if (!file) {
+      inputEl.value = ''
+      return
+    }
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const raw = reader.result
+        if (typeof raw !== 'string') {
+          throw new Error('Unsupported file encoding')
+        }
+
+        const parsed = JSON.parse(raw)
+        const extractEntries = (payload: any): any[] => {
+          if (Array.isArray(payload)) return payload
+          if (payload && typeof payload === 'object') {
+            if (Array.isArray(payload.planning)) return payload.planning
+            if (Array.isArray(payload.accounts)) return payload.accounts
+            if (Array.isArray(payload.entries)) return payload.entries
+            if (Array.isArray(payload.data)) return payload.data
+          }
+          return []
+        }
+
+        const entries = extractEntries(parsed)
+        if (!entries || entries.length === 0) {
+          const message = t('unionRaid.importEmpty') || 'No valid planning entries found in file'
+          onNotify?.(message, 'warning')
+          return
+        }
+
+        const { matched, unmatched } = importPlanningData(entries)
+
+        if (matched === 0) {
+          const message = t('unionRaid.importNoMatches') || 'No planning entries matched the loaded accounts'
+          onNotify?.(message, 'warning')
+          return
+        }
+
+        const baseMessage = t('unionRaid.importSuccess') || 'Planning imported successfully'
+        const suffix = unmatched > 0
+          ? ` ${t('unionRaid.importPartialWarning') || `${unmatched} entry(ies) did not match any loaded account.`}`
+          : ''
+        onNotify?.(`${baseMessage} (${matched})${suffix}`, unmatched > 0 ? 'info' : 'success')
+      } catch (error: any) {
+        console.error('Failed to import planning JSON:', error)
+        const message = `${t('unionRaid.importFailed') || 'Failed to import planning JSON'}${error?.message ? `: ${error.message}` : ''}`
+        onNotify?.(message, 'error')
+      } finally {
+        inputEl.value = ''
+      }
+    }
+
+    reader.onerror = () => {
+      console.error('Failed to read planning JSON file')
+      const message = t('unionRaid.importFailed') || 'Failed to import planning JSON'
+      onNotify?.(message, 'error')
+      inputEl.value = ''
+    }
+
+    reader.readAsText(file, 'utf-8')
+  }, [importPlanningData, onNotify, t])
+
   const handleExportPlanning = useCallback(() => {
     if (!accounts || accounts.length === 0) {
       const msg = t('unionRaid.exportNoData') || 'No accounts available to export'
@@ -484,63 +553,45 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       return
     }
 
-    const cloneJson = (value: any) => {
-      if (value === null || value === undefined) return value
-      try {
-        return JSON.parse(JSON.stringify(value))
-      } catch {
-        return value
-      }
-    }
+    const entries: Array<{ game_uid: string; name: string; plans: (Partial<PlanSlot> | null)[] }> = []
+    let skippedMissingUid = 0
 
-    const attachPlanning = (account: any) => {
-      const key = getAccountKey(account)
-      if (!key) {
-        return {
-          ...account,
-          [ACCOUNT_PLANNING_FIELD]: serializePlanSlots(ensurePlanArray())
-        }
+    accounts.forEach(account => {
+      const accountKey = getAccountKey(account)
+      const gameUid = getGameUid(account)
+      if (!accountKey || !gameUid) {
+        skippedMissingUid += 1
+        return
       }
-      const plans = planningState[key] ?? ensurePlanArray()
-      return {
-        ...account,
-        [ACCOUNT_PLANNING_FIELD]: serializePlanSlots(plans)
-      }
-    }
 
-    const mergeAccountsArray = (source: any[]) => {
-      if (!Array.isArray(source)) return []
-      return source.map(acc => attachPlanning(acc))
+      const plans = serializePlanSlots(planningState[accountKey])
+      const accountName = account?.name
+        ?? account?.nickname
+        ?? account?.nick_name
+        ?? account?.nick
+        ?? account?.player_name
+        ?? account?.uid
+        ?? gameUid
+
+      entries.push({
+        game_uid: gameUid,
+        name: String(accountName),
+        plans
+      })
+    })
+
+    if (entries.length === 0) {
+      const baseMessage = skippedMissingUid > 0
+        ? t('unionRaid.exportMissingUidOnly') || 'All accounts are missing game_uid, nothing to export'
+        : t('unionRaid.exportNoData') || 'No accounts available to export'
+      onNotify?.(baseMessage, 'warning')
+      return
     }
 
     try {
-      const normalizedShape = accountsShape ?? 'array'
-      let payload: any
-
-      if (originalAccountsData) {
-        const base = cloneJson(originalAccountsData)
-        if (normalizedShape === 'object' && base && typeof base === 'object' && Array.isArray((base as any).accounts)) {
-          (base as any).accounts = mergeAccountsArray((base as any).accounts)
-          payload = base
-        } else if (normalizedShape === 'single' && base && typeof base === 'object' && !Array.isArray(base)) {
-          const key = getAccountKey(base)
-          const plans = key ? (planningState[key] ?? ensurePlanArray()) : ensurePlanArray()
-          payload = {
-            ...base,
-            [ACCOUNT_PLANNING_FIELD]: serializePlanSlots(plans)
-          }
-        } else if (Array.isArray(base)) {
-          payload = mergeAccountsArray(base)
-        } else {
-          payload = mergeAccountsArray(accounts)
-        }
-      } else {
-        payload = mergeAccountsArray(accounts)
-      }
-
-      const jsonText = JSON.stringify(payload, null, 2)
+      const jsonText = JSON.stringify(entries, null, 2)
       const baseFile = uploadedFileName?.replace(/\.json$/i, '') || 'union-raid'
-      const exportName = `${baseFile}-with-planning.json`
+      const exportName = `${baseFile}-planning.json`
       const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -551,21 +602,17 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
-      onNotify?.(t('unionRaid.exportSuccess') || 'JSON exported successfully', 'success')
+      const successText = t('unionRaid.exportSuccess') || 'JSON exported successfully'
+      const skippedSuffix = skippedMissingUid > 0
+        ? ` ${t('unionRaid.exportSkippedMissingUid') || `${skippedMissingUid} account(s) missing game_uid were skipped.`}`
+        : ''
+      onNotify?.(`${successText}${skippedSuffix}`, skippedMissingUid > 0 ? 'info' : 'success')
     } catch (error: any) {
       console.error('Failed to export union raid planning JSON:', error)
       const message = `${t('unionRaid.exportFailed') || 'Failed to export JSON'}${error?.message ? `: ${error.message}` : ''}`
       onNotify?.(message, 'error')
     }
-  }, [
-    accounts,
-    accountsShape,
-    originalAccountsData,
-    planningState,
-    uploadedFileName,
-    onNotify,
-    t
-  ])
+  }, [accounts, planningState, uploadedFileName, onNotify, t])
 
   const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '等级' : 'Level')
   const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
@@ -663,6 +710,16 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
           <Button
             variant="outlined"
             size="small"
+            startIcon={<UploadFileIcon />}
+            onClick={handleImportPlanningClick}
+            disabled={!accounts || accounts.length === 0}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            {t('unionRaid.importJson') || 'Import Planning'}
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
             startIcon={<FileDownloadIcon />}
             onClick={handleExportPlanning}
             disabled={!accounts || accounts.length === 0}
@@ -731,6 +788,16 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         onSelectCharacter={handleCharacterSelected}
         initialElement={dialogInitialElement}
       />
+      <Box sx={{ display: 'none' }}>
+        <input
+          type="file"
+          accept="application/json"
+          ref={planningFileInputRef}
+          onChange={handlePlanningFileChange}
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+      </Box>
     </Box>
   )
 }

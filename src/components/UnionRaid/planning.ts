@@ -1,4 +1,4 @@
-import { ACCOUNT_PLANNING_FIELD, STEP_OPTIONS } from './constants'
+import { STEP_OPTIONS } from './constants'
 import type { ActualStrike, PlanSlot, StrikeView } from './types'
 
 export const createEmptyPlanSlot = (): PlanSlot => ({
@@ -81,17 +81,6 @@ export const serializePlanSlots = (plans?: PlanSlot[]): (Partial<PlanSlot> | nul
       predictedDamageInput: plan.predictedDamageInput
     }
   })
-}
-
-export const extractRawPlanArray = (account: any): (Partial<PlanSlot> | null)[] | null => {
-  if (!account || typeof account !== 'object') return null
-  const raw = account[ACCOUNT_PLANNING_FIELD]
-  if (!raw) return null
-  if (Array.isArray(raw)) return raw as (Partial<PlanSlot> | null)[]
-  if (raw && typeof raw === 'object' && Array.isArray(raw.plans)) {
-    return raw.plans as (Partial<PlanSlot> | null)[]
-  }
-  return null
 }
 
 export const planArrayHasData = (plans?: PlanSlot[]): boolean => {

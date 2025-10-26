@@ -5,6 +5,13 @@ export const getAccountKey = (acc: any) => {
   return match ? match[1] : acc?.name
 }
 
+export const getGameUid = (acc: any): string | null => {
+  const uid = acc?.game_uid ?? acc?.gameUid ?? acc?.gameUID
+  if (uid === undefined || uid === null) return null
+  const str = String(uid).trim()
+  return str.length > 0 ? str : null
+}
+
 export const getBurstRank = (id: number, nikkeMap: NikkeMap) => {
   const char = nikkeMap[id]
   if (!char) return 99
