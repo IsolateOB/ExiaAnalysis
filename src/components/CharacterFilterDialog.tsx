@@ -209,8 +209,8 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
             fullWidth
           />
 
-          {/* 筛选条件：5 等分占满行 */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', columnGap: 2, rowGap: 2 }}>
+          {/* 筛选条件：6 等分占满行 */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', columnGap: 2, rowGap: 2 }}>
             <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.class')}</InputLabel>
               <Select
@@ -285,6 +285,20 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                 <MenuItem value="SR">{t('option.weapon.SR')}</MenuItem>
                 <MenuItem value="MG">{t('option.weapon.MG')}</MenuItem>
                 <MenuItem value="RL">{t('option.weapon.RL')}</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ width: '100%' }}>
+              <InputLabel>{t('filter.rare')}</InputLabel>
+              <Select
+                value={filters.original_rare}
+                onChange={(e) => handleFilterChange('original_rare', e.target.value)}
+                label={t('filter.rare')}
+              >
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="SSR">{t('option.rare.SSR')}</MenuItem>
+                <MenuItem value="SR">{t('option.rare.SR')}</MenuItem>
+                <MenuItem value="R">{t('option.rare.R')}</MenuItem>
               </Select>
             </FormControl>
           </Box>

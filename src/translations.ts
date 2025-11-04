@@ -113,9 +113,10 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'filter.searchPlaceholder': '搜索角色名称...',
     'filter.class': '职业',
     'filter.element': '代码',
-    'filter.burst': '爆裂阶段',
+    'filter.burst': '阶段',
     'filter.corporation': '企业',
     'filter.weapon': '武器类型',
+    'filter.rare': '稀有度',
     'filter.all': '全部',
     'filter.results': '筛选结果',
     'filter.loading': '加载角色数据中...',
@@ -175,6 +176,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'option.weapon.SR': 'SR',
     'option.weapon.MG': 'MG',
     'option.weapon.RL': 'RL',
+  'option.rare.SSR': 'SSR',
+  'option.rare.SR': 'SR',
+  'option.rare.R': 'R',
   },
   en: {
     // General
@@ -279,7 +283,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'common.remove': 'Remove',
 
     // Filter dialog (partial)
-    'filter.selectCharacter': 'Select Character',
+    'filter.selectCharacter': 'Select Nikke',
     'filter.name': 'Character Name',
     'filter.searchPlaceholder': 'Search character name...',
     'filter.class': 'Class',
@@ -287,6 +291,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'filter.burst': 'Burst Stage',
     'filter.corporation': 'Manufacturer',
     'filter.weapon': 'Weapon Type',
+  'filter.rare': 'Rarity',
     'filter.all': 'All',
     'filter.results': 'Results',
     'filter.loading': 'Loading characters...',
@@ -346,6 +351,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'option.weapon.SR': 'SR',
     'option.weapon.MG': 'MG',
     'option.weapon.RL': 'RL',
+  'option.rare.SSR': 'SSR',
+  'option.rare.SR': 'SR',
+  'option.rare.R': 'R',
   }
 }
 
