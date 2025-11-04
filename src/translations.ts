@@ -108,7 +108,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'common.remove': '移除',
 
     // 筛选弹窗（部分）
-    'filter.selectCharacter': '选择角色',
+    'filter.selectCharacter': '选择妮姬',
     'filter.name': '角色名称',
     'filter.searchPlaceholder': '搜索角色名称...',
     'filter.class': '职业',

@@ -174,6 +174,26 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     onClose()
   }
 
+  const getBurstLabel = (burst: Character['use_burst_skill']) => {
+    const romanMap: Record<string, string> = {
+      Step1: 'I',
+      Step2: 'II',
+      Step3: 'III'
+    }
+
+    if (burst === 'AllStep') {
+      const suffix = t('option.burst.AllStep')
+      return lang === 'zh' ? `爆裂 ${suffix}` : `Burst ${suffix}`
+    }
+
+    const roman = romanMap[burst]
+    if (roman) {
+      return lang === 'zh' ? `爆裂 ${roman}` : `Burst ${roman}`
+    }
+
+    return t(`option.burst.${burst}`)
+  }
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{t('filter.selectCharacter')}</DialogTitle>
@@ -296,7 +316,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                   >
                     <ListItemText
                       primary={lang === 'zh' ? character.name_cn : character.name_en}
-                      secondary={`${t('option.element.' + character.element)} | ${t('option.burst.' + (character.use_burst_skill === 'AllStep' ? 'AllStep' : character.use_burst_skill))} | ${t('option.class.' + character.class)} | ${t('option.corporation.' + character.corporation)} | ${t('option.weapon.' + character.weapon_type)}`}
+                      secondary={`${t('option.element.' + character.element)} | ${getBurstLabel(character.use_burst_skill)} | ${t('option.class.' + character.class)} | ${t('option.corporation.' + character.corporation)} | ${t('option.weapon.' + character.weapon_type)}`}
                     />
                   </ListItem>
                 ))}
