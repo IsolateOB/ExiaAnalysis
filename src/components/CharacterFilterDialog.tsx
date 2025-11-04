@@ -209,22 +209,8 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
             fullWidth
           />
 
-          {/* 筛选条件：5 等分占满行 */}
+          {/* 筛选条件：按顺序显示 — 代码、阶段、职业、企业、武器（5 等分） */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', columnGap: 2, rowGap: 2 }}>
-            <FormControl size="small" sx={{ width: '100%' }}>
-              <InputLabel>{t('filter.class')}</InputLabel>
-              <Select
-                value={filters.class}
-                onChange={(e) => handleFilterChange('class', e.target.value)}
-                label={t('filter.class')}
-              >
-                <MenuItem value="">{t('filter.all')}</MenuItem>
-                <MenuItem value="Attacker">{t('option.class.Attacker')}</MenuItem>
-                <MenuItem value="Defender">{t('option.class.Defender')}</MenuItem>
-                <MenuItem value="Supporter">{t('option.class.Supporter')}</MenuItem>
-              </Select>
-            </FormControl>
-
             <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.element')}</InputLabel>
               <Select
@@ -252,6 +238,20 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                 <MenuItem value="Step1">{t('option.burst.Step1')}</MenuItem>
                 <MenuItem value="Step2">{t('option.burst.Step2')}</MenuItem>
                 <MenuItem value="Step3">{t('option.burst.Step3')}</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ width: '100%' }}>
+              <InputLabel>{t('filter.class')}</InputLabel>
+              <Select
+                value={filters.class}
+                onChange={(e) => handleFilterChange('class', e.target.value)}
+                label={t('filter.class')}
+              >
+                <MenuItem value="">{t('filter.all')}</MenuItem>
+                <MenuItem value="Attacker">{t('option.class.Attacker')}</MenuItem>
+                <MenuItem value="Defender">{t('option.class.Defender')}</MenuItem>
+                <MenuItem value="Supporter">{t('option.class.Supporter')}</MenuItem>
               </Select>
             </FormControl>
 
