@@ -245,6 +245,7 @@ const App: React.FC = () => {
                 <UnionRaidStats 
                   accounts={accounts} 
                   uploadedFileName={uploadedFileName}
+                  teamBuilderTeam={teamChars}
                   onCopyTeam={(characters) => {
                     // 将角色数组填充到5个位置
                     const teamArray: (Character | undefined)[] = Array(5).fill(undefined)

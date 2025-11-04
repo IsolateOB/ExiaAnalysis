@@ -18,6 +18,7 @@ import {
   Button
 } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import { alpha } from '@mui/material/styles'
@@ -67,6 +68,9 @@ export type UnionRaidTableProps = {
   onRemovePlanCharacter: (accountKey: string, planIndex: number, characterId: number) => void
   onOpenCharacterPicker: (accountKey: string, planIndex: number) => void
   onCopyTeam: (squad: any[]) => void
+  onCopyPlannedTeam: (characterIds: number[]) => void
+  onPastePlannedTeam: (accountKey: string, planIndex: number) => void
+  canPastePlannedTeam: boolean
   getCharacterName: (id: number) => string
   sortCharacterIdsByBurst: (ids: number[]) => number[]
   formatActualDamage: (value: number | null | undefined) => string
@@ -87,6 +91,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   onRemovePlanCharacter,
   onOpenCharacterPicker,
   onCopyTeam,
+  onCopyPlannedTeam,
+  onPastePlannedTeam,
+  canPastePlannedTeam,
   getCharacterName,
   sortCharacterIdsByBurst,
   formatActualDamage,
@@ -454,17 +461,31 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                               sx={{
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: 0.25,
-                                position: 'relative',
+                                gap: 0.5,
                                 p: 0.25,
-                                borderRadius: 1,
-                                '&:hover .copy-icon': { opacity: 1 }
+                                borderRadius: 1
                               }}
                             >
-                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                                {t('unionRaid.plan.actualLabel')}
-                              </Typography>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25, mt: 0.25 }}>
+                              <Stack direction="row" spacing={0.5} alignItems="center">
+                                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                                  {t('unionRaid.plan.actualLabel')}
+                                </Typography>
+                                <Tooltip title={t('unionRaid.copyTeam') || '复制队伍'}>
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => onCopyTeam(actual.squadData)}
+                                      sx={{
+                                        width: 24,
+                                        height: 24
+                                      }}
+                                    >
+                                      <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </Stack>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
                                 {sortedActualIds.map((id, idxSorted) => {
                                   const overlap = overlappingCharacterIds.has(id)
                                   const name = getCharacterName(id)
@@ -481,37 +502,47 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                   )
                                 })}
                               </Box>
-                              <Tooltip title={t('unionRaid.copyTeam') || '复制队伍'}>
-                                <IconButton
-                                  className="copy-icon"
-                                  size="small"
-                                  onClick={() => onCopyTeam(actual.squadData)}
-                                  sx={{
-                                    position: 'absolute',
-                                    top: 2,
-                                    right: 2,
-                                    padding: '2px',
-                                    opacity: 0,
-                                    transition: 'opacity 0.2s',
-                                    backgroundColor: 'background.paper',
-                                    boxShadow: 1,
-                                    '&:hover': {
-                                      backgroundColor: 'primary.main',
-                                      color: 'white'
-                                    }
-                                  }}
-                                >
-                                  <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
-                                </IconButton>
-                              </Tooltip>
                             </Box>
                           )}
                           <Box>
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                              {t('unionRaid.plan.planLabel')}
-                            </Typography>
+                            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.25 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                                {t('unionRaid.plan.planLabel')}
+                              </Typography>
+                              <Tooltip title={t('unionRaid.copyPlanTeam') || t('unionRaid.copyTeam') || '复制规划队伍'}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => onCopyPlannedTeam(sortedPlanIds)}
+                                    disabled={sortedPlanIds.length === 0}
+                                    sx={{ width: 24, height: 24 }}
+                                  >
+                                    <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={t('unionRaid.pastePlanTeam') || '从构建器粘贴队伍'}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => onPastePlannedTeam(accountKey, view.planIndex)}
+                                    disabled={!canPastePlannedTeam}
+                                    sx={{ width: 24, height: 24 }}
+                                  >
+                                    <ContentPasteIcon sx={{ fontSize: '0.875rem' }} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </Stack>
                             {plan.characterIds.length > 0 ? (
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25, mt: 0.25 }}>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: 0.25,
+                                  mt: 0.5
+                                }}
+                              >
                                 {sortedPlanIds.map((id) => (
                                   <Chip
                                     key={id}

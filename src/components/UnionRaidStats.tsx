@@ -26,6 +26,7 @@ import { fetchNikkeList } from '../services/nikkeList'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { UnionRaidTable } from './UnionRaid/UnionRaidTable'
 import { useUnionRaidPlanning } from './UnionRaid/useUnionRaidPlanning'
+import { mapIdsToCharacters } from '../utils/characters'
 import {
   formatActualDamage,
   formatPredictedDamage,
@@ -40,7 +41,8 @@ import {
   LEVEL_FILTER_OPTIONS,
   STEP_FILTER_OPTIONS,
   STEP_OPTIONS,
-  STEP_TO_ROMAN
+  STEP_TO_ROMAN,
+  MAX_PLAN_CHARACTERS
 } from './UnionRaid/constants'
 import { getAccountKey, getCharacterName, getGameUid, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
@@ -51,6 +53,7 @@ interface UnionRaidStatsProps {
   onCopyTeam?: (characters: Character[]) => void
   uploadedFileName?: string
   onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
+  teamBuilderTeam?: (Character | undefined)[]
 }
 
 const countRemainingStrikes = (row: any) => Math.max(3 - (row.actualCount || 0), 0)
@@ -60,7 +63,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   nikkeList,
   onCopyTeam,
   uploadedFileName,
-  onNotify
+  onNotify,
+  teamBuilderTeam
 }) => {
   const { t, lang } = useI18n()
   const [fatalError, setFatalError] = useState<string>()
@@ -453,25 +457,37 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handleCopyTeam = useCallback((squadData: any[]) => {
     if (!onCopyTeam || !squadData || squadData.length === 0) return
 
-    const characters: Character[] = squadData.map((s: any) => {
-      const baseId = tidToBaseId(s.tid)
-      const nikke = nikkeMap[baseId]
-      return {
-        id: baseId,
-        name_cn: nikke?.name_cn || '?',
-        name_en: nikke?.name_en || '?',
-        name_code: nikke?.name_code || baseId,
-        class: nikke?.class || 'Attacker',
-        element: nikke?.element || 'Fire',
-        use_burst_skill: nikke?.use_burst_skill || 'AllStep',
-        corporation: nikke?.corporation || 'ELYSION',
-        weapon_type: nikke?.weapon_type || 'AR',
-        original_rare: nikke?.original_rare || 'SSR'
-      }
-    })
+    const baseIds = squadData.map((s: any) => tidToBaseId(s.tid))
+    onCopyTeam(mapIdsToCharacters(baseIds, nikkeMap))
+  }, [nikkeMap, onCopyTeam])
 
+  const handleCopyPlannedTeam = useCallback((characterIds: number[]) => {
+    if (!onCopyTeam || !characterIds || characterIds.length === 0) return
+    const characters = mapIdsToCharacters(characterIds, nikkeMap)
     onCopyTeam(characters)
   }, [nikkeMap, onCopyTeam])
+
+  const hasBuilderTeam = useMemo(() => {
+    if (!teamBuilderTeam) return false
+    return teamBuilderTeam.some((char) => Boolean(char))
+  }, [teamBuilderTeam])
+
+  const handlePastePlannedTeam = useCallback((accountKey: string, planIndex: number) => {
+    const available = (teamBuilderTeam || []).filter((char): char is Character => Boolean(char))
+    if (available.length === 0) {
+      const emptyMessage = t('unionRaid.pastePlanTeamEmpty') || '构建器中没有可粘贴的队伍'
+      onNotify?.(emptyMessage, 'warning')
+      return
+    }
+
+    const uniqueIds = Array.from(new Set(available.map((char) => char.id))).slice(0, MAX_PLAN_CHARACTERS)
+    mutatePlan(accountKey, planIndex, (plan) => {
+      plan.characterIds = uniqueIds
+    })
+
+    const successMessage = t('unionRaid.pastePlanTeamSuccess') || '已从构建器粘贴到规划'
+    onNotify?.(successMessage, 'success')
+  }, [teamBuilderTeam, mutatePlan, onNotify, t])
 
   const handleImportPlanningClick = useCallback(() => {
     planningFileInputRef.current?.click()
@@ -775,6 +791,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         onRemovePlanCharacter={handleRemovePlanCharacter}
         onOpenCharacterPicker={handleOpenCharacterPicker}
         onCopyTeam={handleCopyTeam}
+        onCopyPlannedTeam={handleCopyPlannedTeam}
+  onPastePlannedTeam={handlePastePlannedTeam}
+  canPastePlannedTeam={hasBuilderTeam}
         getCharacterName={(id) => getCharacterName(id, nikkeMap, lang)}
         sortCharacterIdsByBurst={(ids) => sortCharacterIdsByBurst(ids, nikkeMap)}
         formatActualDamage={formatActualDamage}
