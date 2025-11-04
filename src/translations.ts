@@ -64,7 +64,6 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.refresh': '立即刷新',
     'unionRaid.exportJson': '导出规划 JSON',
     'unionRaid.exportSuccess': '已导出包含规划的 JSON 文件',
-    'unionRaid.exportFailed': '导出包含规划的 JSON 失败',
     'unionRaid.exportNoData': '暂无账号可导出',
     'unionRaid.exportMissingUidOnly': '所有账号都缺少 game_uid，无法导出',
     'unionRaid.exportSkippedMissingUid': '部分账号缺少 game_uid，已跳过',
@@ -116,7 +115,6 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'filter.burst': '阶段',
     'filter.corporation': '企业',
     'filter.weapon': '武器类型',
-    'filter.rare': '稀有度',
     'filter.all': '全部',
     'filter.results': '筛选结果',
     'filter.loading': '加载角色数据中...',
@@ -175,10 +173,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'option.weapon.SG': 'SG',
     'option.weapon.SR': 'SR',
     'option.weapon.MG': 'MG',
-    'option.weapon.RL': 'RL',
-  'option.rare.SSR': 'SSR',
-  'option.rare.SR': 'SR',
-  'option.rare.R': 'R',
+  'option.weapon.RL': 'RL',
   },
   en: {
     // General
@@ -290,8 +285,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'filter.element': 'Element',
     'filter.burst': 'Burst Stage',
     'filter.corporation': 'Manufacturer',
-    'filter.weapon': 'Weapon Type',
-  'filter.rare': 'Rarity',
+  'filter.weapon': 'Weapon Type',
     'filter.all': 'All',
     'filter.results': 'Results',
     'filter.loading': 'Loading characters...',
@@ -350,10 +344,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'option.weapon.SG': 'SG',
     'option.weapon.SR': 'SR',
     'option.weapon.MG': 'MG',
-    'option.weapon.RL': 'RL',
-  'option.rare.SSR': 'SSR',
-  'option.rare.SR': 'SR',
-  'option.rare.R': 'R',
+  'option.weapon.RL': 'RL',
   }
 }
 
