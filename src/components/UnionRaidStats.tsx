@@ -454,6 +454,29 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     setActivePlanContext(null)
   }, [activePlanContext, mutatePlan])
 
+  const handleCharactersSelected = useCallback((characters: Character[]) => {
+    if (!activePlanContext) return
+    const { accountKey, planIndex } = activePlanContext
+    const nextIds = characters.map((char) => char.id).slice(0, MAX_PLAN_CHARACTERS)
+    mutatePlan(accountKey, planIndex, (plan) => {
+      plan.characterIds = nextIds
+    })
+    setCharacterDialogOpen(false)
+    setActivePlanContext(null)
+  }, [activePlanContext, mutatePlan])
+
+  const activePlanCharacters = useMemo(() => {
+    if (!activePlanContext) return []
+    const { accountKey, planIndex } = activePlanContext
+    const plans = planningState[accountKey]
+    if (!plans) return []
+    const planSlots = ensurePlanArray(plans)
+    const plan = planSlots[planIndex]
+    if (!plan) return []
+    const sortedIds = sortCharacterIdsByBurst(plan.characterIds, nikkeMap)
+    return mapIdsToCharacters(sortedIds, nikkeMap)
+  }, [activePlanContext, nikkeMap, planningState])
+
   const handleCopyTeam = useCallback((squadData: any[]) => {
     if (!onCopyTeam || !squadData || squadData.length === 0) return
 
@@ -806,6 +829,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         onClose={handleCharacterDialogClose}
         onSelectCharacter={handleCharacterSelected}
         initialElement={dialogInitialElement}
+        multiSelect
+        maxSelection={MAX_PLAN_CHARACTERS}
+        initialSelectedCharacters={activePlanCharacters}
+        onConfirmSelection={handleCharactersSelected}
       />
       <Box sx={{ display: 'none' }}>
         <input

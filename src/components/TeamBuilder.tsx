@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, Divider, MenuItem, Select } from '@mui/material'
 import { Character, TeamCharacter, AttributeCoefficients } from '../types'
 import CharacterCard from './CharacterCard'
@@ -307,6 +307,26 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     }))
     setFilterDialogOpen(false)
   }
+
+  const handleConfirmSelectedCharacters = useCallback((characters: Character[]) => {
+    setTeam(prev => (
+      prev.map((teamChar, index) => ({
+        ...teamChar,
+        character: characters[index] || undefined
+      }))
+    ))
+
+    setCoefficientsMap(prev => {
+      const next = { ...prev }
+      characters.forEach((char, index) => {
+        if (char) {
+          const position = index + 1
+          next[position] = normalizeCoefficients(prev[position])
+        }
+      })
+      return next
+    })
+  }, [normalizeCoefficients])
 
   const handleRemoveCharacter = (position: number) => {
     setTeam(prev => 
@@ -663,6 +683,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         open={filterDialogOpen}
         onClose={() => setFilterDialogOpen(false)}
         onSelectCharacter={handleSelectCharacter}
+        multiSelect
+        maxSelection={team.length}
+        initialSelectedCharacters={team.map((teamChar) => teamChar.character).filter((char): char is Character => Boolean(char))}
+        onConfirmSelection={handleConfirmSelectedCharacters}
       />
   </Box>
   )

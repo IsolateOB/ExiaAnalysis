@@ -18,6 +18,9 @@ import {
   List,
   ListItem,
   ListItemText,
+  Chip,
+  Stack,
+  Divider
 } from '@mui/material'
 import { Character, CharacterFilter } from '../types'
 import { fetchNikkeList } from '../services/nikkeList'
@@ -28,6 +31,10 @@ interface CharacterFilterDialogProps {
   onClose: () => void
   onSelectCharacter: (character: Character) => void
   initialElement?: string
+  multiSelect?: boolean
+  onConfirmSelection?: (characters: Character[]) => void
+  initialSelectedCharacters?: Character[]
+  maxSelection?: number
 }
 
 const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
@@ -35,6 +42,10 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   onClose,
   onSelectCharacter,
   initialElement,
+  multiSelect = false,
+  onConfirmSelection,
+  initialSelectedCharacters,
+  maxSelection = 5
 }) => {
   const { t, lang } = useI18n()
   const [filters, setFilters] = useState<CharacterFilter>({
@@ -50,6 +61,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   const [nikkeList, setNikkeList] = useState<Character[]>([])
   const [filteredCharacters, setFilteredCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(false)
+  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([])
 
   // 加载角色数据：仅首次打开或本地列表为空时请求，避免闪烁
   useEffect(() => {
@@ -102,8 +114,11 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
         weapon_type: '',
         original_rare: '',
       })
+      if (multiSelect) {
+        setSelectedCharacters(initialSelectedCharacters ? [...initialSelectedCharacters] : [])
+      }
     }
-  }, [open, initialElement])
+  }, [open, initialElement, initialSelectedCharacters, multiSelect])
 
   // 翻译映射
   const translations = {
@@ -170,7 +185,30 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   }
 
   const handleSelectCharacter = (character: Character) => {
+    if (multiSelect) {
+      setSelectedCharacters((prev) => {
+        if (prev.some((item) => item.id === character.id)) {
+          return prev
+        }
+        if (prev.length >= maxSelection) {
+          return prev
+        }
+        return [...prev, character]
+      })
+      return
+    }
+
     onSelectCharacter(character)
+    onClose()
+  }
+
+  const handleRemoveSelected = (characterId: number) => {
+    setSelectedCharacters((prev) => prev.filter((item) => item.id !== characterId))
+  }
+
+  const handleConfirmSelection = () => {
+    if (!multiSelect) return
+    onConfirmSelection?.(selectedCharacters)
     onClose()
   }
 
@@ -193,6 +231,13 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
 
     return t(`option.burst.${burst}`)
   }
+
+  const selectionCount = selectedCharacters.length
+  const selectionLimitReached = multiSelect && selectionCount >= maxSelection
+  const selectedLabelTemplate = t('filter.selectedCharactersLabel') || 'Selected {count}/{max}'
+  const selectedLabel = selectedLabelTemplate
+    .replace('{count}', String(selectionCount))
+    .replace('{max}', String(maxSelection))
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -309,8 +354,11 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                         variant="contained"
                         size="small"
                         onClick={() => handleSelectCharacter(character)}
+                        disabled={multiSelect && !selectedCharacters.some((item) => item.id === character.id) && selectionLimitReached}
                       >
-                        {t('filter.choose')}
+                        {multiSelect && selectedCharacters.some((item) => item.id === character.id)
+                          ? t('filter.selectedTag') || t('filter.choose')
+                          : t('filter.choose')}
                       </Button>
                     }
                   >
@@ -325,10 +373,42 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               <Typography color="textSecondary">{t('filter.notFound')}</Typography>
             )}
           </Box>
+
+          {multiSelect && (
+            <Box sx={{ mt: 2 }}>
+              <Divider sx={{ mb: 2 }} />
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                {selectedLabel}
+              </Typography>
+              {selectionCount === 0 ? (
+                <Typography color="textSecondary">{t('filter.selectedEmpty')}</Typography>
+              ) : (
+                <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                  {selectedCharacters.map((character) => (
+                    <Chip
+                      key={character.id}
+                      label={lang === 'zh' ? character.name_cn : character.name_en}
+                      onDelete={() => handleRemoveSelected(character.id)}
+                      variant="outlined"
+                    />
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('filter.cancel')}</Button>
+        {multiSelect && (
+          <Button
+            variant="contained"
+            onClick={handleConfirmSelection}
+            disabled={selectionCount === 0}
+          >
+            {t('filter.confirmSelection')}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )
