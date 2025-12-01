@@ -2,7 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useEffect, useState } from 'react'
-import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material'
+import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide } from '@mui/material'
+import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
+import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import TeamBuilder from './components/TeamBuilder'
 import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
@@ -86,6 +88,8 @@ const theme = createTheme({
 })
 
 const ACCOUNTS_STORAGE_KEY = 'exia-analysis-accounts'
+const SIDEBAR_WIDTH_MD = 400
+const SIDEBAR_TOGGLE_SIZE = 44
 
 const App: React.FC = () => {
   const { t } = useI18n()
@@ -94,6 +98,7 @@ const App: React.FC = () => {
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [currentPage, setCurrentPage] = useState<'analysis' | 'unionRaid'>('analysis')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [notification, setNotification] = useState<{
     open: boolean
     message: string
@@ -157,79 +162,155 @@ const App: React.FC = () => {
     }
   }
 
+  const collapseSidebar = () => setSidebarCollapsed(true)
+  const expandSidebar = () => setSidebarCollapsed(false)
+  const collapseLabel = t('layout.collapseSidebar') || '收起侧栏'
+  const expandLabel = t('layout.expandSidebar') || '展开侧栏'
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
   <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
   <Header title={t('appTitle')} />
         <Container maxWidth={false} disableGutters sx={{ flex: 1, pt: 0, pb: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ display: 'flex', gap: 0, flex: 1, minHeight: 0 }}>
-            {/* 左侧固定侧栏 */}
+          <Box sx={{ display: 'flex', gap: 0, flex: 1, minHeight: 0, position: 'relative' }}>
             <Box
               sx={{
-                width: { xs: '100%', md: 400 },
+                position: 'relative',
                 flexShrink: 0,
-                alignSelf: 'stretch',
-                position: 'sticky',
-                top: { xs: 56, sm: 56, md: 64 },
-                height: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 56px)', md: 'calc(100vh - 64px)' },
-                bgcolor: 'background.paper',
-                boxShadow: { md: 3 },
-                borderRight: '1px solid #e5e7eb',
-                px: 2,
-                pb: 2,
-                pt: 4,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                // 避免滚动条出现时，左侧内容区域的抖动
-                scrollbarGutter: 'stable both-edges',
+                width: { xs: sidebarCollapsed ? 0 : '100%', md: sidebarCollapsed ? 0 : SIDEBAR_WIDTH_MD },
+                minWidth: { md: sidebarCollapsed ? 0 : SIDEBAR_WIDTH_MD },
+                transition: { md: 'width 0.3s ease' },
+                overflow: 'visible'
               }}
             >
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-                {/* 页面切换 */}
-                <Box>
-                  <ToggleButtonGroup
-                    value={currentPage}
-                    exclusive
-                    onChange={(_, val) => val && setCurrentPage(val)}
-                    size="small"
-                    fullWidth
-                  >
-                    <ToggleButton value="analysis">{t('page.analysis')}</ToggleButton>
-                    <ToggleButton value="unionRaid">{t('page.unionRaid')}</ToggleButton>
-                  </ToggleButtonGroup>
-                </Box>
-                
-                <SingleJsonUpload 
-                  onAccountsLoaded={handleAccountsLoaded}
-                  persistedFileName={uploadedFileName}
-                />
-              </Box>
-              
-              {/* TeamBuilder 占据剩余空间并内部滚动 */}
-              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', mt: 2 }}>
-                <Box sx={{ flexShrink: 0 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{t('teamBuilder')}</Typography>
-                </Box>
-                <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <TeamBuilder
-                    externalTeam={teamChars}
-                    onTeamSelectionChange={(chars, coeffs) => {
-                      setTeamChars(chars); setCoeffsMap(coeffs)
+              <Slide direction="right" in={!sidebarCollapsed} mountOnEnter unmountOnExit timeout={300}>
+                <Box
+                  sx={{
+                    width: { xs: '100%', md: SIDEBAR_WIDTH_MD },
+                    flexShrink: 0,
+                    alignSelf: 'stretch',
+                    position: 'sticky',
+                    top: { xs: 56, sm: 56, md: 64 },
+                    height: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 56px)', md: 'calc(100vh - 64px)' },
+                    bgcolor: 'background.paper',
+                    boxShadow: { md: 3 },
+                    borderRight: '1px solid #e5e7eb',
+                    px: 2,
+                    pb: 2,
+                    pt: 3,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'visible',
+                    scrollbarGutter: 'stable both-edges',
+                    zIndex: 5
+                  }}
+                >
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={collapseSidebar}
+                    aria-label={collapseLabel}
+                    sx={{
+                      position: 'absolute',
+                      top: '50%',
+                      right: -SIDEBAR_TOGGLE_SIZE / 2,
+                      width: SIDEBAR_TOGGLE_SIZE,
+                      height: SIDEBAR_TOGGLE_SIZE,
+                      transform: 'translateY(-50%)',
+                      border: 'none',
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
+                      borderRadius: '50%',
+                      boxShadow: 3,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background-color 0.2s',
+                      '&:hover': {
+                        backgroundColor: 'primary.dark'
+                      }
                     }}
-                  />
+                  >
+                    <KeyboardDoubleArrowLeftIcon fontSize="small" />
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+                    <Box>
+                      <ToggleButtonGroup
+                        value={currentPage}
+                        exclusive
+                        onChange={(_, val) => val && setCurrentPage(val)}
+                        size="small"
+                        fullWidth
+                      >
+                        <ToggleButton value="analysis">{t('page.analysis')}</ToggleButton>
+                        <ToggleButton value="unionRaid">{t('page.unionRaid')}</ToggleButton>
+                      </ToggleButtonGroup>
+                    </Box>
+
+                    <SingleJsonUpload
+                      onAccountsLoaded={handleAccountsLoaded}
+                      persistedFileName={uploadedFileName}
+                    />
+                  </Box>
+
+                  <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', mt: 2 }}>
+                    <Box sx={{ flexShrink: 0 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{t('teamBuilder')}</Typography>
+                    </Box>
+                    <Box sx={{ flex: 1, minHeight: 0 }}>
+                      <TeamBuilder
+                        externalTeam={teamChars}
+                        onTeamSelectionChange={(chars, coeffs) => {
+                          setTeamChars(chars); setCoeffsMap(coeffs)
+                        }}
+                      />
+                    </Box>
+                  </Box>
                 </Box>
-              </Box>
+              </Slide>
             </Box>
 
-            {/* 右侧内容区域：角色分析面板或联盟突袭统计 */}
+            {sidebarCollapsed && (
+              <Box
+                component="button"
+                type="button"
+                onClick={expandSidebar}
+                aria-label={expandLabel}
+                sx={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '50%',
+                  width: SIDEBAR_TOGGLE_SIZE,
+                  height: SIDEBAR_TOGGLE_SIZE,
+                  transform: 'translate(-50%, -50%)',
+                  border: 'none',
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  borderRadius: '50%',
+                  boxShadow: 3,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 6,
+                  transition: 'background-color 0.2s',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark'
+                  }
+                }}
+              >
+                <KeyboardDoubleArrowRightIcon fontSize="small" />
+              </Box>
+            )}
+
             <Box
               sx={{
                 flex: 1,
                 minWidth: 0,
                 minHeight: 0,
-                px: 2,
+                px: { xs: 1.5, md: 2 },
                 pb: 3,
                 pt: 2,
                 display: 'flex',

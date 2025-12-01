@@ -36,6 +36,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // 侧栏/构建
     teamBuilder: '队伍构建',
+      'layout.collapseSidebar': '收起侧栏',
+      'layout.expandSidebar': '展开侧栏',
 
     // 联盟突袭统计
     'unionRaid.title': '联盟突袭统计',
@@ -214,6 +216,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     // Sidebar/Builder
     teamBuilder: 'Team Builder',
+      'layout.collapseSidebar': 'Collapse Sidebar',
+      'layout.expandSidebar': 'Expand Sidebar',
 
     // Union Raid Stats
     'unionRaid.title': 'Union Raid Statistics',
