@@ -35,7 +35,8 @@ import {
   buildStrikeViews,
   createEmptyPlanSlot,
   tidToBaseId,
-  serializePlanSlots
+  serializePlanSlots,
+  planMatchesCurrentFilter
 } from './UnionRaid/planning'
 import {
   LEVEL_FILTER_OPTIONS,
@@ -268,7 +269,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     setSelectedStep(value === 'all' ? 'all' : Number(value))
   }
 
-  const { tableData, matchedStrikeCount } = useMemo(() => {
+  const { tableData, matchedActualCount, matchedPlanCount } = useMemo(() => {
     const accountMap: Record<string, any> = {}
 
     accounts.forEach(acc => {
@@ -285,7 +286,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       }
     })
 
-    let matchCount = 0
+    let actualMatchCount = 0
+    let planMatchCount = 0
 
     if (raidData?.participate_data) {
       const sortedData = [...raidData.participate_data].reverse()
@@ -329,7 +331,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         accountMap[openid].actualCount += 1
 
         if (matchesFilters) {
-          matchCount += 1
+          actualMatchCount += 1
         }
       })
     }
@@ -338,9 +340,16 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       const planSlots = ensurePlanArray(planningState[accountKey])
       account.planSlots = planSlots
       account.strikeViews = buildStrikeViews(planSlots, account.actualStrikes, selectedLevel, selectedStep)
+
+      const planMatches = planSlots.filter((plan) => planMatchesCurrentFilter(plan, selectedLevel, selectedStep))
+      planMatchCount += planMatches.length
     })
 
-    return { tableData: Object.values(accountMap), matchedStrikeCount: matchCount }
+    return {
+      tableData: Object.values(accountMap),
+      matchedActualCount: actualMatchCount,
+      matchedPlanCount: planMatchCount
+    }
   }, [accounts, difficulty, lang, nikkeMap, planningState, raidData, selectedLevel, selectedStep])
 
   const remainingStrikes = useMemo(() => {
@@ -664,7 +673,11 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const statsTemplateKey = isFilterActive
     ? 'unionRaid.filter.stats.filtered'
     : 'unionRaid.filter.stats.total'
-  const statsLabel = (t(statsTemplateKey) || statsTemplateKey).replace('{count}', String(matchedStrikeCount))
+  const statsTemplate = t(statsTemplateKey) || statsTemplateKey
+  const statsLabel = statsTemplate
+    .replace('{count}', String(matchedActualCount))
+    .replace('{actual}', String(matchedActualCount))
+    .replace('{plan}', String(matchedPlanCount))
 
   if (fatalError) {
     return (
