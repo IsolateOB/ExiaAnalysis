@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Typography,
@@ -103,6 +103,16 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   t
 }) => {
   const [planCollapsedByAccount, setPlanCollapsedByAccount] = useState<Record<string, boolean>>({})
+
+  const getMaxActualBlockHeight = (views: StrikeView[]) => {
+    const estimateHeight = (idsLength: number) => {
+      if (!idsLength) return 0
+      const rows = Math.max(1, Math.ceil(idsLength / 4))
+      return 48 + rows * 28
+    }
+    if (!views || views.length === 0) return 0
+    return Math.max(...views.map((sv) => estimateHeight(sv.actual ? sv.actual.characterIds.length : 0)))
+  }
 
   useEffect(() => {
     setPlanCollapsedByAccount((prev) => {
@@ -277,6 +287,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
             const strikeViews: StrikeView[] = row.strikeViews || []
             const rowHighlighted = isFilterActive && strikeViews.some(view => view.matchesFilters)
             const collapsePlans = planCollapsedByAccount[accountKey] ?? false
+            const maxActualBlockHeight = getMaxActualBlockHeight(strikeViews)
             const stickyBackground = renderStickyBackground(rowHighlighted)
             const stickyHoverBackground = renderStickyHoverBackground(rowHighlighted)
 
@@ -429,20 +440,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                   const sortedActualIds = actual ? sortCharacterIdsByBurst(actual.characterIds) : []
                   const sortedPlanIds = sortCharacterIdsByBurst(plan.characterIds)
                   const showPlanContent = !collapsePlans || !actual
-
-                  const maxActualBlockHeight = useMemo(() => {
-                    const estimateHeight = (idsLength: number) => {
-                      if (!idsLength) return 0
-                      const rows = Math.max(1, Math.ceil(idsLength / 4))
-                      return 48 + rows * 28
-                    }
-                    return Math.max(
-                      ...strikeViews.map((sv) => {
-                        const ids = sv.actual ? sortCharacterIdsByBurst(sv.actual.characterIds) : []
-                        return estimateHeight(ids.length)
-                      })
-                    )
-                  }, [strikeViews, sortCharacterIdsByBurst])
 
                   return (
                     <TableCell
