@@ -20,7 +20,7 @@ import {
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
-import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import { alpha } from '@mui/material/styles'
 import type { Theme } from '@mui/material/styles'
 import type { SortKey, StrikeView } from './types'
@@ -51,8 +51,8 @@ const STICKY_LEFT_ACCOUNT = RANK_COLUMN_WIDTH
 const STICKY_LEFT_SYNCHRO = RANK_COLUMN_WIDTH + ACCOUNT_COLUMN_WIDTH
 const STICKY_LEFT_REMAINING = STICKY_LEFT_SYNCHRO + SYNCHRO_COLUMN_WIDTH
 
-const SortIcon = (props: React.ComponentProps<typeof KeyboardDoubleArrowUpIcon>) => (
-  <KeyboardDoubleArrowUpIcon {...props} fontSize="small" color="inherit" />
+const SortIcon = (props: React.ComponentProps<typeof KeyboardDoubleArrowDownIcon>) => (
+  <KeyboardDoubleArrowDownIcon {...props} fontSize="small" color="inherit" />
 )
 
 export type UnionRaidTableProps = {
