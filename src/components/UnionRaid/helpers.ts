@@ -27,11 +27,17 @@ export const getBurstRank = (id: number, nikkeMap: NikkeMap) => {
   }
 }
 
-export const sortCharacterIdsByBurst = (ids: number[], nikkeMap: NikkeMap) => {
+export const sortCharacterIdsByBurst = (ids: number[], nikkeMap: NikkeMap, lang: string = 'zh') => {
   return [...ids].sort((a, b) => {
     const rankA = getBurstRank(a, nikkeMap)
     const rankB = getBurstRank(b, nikkeMap)
     if (rankA !== rankB) return rankA - rankB
+
+    const nameA = getCharacterName(a, nikkeMap, lang)
+    const nameB = getCharacterName(b, nikkeMap, lang)
+    const nameCmp = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' })
+    if (nameCmp !== 0) return nameCmp
+
     return a - b
   })
 }

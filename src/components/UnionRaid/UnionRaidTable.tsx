@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Typography,
@@ -21,6 +21,8 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { alpha } from '@mui/material/styles'
 import type { Theme } from '@mui/material/styles'
 import type { SortKey, StrikeView } from './types'
@@ -100,6 +102,29 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   countRemainingStrikes,
   t
 }) => {
+  const [planCollapsedByAccount, setPlanCollapsedByAccount] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    setPlanCollapsedByAccount((prev) => {
+      const next = { ...prev }
+      sortedData.forEach((row: any) => {
+        const accountKey = row.accountKey || row.gameOpenid || row.name
+        if (next[accountKey] === undefined) {
+          const hasActual = (row.strikeViews || []).some((view: any) => view.actual)
+          next[accountKey] = hasActual
+        }
+      })
+      return next
+    })
+  }, [sortedData])
+
+  const togglePlanCollapse = (accountKey: string) => {
+    setPlanCollapsedByAccount((prev) => ({
+      ...prev,
+      [accountKey]: !prev[accountKey]
+    }))
+  }
+
   const renderSortLabel = (key: SortKey, label: string) => (
     <TableSortLabel
       active={sortBy === key}
@@ -193,6 +218,8 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                   zIndex: 3,
                   top: 0,
                   height: PRIMARY_HEADER_HEIGHT,
+                  minWidth: 444,
+                  width: 444,
                   borderRight: index < 2 ? '2px solid #94a3b8 !important' : undefined
                 }}
               >
@@ -219,10 +246,10 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
               {remainingStrikes}
             </TableCell>
             {[0, 1, 2].flatMap(index => ([
-              <TableCell key={`boss-${index}`} align="center" sx={{ zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT }}>
+              <TableCell key={`boss-${index}`} align="center" sx={{ zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT, minWidth: 64, width: 64 }}>
                 {t('unionRaid.boss')}
               </TableCell>,
-              <TableCell key={`squad-${index}`} align="center" sx={{ minWidth: 220, zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT }}>
+              <TableCell key={`squad-${index}`} align="center" sx={{ minWidth: 220, width: 220, zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT }}>
                 {t('unionRaid.squad')}
               </TableCell>,
               <TableCell
@@ -230,6 +257,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                 align="center"
                 sx={{
                   minWidth: 160,
+                  width: 160,
                   zIndex: 3,
                   top: `${PRIMARY_HEADER_HEIGHT}px`,
                   height: SECONDARY_HEADER_HEIGHT,
@@ -248,6 +276,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
             const accountKey = row.accountKey || row.gameOpenid || row.name
             const strikeViews: StrikeView[] = row.strikeViews || []
             const rowHighlighted = isFilterActive && strikeViews.some(view => view.matchesFilters)
+            const collapsePlans = planCollapsedByAccount[accountKey] ?? false
             const stickyBackground = renderStickyBackground(rowHighlighted)
             const stickyHoverBackground = renderStickyHoverBackground(rowHighlighted)
 
@@ -381,6 +410,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                 {strikeViews.map((view, si) => {
                   const plan = view.plan
                   const actual = view.actual
+                  const showPlan = !collapsePlans || !actual
                   const highlight = isFilterActive ? view.matchesFilters : false
                   const highlightSx = highlight
                     ? {
@@ -398,64 +428,72 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                     : new Set<number>()
                   const sortedActualIds = actual ? sortCharacterIdsByBurst(actual.characterIds) : []
                   const sortedPlanIds = sortCharacterIdsByBurst(plan.characterIds)
+                  const showPlanContent = !collapsePlans || !actual
+
+                  const maxActualBlockHeight = useMemo(() => {
+                    const estimateHeight = (idsLength: number) => {
+                      if (!idsLength) return 0
+                      const rows = Math.max(1, Math.ceil(idsLength / 4))
+                      return 48 + rows * 28
+                    }
+                    return Math.max(
+                      ...strikeViews.map((sv) => {
+                        const ids = sv.actual ? sortCharacterIdsByBurst(sv.actual.characterIds) : []
+                        return estimateHeight(ids.length)
+                      })
+                    )
+                  }, [strikeViews, sortCharacterIdsByBurst])
 
                   return (
-                    <React.Fragment key={si}>
-                      <TableCell
-                        align="center"
+                    <TableCell
+                      key={si}
+                      colSpan={3}
+                      sx={{
+                        borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined,
+                        px: 0.75,
+                        py: 0.5,
+                        verticalAlign: 'top',
+                        ...highlightSx
+                      }}
+                    >
+                      <Box
                         sx={{
-                          minWidth: 64,
-                          verticalAlign: 'top',
-                          px: 0.5,
-                          textAlign: 'center',
-                          ...highlightSx
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(64px, 0.9fr) minmax(220px, 2fr) minmax(160px, 1.3fr)',
+                          gridTemplateRows: showPlanContent ? 'auto auto' : 'auto',
+                          columnGap: 0.75,
+                          rowGap: 0.5,
+                          alignItems: 'stretch',
+                          minWidth: 444
                         }}
                       >
-                        <Stack spacing={4} alignItems="center">
+                        <Box
+                          sx={{
+                            position: 'relative',
+                            minHeight: maxActualBlockHeight,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textAlign: 'center'
+                          }}
+                        >
                           {actual && (
-                            <Box sx={{ textAlign: 'center' }}>
-                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, display: 'block' }}>
+                            <>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ lineHeight: 1.2, position: 'absolute', top: 0, left: 0 }}
+                              >
                                 {t('unionRaid.plan.actualLabel')}
                               </Typography>
-                              <Typography variant="body2" sx={{ fontWeight: 600, display: 'block' }}>
+                              <Typography variant="body2" sx={{ fontWeight: 600, display: 'block', mt: 1.5 }}>
                                 {actualBossLabel}
                               </Typography>
-                            </Box>
+                            </>
                           )}
-                          <Box>
-                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
-                              <TextField
-                                select
-                                size="small"
-                                label={t('unionRaid.plan.planLabel')}
-                                value={planStepValue}
-                                onChange={(e) => onPlanStepChange(accountKey, view.planIndex, e.target.value)}
-                                sx={{ minWidth: 64 }}
-                                slotProps={{ inputLabel: { shrink: true } }}
-                              >
-                                <MenuItem value="none">{t('unionRaid.plan.none')}</MenuItem>
-                                {STEP_OPTIONS.map((step) => (
-                                  <MenuItem key={step} value={String(step)}>
-                                    {STEP_TO_ROMAN[step] || step}
-                                  </MenuItem>
-                                ))}
-                              </TextField>
-                            </Stack>
-                          </Box>
-                        </Stack>
-                      </TableCell>
-                      <TableCell
-                        sx={{
-                          minWidth: 220,
-                          fontSize: '0.82rem',
-                          position: 'relative',
-                          verticalAlign: 'top',
-                          px: 0.75,
-                          py: 0.5,
-                          ...highlightSx
-                        }}
-                      >
-                        <Stack spacing={0.75}>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minHeight: maxActualBlockHeight }}>
                           {actual && (
                             <Box
                               sx={{
@@ -467,9 +505,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                               }}
                             >
                               <Stack direction="row" spacing={0.5} alignItems="center">
-                                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                                  {t('unionRaid.plan.actualLabel')}
-                                </Typography>
                                 <Tooltip title={t('unionRaid.copyTeam') || '复制队伍'}>
                                   <span>
                                     <IconButton
@@ -504,125 +539,177 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                               </Box>
                             </Box>
                           )}
-                          <Box>
-                            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.25 }}>
-                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                                {t('unionRaid.plan.planLabel')}
-                              </Typography>
-                              <Tooltip title={t('unionRaid.copyPlanTeam') || t('unionRaid.copyTeam') || '复制规划队伍'}>
-                                <span>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => onCopyPlannedTeam(sortedPlanIds)}
-                                    disabled={sortedPlanIds.length === 0}
-                                    sx={{ width: 24, height: 24 }}
-                                  >
-                                    <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                              <Tooltip title={t('unionRaid.pastePlanTeam') || '从构建器粘贴队伍'}>
-                                <span>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => onPastePlannedTeam(accountKey, view.planIndex)}
-                                    disabled={!canPastePlannedTeam}
-                                    sx={{ width: 24, height: 24 }}
-                                  >
-                                    <ContentPasteIcon sx={{ fontSize: '0.875rem' }} />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                            </Stack>
-                            {plan.characterIds.length > 0 ? (
-                              <Box
-                                sx={{
-                                  display: 'flex',
-                                  flexWrap: 'wrap',
-                                  gap: 0.25,
-                                  mt: 0.5
-                                }}
-                              >
-                                {sortedPlanIds.map((id) => (
-                                  <Chip
-                                    key={id}
-                                    label={getCharacterName(id)}
-                                    size="small"
-                                    sx={overlappingCharacterIds.has(id) ? {
-                                      backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.2),
-                                      border: (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
-                                    } : undefined}
-                                    onDelete={() => onRemovePlanCharacter(accountKey, view.planIndex, id)}
-                                  />
-                                ))}
-                              </Box>
-                            ) : (
-                              <Typography variant="body2" color="text.disabled" sx={{ mt: 0.5 }}>
-                                {t('unionRaid.plan.noPlan')}
-                              </Typography>
-                            )}
-                            <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: 'wrap' }} alignItems="center">
-                              <Button
-                                variant="outlined"
+                        </Box>
+
+                        <Box
+                          sx={{
+                            minHeight: maxActualBlockHeight,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textAlign: 'center',
+                            px: NUMERIC_VALUE_RIGHT_PADDING
+                          }}
+                        >
+                          {actual && (
+                            <Typography variant="body2" sx={{ ...NUMERIC_VALUE_SX, display: 'block', width: '100%' }}>
+                              {formatActualDamage(actual.damage)}
+                            </Typography>
+                          )}
+                        </Box>
+
+                        {showPlanContent && (
+                          <>
+                            <Box
+                              sx={{
+                                position: 'relative',
+                                minHeight: 80,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ position: 'absolute', top: 0, left: 0 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                                  {t('unionRaid.plan.planLabel')}
+                                </Typography>
+                                <Tooltip title={collapsePlans ? (t('unionRaid.plan.expandPlans') || '展开规划') : (t('unionRaid.plan.collapsePlans') || '收起规划')}>
+                                  <span>
+                                    <IconButton size="small" onClick={() => togglePlanCollapse(accountKey)} sx={{ width: 22, height: 22 }}>
+                                      {collapsePlans ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </Stack>
+                              <TextField
+                                select
                                 size="small"
-                                startIcon={<AddCircleOutlineIcon fontSize="small" />}
-                                onClick={() => onOpenCharacterPicker(accountKey, view.planIndex)}
-                                disabled={addDisabled}
+                                value={planStepValue}
+                                onChange={(e) => onPlanStepChange(accountKey, view.planIndex, e.target.value)}
+                                sx={{ minWidth: 50, textAlign: 'center' }}
                               >
-                                {t('unionRaid.plan.addCharacter')}
-                              </Button>
-                              {addDisabled && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {t('unionRaid.plan.characterLimit')}
+                                <MenuItem value="none">{t('unionRaid.plan.none')}</MenuItem>
+                                {STEP_OPTIONS.map((step) => (
+                                  <MenuItem key={step} value={String(step)}>
+                                    {STEP_TO_ROMAN[step] || step}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                            </Box>
+
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.25 }}>
+                                <Tooltip title={t('unionRaid.copyPlanTeam') || t('unionRaid.copyTeam') || '复制规划队伍'}>
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => onCopyPlannedTeam(sortedPlanIds)}
+                                      disabled={sortedPlanIds.length === 0}
+                                      sx={{ width: 24, height: 24 }}
+                                    >
+                                      <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                                <Tooltip title={t('unionRaid.pastePlanTeam') || '从构建器粘贴队伍'}>
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => onPastePlannedTeam(accountKey, view.planIndex)}
+                                      disabled={!canPastePlannedTeam}
+                                      sx={{ width: 24, height: 24 }}
+                                    >
+                                      <ContentPasteIcon sx={{ fontSize: '0.875rem' }} />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </Stack>
+                              {plan.characterIds.length > 0 ? (
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: 0.25
+                                  }}
+                                >
+                                  {sortedPlanIds.map((id) => (
+                                    <Chip
+                                      key={id}
+                                      label={getCharacterName(id)}
+                                      size="small"
+                                      sx={overlappingCharacterIds.has(id) ? {
+                                        backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.2),
+                                        border: (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                      } : undefined}
+                                      onDelete={() => onRemovePlanCharacter(accountKey, view.planIndex, id)}
+                                    />
+                                  ))}
+                                </Box>
+                              ) : (
+                                <Typography variant="body2" color="text.disabled" sx={{ mt: 0.5 }}>
+                                  {t('unionRaid.plan.noPlan')}
                                 </Typography>
                               )}
-                            </Stack>
-                          </Box>
-                        </Stack>
-                      </TableCell>
-                      <TableCell
-                        align="right"
-                        sx={{
-                          minWidth: 160,
-                          verticalAlign: 'top',
-                          px: 1,
-                          py: 0.5,
-                          borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined,
-                          ...highlightSx
-                        }}
-                      >
-                        <Stack spacing={actual ? 4 : 2} alignItems="flex-end" sx={{ pt: actual ? 0 : 1.25 }}>
-                          {actual && (
-                            <Box sx={{ textAlign: 'right', width: '100%', paddingRight: NUMERIC_VALUE_RIGHT_PADDING }}>
-                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                                {t('unionRaid.plan.actualLabel')}
-                              </Typography>
-                              <Typography variant="body2" sx={{ ...NUMERIC_VALUE_SX, textAlign: 'right', display: 'block', width: '100%' }}>
-                                {formatActualDamage(actual.damage)}
-                              </Typography>
+                              <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: 'wrap' }} alignItems="center">
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<AddCircleOutlineIcon fontSize="small" />}
+                                  onClick={() => onOpenCharacterPicker(accountKey, view.planIndex)}
+                                  disabled={addDisabled}
+                                >
+                                  {t('unionRaid.plan.addCharacter')}
+                                </Button>
+                                {addDisabled && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {t('unionRaid.plan.characterLimit')}
+                                  </Typography>
+                                )}
+                              </Stack>
                             </Box>
-                          )}
-                          <Box sx={{ width: '100%', mt: actual ? 0 : 1.25 }}>
-                            <TextField
-                              size="small"
-                              label={t('unionRaid.plan.predictedDamage')}
-                              value={plan.predictedDamageInput}
-                              onChange={(e) => onPredictedDamageChange(accountKey, view.planIndex, e.target.value)}
-                              onBlur={() => onPredictedDamageBlur(accountKey, view.planIndex)}
-                              fullWidth
-                              inputProps={{
-                                inputMode: 'numeric',
-                                pattern: '[0-9, ]*',
-                                style: NUMERIC_VALUE_INPUT_STYLE
+
+                            <Box
+                              sx={{
+                                width: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center'
                               }}
-                              slotProps={{
-                                inputLabel: { shrink: true }
-                              }}
-                            />
+                            >
+                              <TextField
+                                size="small"
+                                value={plan.predictedDamageInput}
+                                onChange={(e) => onPredictedDamageChange(accountKey, view.planIndex, e.target.value)}
+                                onBlur={() => onPredictedDamageBlur(accountKey, view.planIndex)}
+                                fullWidth
+                                placeholder={t('unionRaid.plan.predictedDamage')}
+                                inputProps={{
+                                  inputMode: 'numeric',
+                                  pattern: '[0-9, ]*',
+                                  style: { ...NUMERIC_VALUE_INPUT_STYLE, textAlign: 'center' }
+                                }}
+                              />
+                            </Box>
+                          </>
+                        )}
+
+                        {!showPlanContent && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                              {t('unionRaid.plan.planLabel')}
+                            </Typography>
+                            <Tooltip title={t('unionRaid.plan.expandPlans') || '展开规划'}>
+                              <span>
+                                <IconButton size="small" onClick={() => togglePlanCollapse(accountKey)} sx={{ width: 22, height: 22 }}>
+                                  <ExpandMoreIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                           </Box>
-                        </Stack>
-                      </TableCell>
-                    </React.Fragment>
+                        )}
+                      </Box>
+                    </TableCell>
                   )
                 })}
               </TableRow>

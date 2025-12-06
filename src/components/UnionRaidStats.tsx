@@ -859,7 +859,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   onPastePlannedTeam={handlePastePlannedTeam}
   canPastePlannedTeam={hasBuilderTeam}
         getCharacterName={(id) => getCharacterName(id, nikkeMap, lang)}
-        sortCharacterIdsByBurst={(ids) => sortCharacterIdsByBurst(ids, nikkeMap)}
+        sortCharacterIdsByBurst={(ids) => sortCharacterIdsByBurst(ids, nikkeMap, lang)}
         formatActualDamage={formatActualDamage}
         countRemainingStrikes={countRemainingStrikes}
         t={t}
