@@ -84,6 +84,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const hasInitializedRef = useRef<boolean>(false)
   const fetchRaidDataRef = useRef<() => Promise<void> | void>(() => {})
   const planningFileInputRef = useRef<HTMLInputElement | null>(null)
+  const lastSuccessfulAccountRef = useRef<number | null>(null)
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false)
   const [dialogInitialElement, setDialogInitialElement] = useState<string | undefined>(undefined)
   const [activePlanContext, setActivePlanContext] = useState<{ accountKey: string; planIndex: number } | null>(null)
@@ -129,6 +130,11 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     }, seconds * 1000)
   }, [])
 
+  useEffect(() => {
+    // 上传或更换账号 JSON 时，重置上次成功的账号索引
+    lastSuccessfulAccountRef.current = null
+  }, [accounts])
+
   const fetchRaidData = useCallback(async () => {
     if (!accounts.length) return
 
@@ -137,45 +143,67 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       fetchTimeoutRef.current = null
     }
 
-    const firstAccount = accounts[0]
-    const cookie = firstAccount?.cookie
-    const areaId = firstAccount?.area_id
-
-    if (!cookie || !areaId) {
-      setFatalError(t('unionRaid.noCookieOrArea'))
-      setFetchStatus(null)
-      return
+    // 按优先顺序构建尝试队列：上次成功的账号优先，其余依次补全
+    const indices: number[] = []
+    const lastIdx = lastSuccessfulAccountRef.current
+    if (lastIdx != null && lastIdx >= 0 && lastIdx < accounts.length) {
+      indices.push(lastIdx)
+    }
+    for (let i = 0; i < accounts.length; i += 1) {
+      if (!indices.includes(i)) indices.push(i)
     }
 
-    setFatalError(undefined)
+    let success = false
+    let triedAnyWithCookie = false
 
-    try {
-      const res = await fetch('/api/game/proxy/Game/GetUnionRaidData', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Game-Cookie': cookie
-        },
-        body: JSON.stringify({ nikke_area_id: areaId })
-      })
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`)
+    for (const idx of indices) {
+      const acc = accounts[idx]
+      const cookie = acc?.cookie
+      const areaId = acc?.area_id
+      if (!cookie || !areaId) {
+        continue
       }
+      triedAnyWithCookie = true
+      try {
+        const res = await fetch('/api/game/proxy/Game/GetUnionRaidData', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Game-Cookie': cookie
+          },
+          body: JSON.stringify({ nikke_area_id: areaId })
+        })
 
-      const json = await res.json()
-      if (json.code !== 0) {
-        throw new Error(json.msg || 'API error')
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`)
+        }
+
+        const json = await res.json()
+        if (json.code !== 0) {
+          throw new Error(json.msg || 'API error')
+        }
+
+        setFatalError(undefined)
+        setRaidData(json.data)
+        setFetchStatus(null)
+        lastSuccessfulAccountRef.current = idx
+        scheduleNextFetch(30)
+        success = true
+        break
+      } catch (err: any) {
+        console.error(`Failed to fetch union raid data with account index ${idx}:`, err)
       }
+    }
 
-      setRaidData(json.data)
-      setFetchStatus(null)
-      scheduleNextFetch(30)
-    } catch (err: any) {
-      console.error('Failed to fetch union raid data:', err)
+    if (!success) {
       const retrySeconds = 5
-      const messageTemplate = t('unionRaid.fetchRetry') || '获取数据失败，{seconds}秒后重新获取'
-      setFetchStatus(messageTemplate.replace('{seconds}', String(retrySeconds)))
+      if (!triedAnyWithCookie) {
+        setFatalError(t('unionRaid.noCookieOrArea'))
+        setFetchStatus(null)
+      } else {
+        const messageTemplate = t('unionRaid.fetchRetry') || '获取数据失败，{seconds}秒后重新获取'
+        setFetchStatus(messageTemplate.replace('{seconds}', String(retrySeconds)))
+      }
       scheduleNextFetch(retrySeconds)
     }
   }, [accounts, scheduleNextFetch, t])
