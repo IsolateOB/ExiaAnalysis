@@ -28,8 +28,16 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
     return arr
   }, [teamCharacters])
 
+  // 与 ExiaInvasion 管理页一致：基于 resource_id 拼接 Nikke-db 头像
+  const getNikkeAvatarUrl = (nikke?: Character): string => {
+    const rid = (nikke as any)?.resource_id
+    if (rid === undefined || rid === null || rid === '') return ''
+    const ridStr = String(rid).padStart(3, '0')
+    return `https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/images/sprite/si_c${ridStr}_00_s.png`
+  }
+
   // 计算每个账号、每个位置的逐人 AEL 与强度
-  type PerChar = { id: number, name: string, ael: number, strength: number }
+  type PerChar = { id: number, name: string, avatarUrl: string, ael: number, strength: number }
   const [perAccount, setPerAccount] = useState<Record<number, PerChar[]>>({})
 
   useEffect(() => {
@@ -39,7 +47,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
       const arr: PerChar[] = []
       for (let pos = 0; pos < 5; pos++) {
         const ch = selected[pos]
-        if (!ch) { arr.push({ id: -1, name: '-', ael: 0, strength: 0 }); continue }
+        if (!ch) { arr.push({ id: -1, name: '-', avatarUrl: '', ael: 0, strength: 0 }); continue }
         const coeff = coefficientsMap?.[pos + 1] || getDefaultCoefficients()
         // 找到该账号中的对应角色数据
         let target: any = null
@@ -63,7 +71,7 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
           } catch {}
         }
         const displayName = (typeof (ch as any).name_en === 'string') ? (lang === 'zh' ? (ch as any).name_cn : (ch as any).name_en) : (ch as any).name_cn
-        arr.push({ id: ch.id, name: displayName, ael: Number.isFinite(ael) ? ael : 0, strength })
+        arr.push({ id: ch.id, name: displayName, avatarUrl: getNikkeAvatarUrl(ch), ael: Number.isFinite(ael) ? ael : 0, strength })
       }
       out[accIndex] = arr
     }
@@ -212,8 +220,19 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
                   <TableCell>
                     <Stack spacing={0.5} sx={{ py: 0.5 }}>
                       {details.map((d, i) => (
-                        <Box key={i} sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {d.name || '-'}
+                        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 32 }}>
+                          {d.avatarUrl ? (
+                            <Box
+                              component="img"
+                              src={d.avatarUrl}
+                              alt={d.name || 'avatar'}
+                              loading="lazy"
+                              sx={{ width: 32, height: 32, borderRadius: 1, flexShrink: 0 }}
+                            />
+                          ) : null}
+                          <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                            {d.name || '-'}
+                          </Box>
                         </Box>
                       ))}
                     </Stack>

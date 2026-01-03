@@ -11,6 +11,7 @@ import { useI18n } from '../i18n'
 
 interface CharacterCardProps {
   character?: Character
+  avatarUrl?: string
   onAddCharacter: () => void
   onRemoveCharacter?: () => void
   damageCoefficient?: number
@@ -28,6 +29,7 @@ interface CharacterCardProps {
 
 const CharacterCard: React.FC<CharacterCardProps> = ({
   character,
+  avatarUrl,
   onAddCharacter,
   onRemoveCharacter,
   damageCoefficient = 1.0,
@@ -48,7 +50,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   // 与头部一致的网格列定义：确保详情区第2列与头部“总系数”列完全对齐
   const headerGridTemplate = React.useMemo(() => (
     hideMetrics
-      ? { xs: 'minmax(120px,1fr) 70px 48px', sm: 'minmax(140px,1fr) 90px 56px', md: 'minmax(160px,0.7fr) 110px 64px' }
+      ? { xs: 'minmax(120px,1fr) 56px 40px', sm: 'minmax(140px,1fr) 72px 44px', md: 'minmax(160px,1fr) 88px 48px' }
       : { xs: 'minmax(120px,1fr) 80px minmax(140px,1.1fr) 48px', sm: 'minmax(140px,1fr) 96px minmax(160px,1.2fr) 56px', md: 'minmax(160px,0.7fr) 120px minmax(170px,1.2fr) 64px' }
   ), [hideMetrics])
 
@@ -115,7 +117,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         onClick={onAddCharacter}
         sx={{
           width: '100%',
-          pl: 1.25,
+          pl: 0,
           pr: 0.75,
           minHeight: 84,
           display: 'flex',
@@ -138,7 +140,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   }
 
   return (
-    <Box sx={{ width: '100%', pl: 1.25, pr: 0.75, minHeight: 84, overflow: 'hidden', borderBottom: '1px solid #e5e7eb' }}>
+    <Box sx={{ width: '100%', pl: 0, pr: 0.75, minHeight: 84, overflow: 'hidden', borderBottom: '1px solid #e5e7eb' }}>
       {/* 行卡头部：名称、简要信息、系数与指标汇总，单行展示（垂直居中） */}
   <Box sx={{ minHeight: 84, display: 'flex', alignItems: 'center' }}>
   <Box
@@ -146,24 +148,35 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
       display: 'grid',
       gridTemplateColumns: headerGridTemplate,
       alignItems: 'center',
-      columnGap: 0.25,
+      columnGap: hideMetrics ? 0 : 0.25,
       width: '100%',
       minWidth: 0,
     }}
   >
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minWidth: 0 }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{lang === 'zh' ? character.name_cn : character.name_en}</Typography>
-          <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
-            {lang === 'zh' ? translations.element[character.element] : character.element}
-            {' '}·{' '}
-            {lang === 'zh' ? translations.burstSkill[character.use_burst_skill] : (
-              character.use_burst_skill === 'Step1' ? 'Step I' : character.use_burst_skill === 'Step2' ? 'Step II' : character.use_burst_skill === 'Step3' ? 'Step III' : 'All Steps'
-            )}
-            {' '}·{' '}
-            {lang === 'zh' ? translations.class[character.class] : character.class}
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          {avatarUrl ? (
+            <Box
+              component="img"
+              src={avatarUrl}
+              alt={lang === 'zh' ? character.name_cn : character.name_en}
+              loading="lazy"
+              sx={{ width: 40, height: 40, borderRadius: 1, flexShrink: 0 }}
+            />
+          ) : null}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minWidth: 0 }}>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{lang === 'zh' ? character.name_cn : character.name_en}</Typography>
+            <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
+              {lang === 'zh' ? translations.element[character.element] : character.element}
+              {' '}·{' '}
+              {lang === 'zh' ? translations.burstSkill[character.use_burst_skill] : (
+                character.use_burst_skill === 'Step1' ? 'Step I' : character.use_burst_skill === 'Step2' ? 'Step II' : character.use_burst_skill === 'Step3' ? 'Step III' : 'All Steps'
+              )}
+              {' '}·{' '}
+              {lang === 'zh' ? translations.class[character.class] : character.class}
+            </Typography>
+          </Box>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
           <TextField
             label={t('card.totalCoeff')}
             type="number"
@@ -195,15 +208,15 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
           </Box>
         )}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', minWidth: { xs: 44, md: 56 }, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minWidth: { xs: 40, sm: 44, md: 48 }, flexShrink: 0 }}>
           <Tooltip title={openDetails ? t('card.collapse') : t('card.expand')}>
-            <IconButton size="small" onClick={() => setOpenDetails(v => !v)} sx={{ p: 0.2, m: 0 }}>
-              <ExpandMore sx={{ fontSize: 20, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            <IconButton size="small" onClick={() => setOpenDetails(v => !v)} sx={{ p: 0, m: 0 }}>
+              <ExpandMore sx={{ fontSize: 18, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </IconButton>
           </Tooltip>
           {onRemoveCharacter && (
-            <IconButton size="small" onClick={onRemoveCharacter} sx={{ color: 'error.main', p: 0.2, m: 0 }}>
-              <Delete sx={{ fontSize: 18 }} />
+            <IconButton size="small" onClick={onRemoveCharacter} sx={{ color: 'error.main', p: 0, m: 0 }}>
+              <Delete sx={{ fontSize: 16 }} />
             </IconButton>
           )}
         </Box>

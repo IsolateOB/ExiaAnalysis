@@ -4,6 +4,8 @@
 // 角色基础信息
 export interface Character {
   id: number
+  // 用于头像资源（与 ExiaInvasion 管理页一致）：Nikke-db 的 sprite 资源编号
+  resource_id?: number | string
   name_cn: string
   name_en: string
   name_code: number

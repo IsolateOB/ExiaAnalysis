@@ -80,12 +80,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.importPartialWarning': '部分规划未匹配任何账号',
     'unionRaid.importFailed': '规划 JSON 导入失败',
     'unionRaid.plan.actualLabel': '实际',
-  'unionRaid.plan.planLabel': '规划',
-  'unionRaid.plan.addCharacter': '添加角色',
-  'unionRaid.plan.noPlan': '尚未规划队伍',
-  'unionRaid.plan.characterLimit': '最多选择5名角色',
-  'unionRaid.plan.predictedDamage': '预测伤害',
-  'unionRaid.plan.none': '无',
+    'unionRaid.plan.planLabel': '规划',
+    'unionRaid.plan.addCharacter': '添加角色',
+    'unionRaid.plan.addOrEdit': '添加或修改',
+    'unionRaid.plan.noPlan': '尚未规划队伍',
+    'unionRaid.plan.characterLimit': '最多选择5名角色',
+    'unionRaid.plan.predictedDamage': '预测伤害',
+    'unionRaid.plan.none': '无',
 
     // 模板（Template）相关
     'tpl.import': '导入模板',
@@ -263,10 +264,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.plan.actualLabel': 'Actual',
     'unionRaid.plan.planLabel': 'Planning',
     'unionRaid.plan.addCharacter': 'Add Character',
+    'unionRaid.plan.addOrEdit': 'Add / Edit',
     'unionRaid.plan.noPlan': 'No planned squad yet',
     'unionRaid.plan.characterLimit': 'Up to 5 characters',
     'unionRaid.plan.predictedDamage': 'Estimated Damage',
-  'unionRaid.plan.none': 'None',
+    'unionRaid.plan.none': 'None',
 
     // Template related
     'tpl.import': 'Import Templates',

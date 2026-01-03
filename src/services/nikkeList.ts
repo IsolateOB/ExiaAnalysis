@@ -113,6 +113,7 @@ export const fetchNikkeList = async (): Promise<NikkeListResult> => {
     if (!en) continue // 跳过没有英文条目
     const id = Number(tw.id)
     if (!Number.isFinite(id)) continue
+    const resource_id = tw?.resource_id ?? tw?.resourceId
     const name_cn = tw?.name_localkey?.name || tw?.name_cn || tw?.name || ''
     const name_en = en?.name_localkey?.name || en?.name_en || en?.name || ''
     const element = normalizeElement(tw?.element_id?.element?.element)
@@ -128,6 +129,7 @@ export const fetchNikkeList = async (): Promise<NikkeListResult> => {
 
     nikkes.push({
       id,
+      resource_id,
       name_code,
       class: cls,
       name_cn,

@@ -514,6 +514,14 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     return mapIdsToCharacters(sortedIds, nikkeMap)
   }, [activePlanContext, nikkeMap, planningState])
 
+  const getCharacterAvatarUrl = useCallback((id: number): string => {
+    const nikke = nikkeMap[id] as any
+    const rid = nikke?.resource_id
+    if (rid === undefined || rid === null || rid === '') return ''
+    const ridStr = String(rid).padStart(3, '0')
+    return `https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/images/sprite/si_c${ridStr}_00_s.png`
+  }, [nikkeMap])
+
   const handleCopyTeam = useCallback((squadData: any[]) => {
     if (!onCopyTeam || !squadData || squadData.length === 0) return
 
@@ -859,6 +867,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   onPastePlannedTeam={handlePastePlannedTeam}
   canPastePlannedTeam={hasBuilderTeam}
         getCharacterName={(id) => getCharacterName(id, nikkeMap, lang)}
+        getCharacterAvatarUrl={getCharacterAvatarUrl}
         sortCharacterIdsByBurst={(ids) => sortCharacterIdsByBurst(ids, nikkeMap, lang)}
         formatActualDamage={formatActualDamage}
         countRemainingStrikes={countRemainingStrikes}

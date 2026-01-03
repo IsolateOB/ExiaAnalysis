@@ -214,6 +214,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return (id: string): Character | undefined => map.get(String(id))
   }, [nikkeList])
 
+  // 与 ExiaInvasion 管理页一致：基于 resource_id 拼接 Nikke-db 头像
+  const getNikkeAvatarUrl = useCallback((nikke?: Character): string => {
+    const rid = nikke?.resource_id
+    if (rid === undefined || rid === null || rid === '') return ''
+    const ridStr = String(rid).padStart(3, '0')
+    return `https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/images/sprite/si_c${ridStr}_00_s.png`
+  }, [])
+
   // 当team或数据变化时：
   // 1) 重新计算强度（内部用途）
   // 2) 通知父组件当前选择与系数
@@ -658,6 +666,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             <CharacterCard
               key={teamChar.position}
               character={teamChar.character}
+              avatarUrl={getNikkeAvatarUrl(teamChar.character)}
               onAddCharacter={() => handleAddCharacter(teamChar.position)}
               onRemoveCharacter={
                 teamChar.character

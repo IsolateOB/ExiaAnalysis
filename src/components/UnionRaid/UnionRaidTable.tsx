@@ -74,6 +74,7 @@ export type UnionRaidTableProps = {
   onPastePlannedTeam: (accountKey: string, planIndex: number) => void
   canPastePlannedTeam: boolean
   getCharacterName: (id: number) => string
+  getCharacterAvatarUrl: (id: number) => string
   sortCharacterIdsByBurst: (ids: number[]) => number[]
   formatActualDamage: (value: number | null | undefined) => string
   countRemainingStrikes: (row: any) => number
@@ -97,6 +98,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   onPastePlannedTeam,
   canPastePlannedTeam,
   getCharacterName,
+  getCharacterAvatarUrl,
   sortCharacterIdsByBurst,
   formatActualDamage,
   countRemainingStrikes,
@@ -104,15 +106,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
 }) => {
   const [planCollapsedByAccount, setPlanCollapsedByAccount] = useState<Record<string, boolean>>({})
 
-  const getMaxActualBlockHeight = (views: StrikeView[]) => {
-    const estimateHeight = (idsLength: number) => {
-      if (!idsLength) return 0
-      const rows = Math.max(1, Math.ceil(idsLength / 4))
-      return 48 + rows * 28
-    }
-    if (!views || views.length === 0) return 0
-    return Math.max(...views.map((sv) => estimateHeight(sv.actual ? sv.actual.characterIds.length : 0)))
-  }
+  const AVATAR_SIZE = 36
 
   useEffect(() => {
     setPlanCollapsedByAccount((prev) => {
@@ -287,7 +281,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
             const strikeViews: StrikeView[] = row.strikeViews || []
             const rowHighlighted = isFilterActive && strikeViews.some(view => view.matchesFilters)
             const collapsePlans = planCollapsedByAccount[accountKey] ?? false
-            const maxActualBlockHeight = getMaxActualBlockHeight(strikeViews)
             const stickyBackground = renderStickyBackground(rowHighlighted)
             const stickyHoverBackground = renderStickyHoverBackground(rowHighlighted)
 
@@ -433,7 +426,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                     : {}
                   const actualBossLabel = actual ? `${actual.level}-${STEP_TO_ROMAN[actual.step] || actual.step}` : null
                   const planStepValue = plan.step === null ? 'none' : String(plan.step)
-                  const addDisabled = plan.characterIds.length >= MAX_PLAN_CHARACTERS
+                  const atCharacterLimit = plan.characterIds.length >= MAX_PLAN_CHARACTERS
                   const overlappingCharacterIds = actual
                     ? new Set(plan.characterIds.filter((id) => actual.characterIds.includes(id)))
                     : new Set<number>()
@@ -467,7 +460,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                         <Box
                           sx={{
                             position: 'relative',
-                            minHeight: maxActualBlockHeight,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -490,14 +482,14 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                           )}
                         </Box>
 
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minHeight: maxActualBlockHeight }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                           {actual && (
                             <Box
                               sx={{
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: 0.5,
-                                p: 0.25,
+                                gap: 0.25,
+                                p: 0,
                                 borderRadius: 1
                               }}
                             >
@@ -521,15 +513,43 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                 {sortedActualIds.map((id, idxSorted) => {
                                   const overlap = overlappingCharacterIds.has(id)
                                   const name = getCharacterName(id)
-                                  return (
-                                    <Chip
+                                  const avatarUrl = getCharacterAvatarUrl(id)
+                                  return avatarUrl ? (
+                                    <Box
                                       key={`actual-${idxSorted}-${id}`}
-                                      label={name}
-                                      size="small"
-                                      sx={overlap ? {
-                                        backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.2),
-                                        border: (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
-                                      } : undefined}
+                                      component="img"
+                                      src={avatarUrl}
+                                      alt={name}
+                                      title={name}
+                                      loading="lazy"
+                                      sx={{
+                                        width: AVATAR_SIZE,
+                                        height: AVATAR_SIZE,
+                                        borderRadius: 1,
+                                        objectFit: 'cover',
+                                        flex: '0 0 auto',
+                                        border: overlap
+                                          ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                          : '1px solid transparent',
+                                      }}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                      }}
+                                    />
+                                  ) : (
+                                    <Box
+                                      key={`actual-${idxSorted}-${id}`}
+                                      sx={{
+                                        width: AVATAR_SIZE,
+                                        height: AVATAR_SIZE,
+                                        borderRadius: 1,
+                                        backgroundColor: 'action.disabledBackground',
+                                        flex: '0 0 auto',
+                                        border: overlap
+                                          ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                          : '1px solid transparent',
+                                      }}
+                                      title={name}
                                     />
                                   )
                                 })}
@@ -540,7 +560,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
 
                         <Box
                           sx={{
-                            minHeight: maxActualBlockHeight,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -629,18 +648,73 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                     gap: 0.25
                                   }}
                                 >
-                                  {sortedPlanIds.map((id) => (
-                                    <Chip
-                                      key={id}
-                                      label={getCharacterName(id)}
-                                      size="small"
-                                      sx={overlappingCharacterIds.has(id) ? {
-                                        backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.2),
-                                        border: (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
-                                      } : undefined}
-                                      onDelete={() => onRemovePlanCharacter(accountKey, view.planIndex, id)}
-                                    />
-                                  ))}
+                                  {sortedPlanIds.map((id) => {
+                                    const name = getCharacterName(id)
+                                    const avatarUrl = getCharacterAvatarUrl(id)
+                                    const overlap = overlappingCharacterIds.has(id)
+
+                                    return (
+                                      <Chip
+                                        key={id}
+                                        label={name}
+                                        size="small"
+                                        sx={{
+                                          backgroundColor: 'transparent',
+                                          border: 'none',
+                                          height: AVATAR_SIZE,
+                                          px: 0,
+                                          '& .MuiChip-label': {
+                                            display: 'none'
+                                          },
+                                          '& .MuiChip-avatar': {
+                                            width: AVATAR_SIZE,
+                                            height: AVATAR_SIZE,
+                                            marginLeft: 0,
+                                            marginRight: 0
+                                          },
+                                          '&:hover': {
+                                            backgroundColor: 'transparent'
+                                          }
+                                        }}
+                                        avatar={avatarUrl ? (
+                                          <Box
+                                            component="img"
+                                            src={avatarUrl}
+                                            alt={name}
+                                            title={name}
+                                            loading="lazy"
+                                            sx={{
+                                              width: AVATAR_SIZE,
+                                              height: AVATAR_SIZE,
+                                              borderRadius: 1,
+                                              objectFit: 'cover',
+                                              flex: '0 0 auto',
+                                              border: overlap
+                                                ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                                : '1px solid transparent'
+                                            }}
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none'
+                                            }}
+                                          />
+                                        ) : (
+                                          <Box
+                                            sx={{
+                                              width: AVATAR_SIZE,
+                                              height: AVATAR_SIZE,
+                                              borderRadius: 1,
+                                              backgroundColor: 'action.disabledBackground',
+                                              flex: '0 0 auto',
+                                              border: overlap
+                                                ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                                : '1px solid transparent'
+                                            }}
+                                            title={name}
+                                          />
+                                        )}
+                                      />
+                                    )
+                                  })}
                                 </Box>
                               ) : (
                                 <Typography variant="body2" color="text.disabled" sx={{ mt: 0.5 }}>
@@ -653,11 +727,10 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                   size="small"
                                   startIcon={<AddCircleOutlineIcon fontSize="small" />}
                                   onClick={() => onOpenCharacterPicker(accountKey, view.planIndex)}
-                                  disabled={addDisabled}
                                 >
-                                  {t('unionRaid.plan.addCharacter')}
+                                  {t('unionRaid.plan.addOrEdit') || '添加或修改'}
                                 </Button>
-                                {addDisabled && (
+                                {atCharacterLimit && (
                                   <Typography variant="caption" color="text.secondary">
                                     {t('unionRaid.plan.characterLimit')}
                                   </Typography>
