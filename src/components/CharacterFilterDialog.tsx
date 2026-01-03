@@ -15,13 +15,16 @@ import {
   Button,
   Box,
   Typography,
+  IconButton,
   List,
   ListItem,
+  ListItemAvatar,
   ListItemText,
   Chip,
   Stack,
   Divider
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
 import { Character, CharacterFilter } from '../types'
 import { fetchNikkeList } from '../services/nikkeList'
 import { useI18n } from '../i18n'
@@ -212,6 +215,15 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     onClose()
   }
 
+  const getCharacterAvatarUrl = (character: Character): string => {
+    const ridFromCharacter = (character as any)?.resource_id
+    const ridFromList = nikkeList.find((n) => n.id === character.id)?.resource_id
+    const rid = ridFromCharacter ?? ridFromList
+    if (rid === undefined || rid === null || rid === '') return ''
+    const ridStr = String(rid).padStart(3, '0')
+    return `https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/images/sprite/si_c${ridStr}_00_s.png`
+  }
+
   const getBurstLabel = (burst: Character['use_burst_skill']) => {
     const romanMap: Record<string, string> = {
       Step1: 'I',
@@ -345,16 +357,20 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                 {t('filter.loading')}
               </Typography>
             ) : filteredCharacters.length > 0 ? (
-              <List>
+              <List dense>
                 {filteredCharacters.map((character) => (
                   <ListItem
                     key={character.id}
+                    alignItems="stretch"
+                    sx={{ py: 0.5 }}
                     secondaryAction={
                       <Button
                         variant="contained"
                         size="small"
                         onClick={() => handleSelectCharacter(character)}
+                        color={multiSelect && selectedCharacters.some((item) => item.id === character.id) ? 'success' : 'primary'}
                         disabled={multiSelect && !selectedCharacters.some((item) => item.id === character.id) && selectionLimitReached}
+                        sx={{ minWidth: 84 }}
                       >
                         {multiSelect && selectedCharacters.some((item) => item.id === character.id)
                           ? t('filter.selectedTag') || t('filter.choose')
@@ -362,9 +378,47 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                       </Button>
                     }
                   >
+                    <ListItemAvatar sx={{ minWidth: 68, width: 68, alignSelf: 'stretch', display: 'flex', alignItems: 'stretch' }}>
+                      {(() => {
+                        const avatarUrl = getCharacterAvatarUrl(character)
+                        const name = lang === 'zh' ? character.name_cn : character.name_en
+                        return avatarUrl ? (
+                          <Box
+                            component="img"
+                            src={avatarUrl}
+                            alt={name}
+                            loading="lazy"
+                            sx={{
+                              height: '100%',
+                              maxHeight: 56,
+                              aspectRatio: '1 / 1',
+                              borderRadius: 1,
+                              objectFit: 'cover'
+                            }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <Box
+                            sx={{
+                              height: '100%',
+                              maxHeight: 56,
+                              aspectRatio: '1 / 1',
+                              borderRadius: 1,
+                              backgroundColor: 'action.disabledBackground'
+                            }}
+                            title={name}
+                          />
+                        )
+                      })()}
+                    </ListItemAvatar>
                     <ListItemText
                       primary={lang === 'zh' ? character.name_cn : character.name_en}
                       secondary={`${t('option.element.' + character.element)} | ${getBurstLabel(character.use_burst_skill)} | ${t('option.class.' + character.class)} | ${t('option.corporation.' + character.corporation)} | ${t('option.weapon.' + character.weapon_type)}`}
+                      primaryTypographyProps={{ noWrap: true, variant: 'body1' }}
+                      secondaryTypographyProps={{ noWrap: true, variant: 'caption' }}
+                      sx={{ my: 0 }}
                     />
                   </ListItem>
                 ))}
@@ -383,28 +437,77 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               {selectionCount === 0 ? (
                 <Typography color="textSecondary">{t('filter.selectedEmpty')}</Typography>
               ) : (
-                <Stack direction="row" spacing={0.5} flexWrap="wrap">
-                  {selectedCharacters.map((character) => (
-                    <Chip
-                      key={character.id}
-                      label={lang === 'zh' ? character.name_cn : character.name_en}
-                      onDelete={() => handleRemoveSelected(character.id)}
-                      variant="outlined"
-                    />
-                  ))}
+                <Stack direction="row" spacing={0.75} flexWrap="wrap">
+                  {selectedCharacters.map((character) => {
+                    const avatarUrl = getCharacterAvatarUrl(character)
+                    const name = lang === 'zh' ? character.name_cn : character.name_en
+
+                    return (
+                      <Box
+                        key={character.id}
+                        sx={{
+                          position: 'relative',
+                          width: 56,
+                          height: 56,
+                          borderRadius: 1,
+                          overflow: 'hidden',
+                          backgroundColor: 'action.disabledBackground'
+                        }}
+                        title={name}
+                      >
+                        {avatarUrl ? (
+                          <Box
+                            component="img"
+                            src={avatarUrl}
+                            alt={name}
+                            loading="lazy"
+                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : null}
+
+                        <IconButton
+                          size="small"
+                          aria-label={t('filter.remove') || 'remove'}
+                          onClick={() => handleRemoveSelected(character.id)}
+                          sx={{
+                            position: 'absolute',
+                            top: 2,
+                            right: 2,
+                            width: 18,
+                            height: 18,
+                            p: 0,
+                            backgroundColor: 'background.paper',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            '&:hover': {
+                              backgroundColor: 'background.paper'
+                            }
+                          }}
+                        >
+                          <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
+                    )
+                  })}
                 </Stack>
               )}
             </Box>
           )}
         </Box>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{t('filter.cancel')}</Button>
+      <DialogActions sx={{ px: 3, pb: 2, pt: 1.5 }}>
+        <Button variant="outlined" onClick={onClose} sx={{ minWidth: 96, px: 2, py: 0.75 }}>
+          {t('filter.cancel')}
+        </Button>
         {multiSelect && (
           <Button
             variant="contained"
             onClick={handleConfirmSelection}
             disabled={selectionCount === 0}
+            sx={{ minWidth: 120, px: 2.5, py: 0.75 }}
           >
             {t('filter.confirmSelection')}
           </Button>

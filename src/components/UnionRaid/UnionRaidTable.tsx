@@ -106,7 +106,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
 }) => {
   const [planCollapsedByAccount, setPlanCollapsedByAccount] = useState<Record<string, boolean>>({})
 
-  const AVATAR_SIZE = 36
+  const AVATAR_SIZE = 44
 
   useEffect(() => {
     setPlanCollapsedByAccount((prev) => {
@@ -222,8 +222,8 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                   zIndex: 3,
                   top: 0,
                   height: PRIMARY_HEADER_HEIGHT,
-                  minWidth: 444,
-                  width: 444,
+                  minWidth: 459,
+                  width: 459,
                   borderRight: index < 2 ? '2px solid #94a3b8 !important' : undefined
                 }}
               >
@@ -253,7 +253,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
               <TableCell key={`boss-${index}`} align="center" sx={{ zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT, minWidth: 64, width: 64 }}>
                 {t('unionRaid.boss')}
               </TableCell>,
-              <TableCell key={`squad-${index}`} align="center" sx={{ minWidth: 220, width: 220, zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT }}>
+              <TableCell key={`squad-${index}`} align="center" sx={{ minWidth: 235, width: 235, zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT }}>
                 {t('unionRaid.squad')}
               </TableCell>,
               <TableCell
@@ -449,12 +449,12 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                       <Box
                         sx={{
                           display: 'grid',
-                          gridTemplateColumns: 'minmax(64px, 0.9fr) minmax(220px, 2fr) minmax(160px, 1.3fr)',
+                          gridTemplateColumns: 'minmax(64px, 0.9fr) minmax(235px, 2fr) minmax(160px, 1.3fr)',
                           gridTemplateRows: showPlanContent ? 'auto auto' : 'auto',
                           columnGap: 0.75,
                           rowGap: 0.5,
                           alignItems: 'stretch',
-                          minWidth: 444
+                          minWidth: 459
                         }}
                       >
                         <Box
@@ -528,8 +528,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                         borderRadius: 1,
                                         objectFit: 'cover',
                                         flex: '0 0 auto',
+                                        boxSizing: 'border-box',
                                         border: overlap
-                                          ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                          ? (theme) => `2px solid ${alpha(theme.palette.secondary.main, 0.6)}`
                                           : '1px solid transparent',
                                       }}
                                       onError={(e) => {
@@ -545,8 +546,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                         borderRadius: 1,
                                         backgroundColor: 'action.disabledBackground',
                                         flex: '0 0 auto',
+                                        boxSizing: 'border-box',
                                         border: overlap
-                                          ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                          ? (theme) => `2px solid ${alpha(theme.palette.secondary.main, 0.6)}`
                                           : '1px solid transparent',
                                       }}
                                       title={name}
@@ -689,8 +691,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                               borderRadius: 1,
                                               objectFit: 'cover',
                                               flex: '0 0 auto',
+                                              boxSizing: 'border-box',
                                               border: overlap
-                                                ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                                ? (theme) => `2px solid ${alpha(theme.palette.secondary.main, 0.6)}`
                                                 : '1px solid transparent'
                                             }}
                                             onError={(e) => {
@@ -705,8 +708,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                               borderRadius: 1,
                                               backgroundColor: 'action.disabledBackground',
                                               flex: '0 0 auto',
+                                              boxSizing: 'border-box',
                                               border: overlap
-                                                ? (theme) => `1px solid ${alpha(theme.palette.secondary.main, 0.6)}`
+                                                ? (theme) => `2px solid ${alpha(theme.palette.secondary.main, 0.6)}`
                                                 : '1px solid transparent'
                                             }}
                                             title={name}
