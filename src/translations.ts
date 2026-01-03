@@ -82,7 +82,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.plan.actualLabel': '实际',
     'unionRaid.plan.planLabel': '规划',
     'unionRaid.plan.addCharacter': '添加角色',
-    'unionRaid.plan.addOrEdit': '添加或修改',
+    'unionRaid.plan.addOrEdit': '新增或修改',
     'unionRaid.plan.noPlan': '尚未规划队伍',
     'unionRaid.plan.characterLimit': '最多选择5名角色',
     'unionRaid.plan.predictedDamage': '预测伤害',
