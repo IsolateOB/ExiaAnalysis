@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import {
   Box,
   Typography,
@@ -21,8 +21,6 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import EditIcon from '@mui/icons-material/Edit'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { alpha } from '@mui/material/styles'
 import type { Theme } from '@mui/material/styles'
 import type { SortKey, StrikeView } from './types'
@@ -104,29 +102,20 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   countRemainingStrikes,
   t
 }) => {
-  const [planCollapsedByAccount, setPlanCollapsedByAccount] = useState<Record<string, boolean>>({})
-
   const AVATAR_SIZE = 44
+  const AVATAR_GAP = 0.25
+  const STRIKE_GUTTER = 1.5
+  const BOSS_COLUMN_WIDTH = 80
 
-  useEffect(() => {
-    setPlanCollapsedByAccount((prev) => {
-      const next = { ...prev }
-      sortedData.forEach((row: any) => {
-        const accountKey = row.accountKey || row.gameOpenid || row.name
-        if (next[accountKey] === undefined) {
-          const hasActual = (row.strikeViews || []).some((view: any) => view.actual)
-          next[accountKey] = hasActual
-        }
-      })
-      return next
-    })
-  }, [sortedData])
+  const getSquadColumnWidthPx = (theme: Theme) => {
+    const gapPx = Number.parseFloat(theme.spacing(AVATAR_GAP))
+    return MAX_PLAN_CHARACTERS * AVATAR_SIZE + (MAX_PLAN_CHARACTERS - 1) * gapPx
+  }
 
-  const togglePlanCollapse = (accountKey: string) => {
-    setPlanCollapsedByAccount((prev) => ({
-      ...prev,
-      [accountKey]: !prev[accountKey]
-    }))
+  const getSquadColumnMidWidthPx = (theme: Theme) => {
+    const squadWidth = getSquadColumnWidthPx(theme)
+    const gutterPx = Number.parseFloat(theme.spacing(STRIKE_GUTTER))
+    return squadWidth + gutterPx
   }
 
   const renderSortLabel = (key: SortKey, label: string) => (
@@ -250,22 +239,51 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
               {remainingStrikes}
             </TableCell>
             {[0, 1, 2].flatMap(index => ([
-              <TableCell key={`boss-${index}`} align="center" sx={{ zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT, minWidth: 64, width: 64 }}>
+              <TableCell
+                key={`boss-${index}`}
+                align="center"
+                sx={{
+                  zIndex: 3,
+                  top: `${PRIMARY_HEADER_HEIGHT}px`,
+                  height: SECONDARY_HEADER_HEIGHT,
+                  boxSizing: 'border-box',
+                  minWidth: BOSS_COLUMN_WIDTH,
+                  width: BOSS_COLUMN_WIDTH,
+                  maxWidth: BOSS_COLUMN_WIDTH,
+                  pr: STRIKE_GUTTER
+                }}
+              >
                 {t('unionRaid.boss')}
               </TableCell>,
-              <TableCell key={`squad-${index}`} align="center" sx={{ minWidth: 235, width: 235, zIndex: 3, top: `${PRIMARY_HEADER_HEIGHT}px`, height: SECONDARY_HEADER_HEIGHT }}>
+              <TableCell
+                key={`squad-${index}`}
+                align="center"
+                sx={(theme) => {
+                  const squadWidth = getSquadColumnMidWidthPx(theme)
+                  return {
+                    boxSizing: 'border-box',
+                    minWidth: squadWidth,
+                    width: squadWidth,
+                    maxWidth: squadWidth,
+                    zIndex: 3,
+                    top: `${PRIMARY_HEADER_HEIGHT}px`,
+                    height: SECONDARY_HEADER_HEIGHT
+                  }
+                }}
+              >
                 {t('unionRaid.squad')}
               </TableCell>,
               <TableCell
                 key={`damage-${index}`}
                 align="center"
                 sx={{
+                  boxSizing: 'border-box',
                   minWidth: 160,
-                  width: 160,
                   zIndex: 3,
                   top: `${PRIMARY_HEADER_HEIGHT}px`,
                   height: SECONDARY_HEADER_HEIGHT,
                   px: 1,
+                  pl: STRIKE_GUTTER,
                   borderRight: index < 2 ? '2px solid #94a3b8 !important' : undefined
                 }}
               >
@@ -280,7 +298,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
             const accountKey = row.accountKey || row.gameOpenid || row.name
             const strikeViews: StrikeView[] = row.strikeViews || []
             const rowHighlighted = isFilterActive && strikeViews.some(view => view.matchesFilters)
-            const collapsePlans = planCollapsedByAccount[accountKey] ?? false
             const stickyBackground = renderStickyBackground(rowHighlighted)
             const stickyHoverBackground = renderStickyHoverBackground(rowHighlighted)
 
@@ -414,7 +431,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                 {strikeViews.map((view, si) => {
                   const plan = view.plan
                   const actual = view.actual
-                  const showPlan = !collapsePlans || !actual
                   const highlight = isFilterActive ? view.matchesFilters : false
                   const highlightSx = highlight
                     ? {
@@ -432,7 +448,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                     : new Set<number>()
                   const sortedActualIds = actual ? sortCharacterIdsByBurst(actual.characterIds) : []
                   const sortedPlanIds = sortCharacterIdsByBurst(plan.characterIds)
-                  const showPlanContent = !collapsePlans || !actual
 
                   return (
                     <TableCell
@@ -440,64 +455,70 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                       colSpan={3}
                       sx={{
                         borderRight: si < 2 ? '2px solid #94a3b8 !important' : undefined,
-                        px: 0.75,
+                        px: 0,
                         py: 0.5,
                         verticalAlign: 'top',
                         ...highlightSx
                       }}
                     >
                       <Box
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(64px, 0.9fr) minmax(235px, 2fr) minmax(160px, 1.3fr)',
-                          gridTemplateRows: actual ? 'auto auto' : 'auto',
-                          columnGap: 0.75,
-                          rowGap: 0.5,
-                          alignItems: 'stretch',
-                          minWidth: 459
+                        sx={(theme) => {
+                          const squadWidth = getSquadColumnMidWidthPx(theme)
+                          return {
+                            display: 'grid',
+                            gridTemplateColumns: `${BOSS_COLUMN_WIDTH}px ${squadWidth}px 1fr`,
+                            gridTemplateRows: actual ? 'auto auto' : 'auto',
+                            columnGap: 0,
+                            rowGap: 0.5,
+                            alignItems: 'stretch',
+                            width: '100%'
+                          }
                         }}
                       >
-                        {showPlanContent && (
-                          <>
-                            <Box
-                              sx={{
-                                position: 'relative',
-                                minHeight: 80,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
+                        <>
+                          <Box
+                            sx={{
+                              position: 'relative',
+                              minHeight: 80,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              pr: STRIKE_GUTTER
+                            }}
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
+                              alignItems="center"
+                              sx={(theme) => ({ position: 'absolute', top: 0, left: theme.spacing(STRIKE_GUTTER) })}
                             >
-                              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ position: 'absolute', top: 0, left: 0 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                                  {t('unionRaid.plan.planLabel')}
-                                </Typography>
-                                <Tooltip title={collapsePlans ? (t('unionRaid.plan.expandPlans') || '展开规划') : (t('unionRaid.plan.collapsePlans') || '收起规划')}>
-                                  <span>
-                                    <IconButton size="small" onClick={() => togglePlanCollapse(accountKey)} sx={{ width: 22, height: 22 }}>
-                                      {collapsePlans ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
-                                    </IconButton>
-                                  </span>
-                                </Tooltip>
-                              </Stack>
-                              <TextField
-                                select
-                                size="small"
-                                value={planStepValue}
-                                onChange={(e) => onPlanStepChange(accountKey, view.planIndex, e.target.value)}
-                                sx={{ minWidth: 50, textAlign: 'center' }}
-                              >
-                                <MenuItem value="none">{t('unionRaid.plan.none')}</MenuItem>
-                                {STEP_OPTIONS.map((step) => (
-                                  <MenuItem key={step} value={String(step)}>
-                                    {STEP_TO_ROMAN[step] || step}
-                                  </MenuItem>
-                                ))}
-                              </TextField>
-                            </Box>
+                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                                {t('unionRaid.plan.planLabel')}
+                              </Typography>
+                            </Stack>
+                            <TextField
+                              select
+                              size="small"
+                              value={planStepValue}
+                              onChange={(e) => onPlanStepChange(accountKey, view.planIndex, e.target.value)}
+                              sx={{ minWidth: 50, textAlign: 'center' }}
+                            >
+                              <MenuItem value="none">{t('unionRaid.plan.none')}</MenuItem>
+                              {STEP_OPTIONS.map((step) => (
+                                <MenuItem key={step} value={String(step)}>
+                                  {STEP_TO_ROMAN[step] || step}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          </Box>
 
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.25 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                              <Stack
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                                sx={(theme) => ({ mt: 0.25, width: getSquadColumnWidthPx(theme), mx: 'auto' })}
+                              >
                                 <Stack direction="row" spacing={0.5} alignItems="center">
                                   <Tooltip title={t('unionRaid.copyPlanTeam') || t('unionRaid.copyTeam') || '复制规划队伍'}>
                                     <span>
@@ -550,10 +571,18 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
 
                               {plan.characterIds.length > 0 ? (
                                 <Box
-                                  sx={{
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: 0.25
+                                  sx={(theme) => {
+                                    const squadWidth = getSquadColumnWidthPx(theme)
+                                    return {
+                                      display: 'flex',
+                                      flexWrap: 'nowrap',
+                                      gap: AVATAR_GAP,
+                                      width: squadWidth,
+                                      minWidth: squadWidth,
+                                      maxWidth: squadWidth,
+                                      mx: 'auto',
+                                      overflow: 'hidden'
+                                    }
                                   }}
                                 >
                                   {sortedPlanIds.map((id) => {
@@ -570,6 +599,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                           backgroundColor: 'transparent',
                                           border: 'none',
                                           height: AVATAR_SIZE,
+                                          width: AVATAR_SIZE,
+                                          minWidth: AVATAR_SIZE,
+                                          maxWidth: AVATAR_SIZE,
                                           px: 0,
                                           '& .MuiChip-label': {
                                             display: 'none'
@@ -631,7 +663,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                   {t('unionRaid.plan.noPlan')}
                                 </Typography>
                               )}
-                            </Box>
+                          </Box>
 
                             <Box
                               sx={{
@@ -639,7 +671,9 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                 display: 'flex',
                                 flexDirection: 'column',
                                 alignItems: 'center',
-                                justifyContent: 'center'
+                                justifyContent: 'center',
+                                pl: STRIKE_GUTTER,
+                                pr: 2
                               }}
                             >
                               <TextField
@@ -656,23 +690,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                 }}
                               />
                             </Box>
-                          </>
-                        )}
-
-                        {!showPlanContent && (
-                          <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                              {t('unionRaid.plan.planLabel')}
-                            </Typography>
-                            <Tooltip title={t('unionRaid.plan.expandPlans') || '展开规划'}>
-                              <span>
-                                <IconButton size="small" onClick={() => togglePlanCollapse(accountKey)} sx={{ width: 22, height: 22 }}>
-                                  <ExpandMoreIcon fontSize="small" />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </Box>
-                        )}
+                        </>
 
                         <Box
                           sx={{
@@ -680,7 +698,8 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            textAlign: 'center'
+                            textAlign: 'center',
+                            pr: STRIKE_GUTTER
                           }}
                         >
                           {actual && (
@@ -688,7 +707,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
-                                sx={{ lineHeight: 1.2, position: 'absolute', top: 0, left: 0 }}
+                                sx={(theme) => ({ lineHeight: 1.2, position: 'absolute', top: 0, left: theme.spacing(STRIKE_GUTTER) })}
                               >
                                 {t('unionRaid.plan.actualLabel')}
                               </Typography>
@@ -726,7 +745,21 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                   </span>
                                 </Tooltip>
                               </Stack>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
+                              <Box
+                                sx={(theme) => {
+                                  const squadWidth = getSquadColumnWidthPx(theme)
+                                  return {
+                                    display: 'flex',
+                                    flexWrap: 'nowrap',
+                                    gap: AVATAR_GAP,
+                                    width: squadWidth,
+                                    minWidth: squadWidth,
+                                    maxWidth: squadWidth,
+                                    mx: 'auto',
+                                    overflow: 'hidden'
+                                  }
+                                }}
+                              >
                                 {sortedActualIds.map((id, idxSorted) => {
                                   const overlap = overlappingCharacterIds.has(id)
                                   const name = getCharacterName(id)
@@ -783,7 +816,8 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                             alignItems: 'center',
                             justifyContent: 'center',
                             textAlign: 'center',
-                            px: NUMERIC_VALUE_RIGHT_PADDING
+                            px: NUMERIC_VALUE_RIGHT_PADDING,
+                            pr: 3
                           }}
                         >
                           {actual && (
