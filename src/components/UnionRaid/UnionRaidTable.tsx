@@ -548,11 +548,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                 </Button>
                               </Stack>
 
-                              {atCharacterLimit && (
-                                <Typography variant="caption" color="text.secondary" sx={{ mt: -0.25, lineHeight: 1.2 }}>
-                                  {t('unionRaid.plan.characterLimit')}
-                                </Typography>
-                              )}
                               {plan.characterIds.length > 0 ? (
                                 <Box
                                   sx={{
