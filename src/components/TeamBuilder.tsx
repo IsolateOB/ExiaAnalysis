@@ -17,7 +17,9 @@ import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import { fetchNikkeList } from '../services/nikkeList'
 import { useI18n } from '../i18n'
-import { numberData } from '../data/number'
+import { itemData } from '../data/item'
+import { fetchRoledata } from '../services/roledata'
+import type { Lang } from '../translations'
 
 interface TeamBuilderProps {
   baselineData?: any
@@ -31,7 +33,7 @@ interface TeamBuilderProps {
 }
 
 // 计算角色强度的工具函数
-const calculateCharacterStrength = async (characterData: any, character: Character, rootData?: any): Promise<number> => {
+const calculateCharacterStrength = async (characterData: any, character: Character, rootData?: any, lang: Lang = 'zh'): Promise<number> => {
   if (!characterData || !characterData.equipments) {
     return 0
   }
@@ -59,20 +61,15 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
   const breakthroughCoeff = 1 + (grade * 0.03) + (core * 0.02)
 
   try {
-    const classKeyMap: Record<string, keyof typeof numberData> = {
-      Attacker: 'Attacker_level_attack_list',
-      Defender: 'Defender_level_attack_list',
-      Supporter: 'Supporter_level_attack_list',
-    }
-
-    const resolvedClassKey = classKeyMap[character.class] ?? 'Attacker_level_attack_list'
-    const attackList = numberData[resolvedClassKey] as number[] | undefined
+    const rid = (character as any)?.resource_id
+    const role = rid != null && rid !== '' ? await fetchRoledata(rid, lang) : {}
+    const attackList = (role as any)?.character_level_attack_list as number[] | undefined
     const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
     const syncAttack = attackList && synchroLevel > 0
       ? attackList[Math.min(Math.max(synchroLevel - 1, 0), attackList.length - 1)] ?? 0
       : 0
 
-    const itemArray = numberData.item_atk || []
+    const itemArray = itemData.item_atk || []
     let itemAttack = 0
     if (characterData.item_rare === 'SSR') {
       // SSR按照SR最高等级计算（9688）
@@ -104,7 +101,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   onTeamSelectionChange,
   externalTeam,
 }) => {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
     Array.from({ length: 5 }, (_, index) => ({
       position: index + 1,
@@ -548,8 +545,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const targetCharData = findCharacterDataById(characterId, targetData)
     
     return {
-      baseline: await calculateCharacterStrength(baselineCharData, character, baselineData),
-      target: await calculateCharacterStrength(targetCharData, character, targetData)
+      baseline: await calculateCharacterStrength(baselineCharData, character, baselineData, lang),
+      target: await calculateCharacterStrength(targetCharData, character, targetData, lang)
     }
   }
 

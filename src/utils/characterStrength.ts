@@ -2,13 +2,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import { Character } from '../types'
-import { numberData } from '../data/number'
+import { itemData } from '../data/item'
+import { fetchRoledata } from '../services/roledata'
+import type { Lang } from '../translations'
 
 // 计算角色强度的工具函数
 export const calculateCharacterStrength = async (
   characterData: any, 
   characterInfo?: Character, 
-  rootData?: any
+  rootData?: any,
+  lang: Lang = 'zh'
 ): Promise<number> => {
   if (!characterData || !characterData.equipments) {
     return 0
@@ -37,32 +40,16 @@ export const calculateCharacterStrength = async (
   const breakthroughCoeff = 1 + (grade * 0.03) + (core * 0.02)
 
   try {
-    const classMap: Record<string, keyof typeof numberData> = {
-      Attacker: 'Attacker_level_attack_list',
-      Defender: 'Defender_level_attack_list',
-      Supporter: 'Supporter_level_attack_list',
-    }
-
-    // 确定角色职业：优先使用Character对象，否则尝试从其他来源获取
-    let characterClass = characterInfo?.class || characterData.class || characterData.priority || 'Attacker'
-    const priorityToClassMap: Record<string, 'Attacker' | 'Defender' | 'Supporter'> = {
-      black: 'Attacker',
-      blue: 'Defender',
-      yellow: 'Supporter',
-    }
-    if (priorityToClassMap[characterClass]) {
-      characterClass = priorityToClassMap[characterClass]
-    }
-
-    const attackListKey = classMap[characterClass] ?? 'Attacker_level_attack_list'
-    const attackList = numberData[attackListKey] as number[] | undefined
+    const rid = characterInfo?.resource_id
+    const role = rid != null && rid !== '' ? await fetchRoledata(rid, lang) : {}
+    const atkList = (role as any)?.character_level_attack_list as number[] | undefined
     const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
-    const syncAttack = attackList && synchroLevel > 0
-      ? attackList[Math.min(Math.max(synchroLevel - 1, 0), attackList.length - 1)] ?? 0
+    const syncAttack = atkList && synchroLevel > 0
+      ? atkList[Math.min(Math.max(synchroLevel - 1, 0), atkList.length - 1)] ?? 0
       : 0
 
     // 获取item攻击力
-    const itemArray = numberData.item_atk || []
+    const itemArray = itemData.item_atk || []
     let itemAttack = 0
     if (characterData.item_rare === 'SSR') {
       // SSR按照SR最高等级计算（9688）

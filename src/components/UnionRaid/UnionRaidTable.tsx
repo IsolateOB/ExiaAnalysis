@@ -565,7 +565,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                     }
                                   }}
                                 >
-                                  {t('unionRaid.plan.addOrEdit')}
+                                  {t('unionRaid.plan.Edit')}
                                 </Button>
                               </Stack>
 

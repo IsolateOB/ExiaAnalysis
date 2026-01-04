@@ -12,6 +12,7 @@ export const mapIdsToCharacters = (
 
     return {
       id,
+      resource_id: (nikke as any)?.resource_id,
       name_cn: nikke?.name_cn ?? '?',
       name_en: nikke?.name_en ?? '?',
       name_code: nikke?.name_code ?? id,

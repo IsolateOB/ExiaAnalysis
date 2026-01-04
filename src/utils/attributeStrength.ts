@@ -2,7 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import { AttributeCoefficients, Character, RawAttributeScores } from '../types'
-import { numberData } from '../data/number'
+import { itemData } from '../data/item'
+import { fetchRoledata } from '../services/roledata'
+import type { Lang } from '../translations'
 
 // 默认系数
 export const defaultCoefficients: AttributeCoefficients = {
@@ -90,32 +92,33 @@ const getBreakthroughCoeff = (characterData: any) => {
 }
 
 // 读取同步器与 item 的基值（攻/防/血）
-const getBaseNumbers = (numData: any, characterData: any, character: Character) => {
-  const classMap: Record<string, string> = {
-    Attacker: 'Attacker',
-    Defender: 'Defender',
-    Supporter: 'Supporter',
-  }
-  const clazz = classMap[character.class]
+const getBaseNumbers = async (characterData: any, character: Character, lang: Lang) => {
   const level = (characterData?.synchroLevel || 0) as number
   const idx = Math.max(0, (level || 1) - 1)
 
-  const atkList = numData?.[`${clazz}_level_attack_list`] || []
-  // 注意：numberData 中有的使用 defence（英式），有的使用 defense（美式），两者都要兼容
-  const defList =
-    numData?.[`${clazz}_level_defense_list`] ||
-    numData?.[`${clazz}_level_defence_list`] ||
-    []
-  const hpList = numData?.[`${clazz}_level_hp_list`] || []
+  // 角色等级曲线：从后端获取 roledata（按 resource_id）
+  let syncAtk = 0, syncDef = 0, syncHP = 0
+  try {
+    const rid = (character as any)?.resource_id
+    if (rid != null && rid !== '') {
+      const role = await fetchRoledata(rid, lang)
+      const atkList = (role as any)?.character_level_attack_list as number[] | undefined
+      const defList =
+        ((role as any)?.character_level_defence_list as number[] | undefined) ||
+        ((role as any)?.character_level_defense_list as number[] | undefined)
+      const hpList = (role as any)?.character_level_hp_list as number[] | undefined
+      if (atkList && atkList.length) syncAtk = atkList[Math.min(idx, atkList.length - 1)] || 0
+      if (defList && defList.length) syncDef = defList[Math.min(idx, defList.length - 1)] || 0
+      if (hpList && hpList.length) syncHP = hpList[Math.min(idx, hpList.length - 1)] || 0
+    }
+  } catch {
+    // ignore: fallback to 0
+  }
 
-  const syncAtk = atkList[idx] || 0
-  const syncDef = defList[idx] || 0
-  const syncHP = hpList[idx] || 0
-
-  // item
-  const itemAtkList = numData?.item_atk || []
-  const itemDefList = numData?.item_def || []
-  const itemHPList = numData?.item_hp || []
+  // item（仍使用本地 number.ts 的 item 数据）
+  const itemAtkList = itemData?.item_atk || []
+  const itemDefList = itemData?.item_def || []
+  const itemHPList = itemData?.item_hp || []
 
   let itemAtk = 0, itemDef = 0, itemHP = 0
   if (characterData?.item_rare === 'SSR') {
@@ -134,14 +137,16 @@ const getBaseNumbers = (numData: any, characterData: any, character: Character) 
 }
 
 // 计算原始属性分（不乘系数）
-export const computeRawAttributeScores = (
+export const computeRawAttributeScores = async (
   characterData: any,
   character: Character,
-  rootData?: any
-): RawAttributeScores => {
+  rootData?: any,
+  lang: Lang = 'zh'
+): Promise<RawAttributeScores> => {
   const totals = aggregateEquipStats(characterData)
   const breakthroughCoeff = getBreakthroughCoeff(characterData)
-  const { syncAtk, syncDef, syncHP, itemAtk, itemDef, itemHP } = getBaseNumbers(numberData, { ...rootData, ...characterData }, character)
+  const merged = { ...rootData, ...characterData }
+  const { syncAtk, syncDef, syncHP, itemAtk, itemDef, itemHP } = await getBaseNumbers(merged, character, lang)
   // 新算法：基础值不再预乘突破;突破作为最终外部乘区单独放大,防止同步器部分与突破重复嵌套
   const baseAttack = syncAtk + itemAtk
   const baseDefense = syncDef + itemDef
