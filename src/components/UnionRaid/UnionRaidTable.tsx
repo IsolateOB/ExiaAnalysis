@@ -501,6 +501,11 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                               size="small"
                               value={planStepValue}
                               onChange={(e) => onPlanStepChange(accountKey, view.planIndex, e.target.value)}
+                              SelectProps={{
+                                inputProps: {
+                                  'aria-label': t('unionRaid.plan.planLabel')
+                                }
+                              }}
                               sx={{ minWidth: 50, textAlign: 'center' }}
                             >
                               <MenuItem value="none">{t('unionRaid.plan.none')}</MenuItem>
@@ -526,6 +531,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                         size="small"
                                         onClick={() => onCopyPlannedTeam(sortedPlanIds)}
                                         disabled={sortedPlanIds.length === 0}
+                                        aria-label={t('unionRaid.copyPlanTeam') || t('unionRaid.copyTeam') || '复制规划队伍'}
                                         sx={{ width: 24, height: 24 }}
                                       >
                                         <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
@@ -538,6 +544,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                         size="small"
                                         onClick={() => onPastePlannedTeam(accountKey, view.planIndex)}
                                         disabled={!canPastePlannedTeam}
+                                        aria-label={t('unionRaid.pastePlanTeam') || '从构建器粘贴队伍'}
                                         sx={{ width: 24, height: 24 }}
                                       >
                                         <ContentPasteIcon sx={{ fontSize: '0.875rem' }} />
@@ -684,6 +691,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                 fullWidth
                                 placeholder={t('unionRaid.plan.predictedDamage')}
                                 inputProps={{
+                                  'aria-label': t('unionRaid.plan.predictedDamage'),
                                   inputMode: 'numeric',
                                   pattern: '[0-9, ]*',
                                   style: { ...NUMERIC_VALUE_INPUT_STYLE, textAlign: 'center' }
@@ -735,6 +743,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                     <IconButton
                                       size="small"
                                       onClick={() => onCopyTeam(actual.squadData)}
+                                      aria-label={t('unionRaid.copyTeam') || '复制队伍'}
                                       sx={{
                                         width: 24,
                                         height: 24

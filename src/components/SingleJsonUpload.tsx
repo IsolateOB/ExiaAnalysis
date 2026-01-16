@@ -116,9 +116,12 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
         </Box>
       </Box>
       <Box
+        component="button"
+        type="button"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={() => !isUploading && handleClickUpload()}
+        aria-label={t('upload.hint')}
         sx={{
           border: '2px dashed #ccc', borderRadius: 1, p: 2,
           // 保持上传前后尺寸一致
@@ -126,6 +129,9 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
           height: 120,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
           cursor: 'pointer', bgcolor: fileName ? '#f0f8ff' : 'transparent', borderColor: fileName ? '#1976d2' : '#ccc',
+          color: 'inherit',
+          textAlign: 'center',
+          font: 'inherit',
           '&:hover': { bgcolor: '#fafafa' }
         }}
       >

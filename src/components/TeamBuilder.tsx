@@ -236,39 +236,56 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         return sum + (teamChar.damageCoefficient || 0)
       }, 0)
       
-      for (const teamChar of team) {
-        if (teamChar.character) {
-          const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
-          const characterId = teamChar.character.id?.toString()
-          const baselineCharData = findCharacterDataById(characterId, baselineData)
-          const targetCharData = findCharacterDataById(characterId, targetData)
-          const baselineRaw = baselineCharData ? await computeRawAttributeScores(baselineCharData, teamChar.character, baselineData) : undefined
-          const targetRaw = targetCharData ? await computeRawAttributeScores(targetCharData, teamChar.character, targetData) : undefined
-          newRaw[teamChar.position] = { baseline: baselineRaw, target: targetRaw }
-          const baselineWeighted = baselineRaw ? computeWeightedStrength(baselineRaw, coeffs) : undefined
-          const targetWeighted = targetRaw ? computeWeightedStrength(targetRaw, coeffs) : undefined
-          const baselineValue = baselineWeighted ? (baselineWeighted.finalAtk + baselineWeighted.finalDef + baselineWeighted.finalHP) : 0
-          const targetValue = targetWeighted ? (targetWeighted.finalAtk + targetWeighted.finalDef + targetWeighted.finalHP) : 0
-          const strengths = { baseline: baselineValue, target: targetValue }
-          newStrengths[teamChar.position] = strengths
-          
-          // 如果系数总和为0，则所有角色都不贡献输出
-          if (totalCoefficient > 0) {
-            // 计算该角色在队伍中的输出占比（用于绝对值展示）
-            const outputRatio = (teamChar.damageCoefficient || 0) / totalCoefficient
-            totalBaselineStrength += strengths.baseline * outputRatio
-            totalTargetStrength += strengths.target * outputRatio
+      const results = await Promise.all(team.map(async (teamChar) => {
+        if (!teamChar.character) {
+          return {
+            position: teamChar.position,
+            strengths: { baseline: 0, target: 0 },
+            raw: { baseline: undefined, target: undefined },
+            damageCoefficient: teamChar.damageCoefficient || 0
           }
-          // 以比值的方式参与：按伤害系数做加权平均
-          const w = teamChar.damageCoefficient || 0
-          if (w > 0 && strengths.baseline > 0) {
-            ratioWeightedSum += w * (strengths.target / strengths.baseline)
-            weightSum += w
-          }
-        } else {
-          newStrengths[teamChar.position] = { baseline: 0, target: 0 }
         }
-      }
+
+        const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
+        const characterId = teamChar.character.id?.toString()
+        const baselineCharData = findCharacterDataById(characterId, baselineData)
+        const targetCharData = findCharacterDataById(characterId, targetData)
+
+        const [baselineRaw, targetRaw] = await Promise.all([
+          baselineCharData ? computeRawAttributeScores(baselineCharData, teamChar.character, baselineData) : Promise.resolve(undefined),
+          targetCharData ? computeRawAttributeScores(targetCharData, teamChar.character, targetData) : Promise.resolve(undefined)
+        ])
+
+        const baselineWeighted = baselineRaw ? computeWeightedStrength(baselineRaw, coeffs) : undefined
+        const targetWeighted = targetRaw ? computeWeightedStrength(targetRaw, coeffs) : undefined
+        const baselineValue = baselineWeighted ? (baselineWeighted.finalAtk + baselineWeighted.finalDef + baselineWeighted.finalHP) : 0
+        const targetValue = targetWeighted ? (targetWeighted.finalAtk + targetWeighted.finalDef + targetWeighted.finalHP) : 0
+
+        return {
+          position: teamChar.position,
+          strengths: { baseline: baselineValue, target: targetValue },
+          raw: { baseline: baselineRaw, target: targetRaw },
+          damageCoefficient: teamChar.damageCoefficient || 0
+        }
+      }))
+
+      results.forEach((result) => {
+        newStrengths[result.position] = result.strengths
+        newRaw[result.position] = result.raw
+
+        // 如果系数总和为0，则所有角色都不贡献输出
+        if (totalCoefficient > 0) {
+          // 计算该角色在队伍中的输出占比（用于绝对值展示）
+          const outputRatio = result.damageCoefficient / totalCoefficient
+          totalBaselineStrength += result.strengths.baseline * outputRatio
+          totalTargetStrength += result.strengths.target * outputRatio
+        }
+        // 以比值的方式参与：按伤害系数做加权平均
+        if (result.damageCoefficient > 0 && result.strengths.baseline > 0) {
+          ratioWeightedSum += result.damageCoefficient * (result.strengths.target / result.strengths.baseline)
+          weightSum += result.damageCoefficient
+        }
+      })
       
       setCharacterStrengths(newStrengths)
       setRawMap(newRaw)
@@ -606,12 +623,22 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); confirmRename() }; if (e.key === 'Escape') { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') } }}
                     autoFocus
                     inputRef={(el) => { renameInputRef.current = el; if (el) { el.focus(); el.select() } }}
+                    inputProps={{ 'aria-label': t('tpl.inputName') }}
                     sx={{ flex: 1, minWidth: 0 }}
                   />
-                  <IconButton size="small" color="primary" onClick={(e)=>{ e.stopPropagation(); confirmRename() }}>
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={(e)=>{ e.stopPropagation(); confirmRename() }}
+                    aria-label={t('tpl.rename')}
+                  >
                     <CheckIcon fontSize="small" />
                   </IconButton>
-                  <IconButton size="small" onClick={(e)=>{ e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') }}>
+                  <IconButton
+                    size="small"
+                    onClick={(e)=>{ e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') }}
+                    aria-label={t('tpl.cancel') || t('common.cancel') || '取消'}
+                  >
                     <CloseIcon fontSize="small" />
                   </IconButton>
                 </Box>
@@ -624,6 +651,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                     <IconButton
                       size="small"
                       onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(tpl.id) }}
+                      aria-label={t('tpl.rename')}
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
@@ -633,6 +661,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                       size="small"
                       color="error"
                       onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(tpl.id) }}
+                      aria-label={t('tpl.delete')}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>

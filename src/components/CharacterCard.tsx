@@ -114,7 +114,10 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   if (!character) {
     return (
       <Box
+        component="button"
+        type="button"
         onClick={onAddCharacter}
+        aria-label={t('card.add')}
         sx={{
           width: '100%',
           pl: 0,
@@ -123,6 +126,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
           display: 'flex',
           alignItems: 'center',
           cursor: 'pointer',
+          textAlign: 'left',
+          backgroundColor: 'transparent',
+          border: 'none',
           borderBottom: '1px solid #e5e7eb',
           '&:hover': {
             backgroundColor: 'action.hover',
@@ -210,12 +216,22 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         )}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minWidth: { xs: 40, sm: 44, md: 48 }, flexShrink: 0 }}>
           <Tooltip title={openDetails ? t('card.collapse') : t('card.expand')}>
-            <IconButton size="small" onClick={() => setOpenDetails(v => !v)} sx={{ p: 0, m: 0 }}>
+            <IconButton
+              size="small"
+              onClick={() => setOpenDetails(v => !v)}
+              aria-label={openDetails ? t('card.collapse') : t('card.expand')}
+              sx={{ p: 0, m: 0 }}
+            >
               <ExpandMore sx={{ fontSize: 18, transform: openDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </IconButton>
           </Tooltip>
           {onRemoveCharacter && (
-            <IconButton size="small" onClick={onRemoveCharacter} sx={{ color: 'error.main', p: 0, m: 0 }}>
+            <IconButton
+              size="small"
+              onClick={onRemoveCharacter}
+              aria-label={t('common.remove') || t('filter.remove') || '删除'}
+              sx={{ color: 'error.main', p: 0, m: 0 }}
+            >
               <Delete sx={{ fontSize: 16 }} />
             </IconButton>
           )}

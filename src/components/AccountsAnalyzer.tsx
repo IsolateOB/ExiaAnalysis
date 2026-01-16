@@ -43,13 +43,12 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const out: Record<number, PerChar[]> = {}
-      for (let accIndex = 0; accIndex < accounts.length; accIndex++) {
-        const acc = accounts[accIndex]
-        const arr: PerChar[] = []
-        for (let pos = 0; pos < 5; pos++) {
+      const results = await Promise.all(accounts.map(async (acc, accIndex) => {
+        const arr = await Promise.all(Array.from({ length: 5 }, async (_, pos) => {
           const ch = selected[pos]
-          if (!ch) { arr.push({ id: -1, name: '-', avatarUrl: '', ael: 0, strength: 0 }); continue }
+          if (!ch) {
+            return { id: -1, name: '-', avatarUrl: '', ael: 0, strength: 0 }
+          }
           const coeff = coefficientsMap?.[pos + 1] || getDefaultCoefficients()
           // 找到该账号中的对应角色数据
           let target: any = null
@@ -73,10 +72,13 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
             } catch {}
           }
           const displayName = (typeof (ch as any).name_en === 'string') ? (lang === 'zh' ? (ch as any).name_cn : (ch as any).name_en) : (ch as any).name_cn
-          arr.push({ id: ch.id, name: displayName, avatarUrl: getNikkeAvatarUrl(ch), ael: Number.isFinite(ael) ? ael : 0, strength })
-        }
-        out[accIndex] = arr
-      }
+          return { id: ch.id, name: displayName, avatarUrl: getNikkeAvatarUrl(ch), ael: Number.isFinite(ael) ? ael : 0, strength }
+        }))
+        return [accIndex, arr] as const
+      }))
+
+      const out: Record<number, PerChar[]> = {}
+      results.forEach(([accIndex, arr]) => { out[accIndex] = arr })
       if (!cancelled) setPerAccount(out)
     })()
     return () => { cancelled = true }
