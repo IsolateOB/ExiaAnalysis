@@ -182,10 +182,15 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
     return { matched, unmatched }
   }, [gameUidToAccountKey])
 
+  const replaceAllPlanning = useCallback((newState: Record<string, PlanSlot[]>) => {
+    setPlanningState(newState)
+  }, [])
+
   return {
     planningState,
     mutatePlanSlot,
     resetPlanning,
-    importPlanningData
+    importPlanningData,
+    replaceAllPlanning
   }
 }

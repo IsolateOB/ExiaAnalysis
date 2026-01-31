@@ -13,12 +13,18 @@ import {
   Select,
   MenuItem,
   Alert,
-  Button
+  Button,
+  TextField
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import FileDownloadIcon from '@mui/icons-material/FileDownload'
-import UploadFileIcon from '@mui/icons-material/UploadFile'
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import AddIcon from '@mui/icons-material/Add'
+import EditIcon from '@mui/icons-material/Edit'
+import DeleteIcon from '@mui/icons-material/Delete'
+import SaveIcon from '@mui/icons-material/Save'
+import CircularProgress from '@mui/material/CircularProgress'
 import type { SelectChangeEvent } from '@mui/material/Select'
 import type { Character } from '../types'
 import { useI18n } from '../i18n'
@@ -48,6 +54,13 @@ import {
 import { getAccountKey, getCharacterName, getGameUid, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
 
+interface RaidPlan {
+  id: string
+  name: string
+  data: Record<string, PlanSlot[]>
+  updatedAt: number
+}
+
 interface UnionRaidStatsProps {
   accounts: any[]
   nikkeList?: Character[]
@@ -55,7 +68,10 @@ interface UnionRaidStatsProps {
   uploadedFileName?: string
   onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
   teamBuilderTeam?: (Character | undefined)[]
+  authToken?: string | null
 }
+
+const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 
 const countRemainingStrikes = (row: any) => Math.max(3 - (row.actualCount || 0), 0)
 
@@ -65,7 +81,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   onCopyTeam,
   uploadedFileName,
   onNotify,
-  teamBuilderTeam
+  teamBuilderTeam,
+  authToken
 }) => {
   const { t, lang } = useI18n()
   const [fatalError, setFatalError] = useState<string>()
@@ -83,13 +100,242 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const hasInitializedRef = useRef<boolean>(false)
   const fetchRaidDataRef = useRef<() => Promise<void> | void>(() => {})
-  const planningFileInputRef = useRef<HTMLInputElement | null>(null)
+  const [cloudLoading, setCloudLoading] = useState(false)
   const lastSuccessfulAccountRef = useRef<number | null>(null)
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false)
   const [dialogInitialElement, setDialogInitialElement] = useState<string | undefined>(undefined)
   const [activePlanContext, setActivePlanContext] = useState<{ accountKey: string; planIndex: number } | null>(null)
 
-  const { planningState, mutatePlanSlot, importPlanningData } = useUnionRaidPlanning(accounts)
+
+  
+  // Plan Management States
+  const [plans, setPlans] = useState<RaidPlan[]>([])
+  const [currentPlanId, setCurrentPlanId] = useState<string>('')
+  const [isRenamingPlan, setIsRenamingPlan] = useState(false)
+  const [renamePlanName, setRenamePlanName] = useState('')
+
+  const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
+
+
+
+  // Cloud Sync: Load on Mount/Auth
+  useEffect(() => {
+    if (!authToken) return
+    const loadPlans = async () => {
+        setCloudLoading(true)
+        try {
+            const res = await fetch(`${API_BASE_URL}/raid-plan`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            })
+            if (res.ok) {
+                const json = await res.json()
+                if (json && json.plan_data && Array.isArray(json.plan_data)) {
+                    const serverPlans = json.plan_data as RaidPlan[]
+                    setPlans(serverPlans)
+                    if (serverPlans.length > 0) {
+                        // Default select first, and load data
+                        setCurrentPlanId(serverPlans[0].id)
+                        replaceAllPlanning(serverPlans[0].data)
+                    } else {
+                        // Initialize default
+                        const newPlan = { 
+                            id: Math.random().toString(36).slice(2), 
+                            name: '默认规划', 
+                            data: planningState, 
+                            updatedAt: Date.now() 
+                        }
+                        setPlans([newPlan])
+                        setCurrentPlanId(newPlan.id)
+                    }
+                } else if (res.status === 404 || !json.plan_data) {
+                    // No data, init default
+                    const newPlan = { 
+                        id: Math.random().toString(36).slice(2), 
+                        name: '默认规划', 
+                        data: planningState, 
+                        updatedAt: Date.now() 
+                    }
+                    setPlans([newPlan])
+                    setCurrentPlanId(newPlan.id)
+                }
+            } else if (res.status === 404) {
+                 const newPlan = { id: Math.random().toString(36).slice(2), name: '默认规划', data: planningState, updatedAt: Date.now() }
+                 setPlans([newPlan])
+                 setCurrentPlanId(newPlan.id)
+            }
+        } catch (e) {
+            console.error(e)
+            onNotify?.(t('unionRaid.cloudDownloadFailed') || '加载云端数据失败', 'error')
+        } finally {
+            setCloudLoading(false)
+        }
+    }
+    loadPlans()
+  }, [authToken])
+
+  // Silent Polling for updates (every 5 seconds)
+  useEffect(() => {
+    if (!authToken) return
+
+    const poll = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/raid-plan`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            })
+            if (res.ok) {
+                const json = await res.json()
+                if (json && json.plan_data && Array.isArray(json.plan_data)) {
+                    const serverPlans = json.plan_data as RaidPlan[]
+                    
+                    setPlans(prevLocalPlans => {
+                        // Compare timestamps or content to decide update
+                        // Simple strategy: Update list if server has fresher data for any plan
+                        // OR simpler: Just replace list, React handles diff?
+                        // But need to update ACTIVE plan if it changed.
+                        
+                        let hasChanges = false
+                        if (serverPlans.length !== prevLocalPlans.length) hasChanges = true
+                        else {
+                            // Check updated timestamps
+                            for (const sp of serverPlans) {
+                                const lp = prevLocalPlans.find(l => l.id === sp.id)
+                                if (!lp || sp.updatedAt > lp.updatedAt) {
+                                    hasChanges = true
+                                    break
+                                }
+                            }
+                        }
+
+                        if (!hasChanges) return prevLocalPlans
+
+                        // If current plan updated, refresh UI
+                        // Need currentPlanId from closure? 
+                        // It is available in the effect scope if we include it in deps, 
+                        // but we want polling to be independent.
+                        // We can solve this by functional update or ref.
+                        // Let's rely on setPlans callback or separate effect.
+                        return serverPlans
+                    })
+                }
+            }
+        } catch (e) {
+            // Ignore polling errors
+            console.warn('Polling failed', e)
+        }
+    }
+
+    const intervalId = setInterval(poll, 5000)
+    return () => clearInterval(intervalId)
+  }, [authToken])
+
+  // Effect to update UI if Current Plan's data changed in "plans" array (via Polling)
+  // distinct from the "Sync planningState -> plans" logic.
+  // We need to detect: "plans" array updated from SERVER, and current active plan has new data.
+  // BUT avoid loop: Server update -> setPlans -> Effect -> replaceAllPlanning -> planningState change -> Effect -> setPlans -> Save...
+  // Mechanism:
+  // 1. Polling updates `plans`.
+  // 2. We compare `plans.find(current).data` with `planningState`.
+  // 3. If significantly different (and plan timestamp is new), we `replaceAllPlanning`.
+  // To verify strict "Newer from Server", we check updatedAt.
+  
+  // Ref to track last seen update time for current plan to avoid loop
+  const lastLoadedUpdateRef = useRef<number>(0)
+  
+  useEffect(() => {
+    if (!currentPlanId || plans.length === 0) return
+    const currentListPlan = plans.find(p => p.id === currentPlanId)
+    if (!currentListPlan) return
+
+    // If the plan in the list has a newer timestamp than what we last loaded/saved
+    if (currentListPlan.updatedAt > lastLoadedUpdateRef.current) {
+        // It's an update from server (or another tab)
+        // Check if data is actually different to avoid unnecessary UI flash
+        if (JSON.stringify(currentListPlan.data) !== JSON.stringify(planningState)) {
+             console.log('Auto-updating active plan from cloud...')
+             replaceAllPlanning(currentListPlan.data)
+             lastLoadedUpdateRef.current = currentListPlan.updatedAt
+        } else {
+             // Data matches, just update ref
+             lastLoadedUpdateRef.current = currentListPlan.updatedAt
+        }
+    }
+  }, [plans, currentPlanId, replaceAllPlanning, planningState])
+
+  // Modify "Sync planningState -> current plan" effect to update the Ref
+  useEffect(() => {
+    if (!currentPlanId) return
+    
+    // Capture current time for this edit
+    const now = Date.now()
+    
+    setPlans(prev => prev.map(p => {
+        if (p.id === currentPlanId) {
+             // Only update if data really changed
+             if (JSON.stringify(p.data) === JSON.stringify(planningState)) return p;
+             
+             // Valid local edit
+             lastLoadedUpdateRef.current = now // Update Ref so we don't re-import our own change
+             return { ...p, data: planningState, updatedAt: now }
+        }
+        return p
+    }))
+  }, [planningState, currentPlanId])
+
+  // Cloud Sync: Auto Save (Debounced)
+  useEffect(() => {
+      if (!authToken || plans.length === 0) return
+      const timer = setTimeout(async () => {
+          try {
+              await fetch(`${API_BASE_URL}/raid-plan`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${authToken}`
+                  },
+                  body: JSON.stringify({ plan_data: plans })
+              })
+          } catch(e) { console.error(e) }
+      }, 2000)
+      return () => clearTimeout(timer)
+  }, [plans, authToken])
+
+  const handleCreatePlan = () => {
+      const newPlan = {
+          id: Math.random().toString(36).slice(2),
+          name: `规划 ${plans.length + 1}`,
+          data: {}, 
+          updatedAt: Date.now()
+      }
+      setPlans(prev => [...prev, newPlan])
+      setCurrentPlanId(newPlan.id)
+      replaceAllPlanning({}) // Clear UI
+  }
+
+  const handleDeletePlan = () => {
+      if (plans.length <= 1) {
+          onNotify?.(t('common.error') || '至少保留一个规划', 'warning')
+          return
+      }
+      const rest = plans.filter(p => p.id !== currentPlanId)
+      setPlans(rest)
+      setCurrentPlanId(rest[0].id)
+      replaceAllPlanning(rest[0].data)
+  }
+
+  const handleRenamePlan = () => {
+      if (!currentPlanId) return
+      const p = plans.find(p => p.id === currentPlanId)
+      if (p) {
+          setRenamePlanName(p.name)
+          setIsRenamingPlan(true)
+      }
+  }
+
+  const confirmRenamePlan = () => {
+      if (!renamePlanName.trim()) return
+      setPlans(prev => prev.map(p => p.id === currentPlanId ? { ...p, name: renamePlanName } : p))
+      setIsRenamingPlan(false)
+  }
 
   useEffect(() => {
     if (nikkeList && nikkeList.length > 0) {
@@ -557,146 +803,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     onNotify?.(successMessage, 'success')
   }, [teamBuilderTeam, mutatePlan, onNotify, t])
 
-  const handleImportPlanningClick = useCallback(() => {
-    planningFileInputRef.current?.click()
-  }, [])
 
-  const handlePlanningFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const inputEl = event.target
-    const file = inputEl.files?.[0]
-
-    if (!file) {
-      inputEl.value = ''
-      return
-    }
-
-    const reader = new FileReader()
-
-    reader.onload = () => {
-      try {
-        const raw = reader.result
-        if (typeof raw !== 'string') {
-          throw new Error('Unsupported file encoding')
-        }
-
-        const parsed = JSON.parse(raw)
-        const extractEntries = (payload: any): any[] => {
-          if (Array.isArray(payload)) return payload
-          if (payload && typeof payload === 'object') {
-            if (Array.isArray(payload.planning)) return payload.planning
-            if (Array.isArray(payload.accounts)) return payload.accounts
-            if (Array.isArray(payload.entries)) return payload.entries
-            if (Array.isArray(payload.data)) return payload.data
-          }
-          return []
-        }
-
-        const entries = extractEntries(parsed)
-        if (!entries || entries.length === 0) {
-          const message = t('unionRaid.importEmpty') || 'No valid planning entries found in file'
-          onNotify?.(message, 'warning')
-          return
-        }
-
-        const { matched, unmatched } = importPlanningData(entries)
-
-        if (matched === 0) {
-          const message = t('unionRaid.importNoMatches') || 'No planning entries matched the loaded accounts'
-          onNotify?.(message, 'warning')
-          return
-        }
-
-        const baseMessage = t('unionRaid.importSuccess') || 'Planning imported successfully'
-        const suffix = unmatched > 0
-          ? ` ${t('unionRaid.importPartialWarning') || `${unmatched} entry(ies) did not match any loaded account.`}`
-          : ''
-        onNotify?.(`${baseMessage} (${matched})${suffix}`, unmatched > 0 ? 'info' : 'success')
-      } catch (error: any) {
-        console.error('Failed to import planning JSON:', error)
-        const message = `${t('unionRaid.importFailed') || 'Failed to import planning JSON'}${error?.message ? `: ${error.message}` : ''}`
-        onNotify?.(message, 'error')
-      } finally {
-        inputEl.value = ''
-      }
-    }
-
-    reader.onerror = () => {
-      console.error('Failed to read planning JSON file')
-      const message = t('unionRaid.importFailed') || 'Failed to import planning JSON'
-      onNotify?.(message, 'error')
-      inputEl.value = ''
-    }
-
-    reader.readAsText(file, 'utf-8')
-  }, [importPlanningData, onNotify, t])
-
-  const handleExportPlanning = useCallback(() => {
-    if (!accounts || accounts.length === 0) {
-      const msg = t('unionRaid.exportNoData') || 'No accounts available to export'
-      onNotify?.(msg, 'warning')
-      return
-    }
-
-    const entries: Array<{ game_uid: string; name: string; plans: (Partial<PlanSlot> | null)[] }> = []
-    let skippedMissingUid = 0
-
-    accounts.forEach(account => {
-      const accountKey = getAccountKey(account)
-      const gameUid = getGameUid(account)
-      if (!accountKey || !gameUid) {
-        skippedMissingUid += 1
-        return
-      }
-
-      const plans = serializePlanSlots(planningState[accountKey])
-      const accountName = account?.name
-        ?? account?.nickname
-        ?? account?.nick_name
-        ?? account?.nick
-        ?? account?.player_name
-        ?? account?.uid
-        ?? gameUid
-
-      entries.push({
-        game_uid: gameUid,
-        name: String(accountName),
-        plans
-      })
-    })
-
-    if (entries.length === 0) {
-      const baseMessage = skippedMissingUid > 0
-        ? t('unionRaid.exportMissingUidOnly') || 'All accounts are missing game_uid, nothing to export'
-        : t('unionRaid.exportNoData') || 'No accounts available to export'
-      onNotify?.(baseMessage, 'warning')
-      return
-    }
-
-    try {
-      const jsonText = JSON.stringify(entries, null, 2)
-      const baseFile = uploadedFileName?.replace(/\.json$/i, '') || 'union-raid'
-      const exportName = `${baseFile}-planning.json`
-      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = exportName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-
-      const successText = t('unionRaid.exportSuccess') || 'JSON exported successfully'
-      const skippedSuffix = skippedMissingUid > 0
-        ? ` ${t('unionRaid.exportSkippedMissingUid') || `${skippedMissingUid} account(s) missing game_uid were skipped.`}`
-        : ''
-      onNotify?.(`${successText}${skippedSuffix}`, skippedMissingUid > 0 ? 'info' : 'success')
-    } catch (error: any) {
-      console.error('Failed to export union raid planning JSON:', error)
-      const message = `${t('unionRaid.exportFailed') || 'Failed to export JSON'}${error?.message ? `: ${error.message}` : ''}`
-      onNotify?.(message, 'error')
-    }
-  }, [accounts, planningState, uploadedFileName, onNotify, t])
 
   const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '等级' : 'Level')
   const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
@@ -795,26 +902,58 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               </Typography>
             </Box>
           )}
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<UploadFileIcon />}
-            onClick={handleImportPlanningClick}
-            disabled={!accounts || accounts.length === 0}
-            sx={{ whiteSpace: 'nowrap' }}
-          >
-            {t('unionRaid.importJson') || 'Import Planning'}
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<FileDownloadIcon />}
-            onClick={handleExportPlanning}
-            disabled={!accounts || accounts.length === 0}
-            sx={{ whiteSpace: 'nowrap' }}
-          >
-            {t('unionRaid.exportJson') || 'Export JSON'}
-          </Button>
+          {authToken && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {isRenamingPlan ? (
+                    <TextField
+                        size="small"
+                        value={renamePlanName}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRenamePlanName(e.target.value)}
+                        onBlur={confirmRenamePlan}
+                        onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && confirmRenamePlan()}
+                        autoFocus
+                    />
+                ) : (
+                    <Select
+                        size="small"
+                        value={currentPlanId}
+                        onChange={(e) => {
+                            const newId = e.target.value
+                            const p = plans.find(pl => pl.id === newId)
+                            if (p) {
+                                setCurrentPlanId(newId)
+                                replaceAllPlanning(p.data)
+                            }
+                        }}
+                        sx={{ minWidth: 120 }}
+                    >
+                        {plans.map(p => (
+                            <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                        ))}
+                    </Select>
+                )}
+                
+                <Tooltip title={t('common.add') || '新建'}>
+                    <Button variant="outlined" sx={{ minWidth: 0, px: 1 }} onClick={handleCreatePlan}>
+                        <AddIcon />
+                    </Button>
+                </Tooltip>
+                
+                <Tooltip title={t('common.edit') || '重命名'}>
+                    <Button variant="outlined" sx={{ minWidth: 0, px: 1 }} onClick={handleRenamePlan} disabled={isRenamingPlan}>
+                        <EditIcon />
+                    </Button>
+                </Tooltip>
+
+                <Tooltip title={t('common.delete') || '删除'}>
+                    <Button variant="outlined" sx={{ minWidth: 0, px: 1 }} color="error" onClick={handleDeletePlan}>
+                        <DeleteIcon />
+                    </Button>
+                </Tooltip>
+                
+                {cloudLoading && <CircularProgress size={20} />}
+            </Box>
+          )}
           <Tooltip title={t('unionRaid.refresh') || '刷新'}>
             <Box
               onClick={handleManualRefresh}
@@ -884,16 +1023,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         initialSelectedCharacters={activePlanCharacters}
         onConfirmSelection={handleCharactersSelected}
       />
-      <Box sx={{ display: 'none' }}>
-        <input
-          type="file"
-          accept="application/json"
-          ref={planningFileInputRef}
-          onChange={handlePlanningFileChange}
-          aria-hidden="true"
-          tabIndex={-1}
-        />
-      </Box>
+
     </Box>
   )
 }

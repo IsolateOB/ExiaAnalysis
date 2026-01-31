@@ -148,7 +148,7 @@ const SingleJsonUpload: React.FC<SingleJsonUploadProps> = ({ onAccountsLoaded, p
         ) : fileName ? (
           <Box sx={{ textAlign: 'center', maxWidth: '100%' }}>
             <Typography variant="body2" noWrap sx={{ mb: 1, color: '#1976d2', fontSize: '0.8rem', maxWidth: '100%' }}>✓ {fileName}</Typography>
-            <Button variant="outlined" size="small" startIcon={<DeleteIcon />} onClick={(e) => { e.stopPropagation(); clear() }} sx={{ fontSize: '0.7rem' }}>{t('common.remove')}</Button>
+            <Button variant="outlined" size="small" startIcon={<CloudUploadIcon />} onClick={(e) => { e.stopPropagation(); handleClickUpload() }} sx={{ fontSize: '0.7rem' }}>{t('common.replace') || '替换'}</Button>
           </Box>
         ) : (
           <Box sx={{ textAlign: 'center' }}>

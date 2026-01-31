@@ -11,10 +11,8 @@ import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../ut
 import EditIcon from '@mui/icons-material/Edit'
 import SaveIcon from '@mui/icons-material/Save'
 import DeleteIcon from '@mui/icons-material/Delete'
-import FileDownloadIcon from '@mui/icons-material/FileDownload'
-import FileUploadIcon from '@mui/icons-material/FileUpload'
-import CheckIcon from '@mui/icons-material/Check'
-import CloseIcon from '@mui/icons-material/Close'
+import AddIcon from '@mui/icons-material/Add'
+
 import { fetchNikkeList } from '../services/nikkeList'
 import { useI18n } from '../i18n'
 import { itemData } from '../data/item'
@@ -29,8 +27,12 @@ interface TeamBuilderProps {
   // 新增：将当前选择与系数暴露给父级（给 AccountsAnalyzer 使用）
   onTeamSelectionChange?: (chars: (Character | undefined)[], coeffs: { [position: number]: AttributeCoefficients }) => void
   // 新增：外部设置队伍(用于复制功能)
+
   externalTeam?: (Character | undefined)[]
+  authToken?: string | null
 }
+
+const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 
 // 计算角色强度的工具函数
 const calculateCharacterStrength = async (characterData: any, character: Character, rootData?: any, lang: Lang = 'zh'): Promise<number> => {
@@ -99,7 +101,9 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   onTeamStrengthChange,
   onTeamRatioChange,
   onTeamSelectionChange,
+
   externalTeam,
+  authToken,
 }) => {
   const { t, lang } = useI18n()
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
@@ -124,8 +128,50 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [autoOpen, setAutoOpen] = useState(false)
   const [lockOpen, setLockOpen] = useState(false)
   const [acOpen, setAcOpen] = useState(false)
-  // 导入用隐藏文件输入
-  const importInputRef = useRef<HTMLInputElement | null>(null)
+
+  
+  // Cloud Sync Logic
+  useEffect(() => {
+    if (!authToken) return
+    const loadCloudTemplates = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/team-template`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            })
+            if (res.ok) {
+                const json = await res.json()
+                if (json && json.template_data && Array.isArray(json.template_data)) {
+                    const serverTpls = json.template_data as TeamTemplate[]
+                    localStorage.setItem('exia_team_templates', JSON.stringify(serverTpls))
+                    setTemplates(serverTpls)
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load cloud templates', e)
+        }
+    }
+    loadCloudTemplates()
+  }, [authToken])
+
+  // Auto-save templates when changed (debounced)
+  useEffect(() => {
+    if (!authToken) return
+    const timer = setTimeout(async () => {
+        try {
+            await fetch(`${API_BASE_URL}/team-template`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ template_data: templates })
+            })
+        } catch (e) {
+            console.error('Failed to save cloud templates', e)
+        }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [templates, authToken])
 
   // 统一补全/迁移系数：新增基础轴属性系数，迁移旧 hp -> axisHP
   const normalizeCoefficients = (c?: AttributeCoefficients): AttributeCoefficients => {
@@ -572,112 +618,87 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       {/* 模板管理（导入导出 + 选择 + 保存为模板）- 固定部分 */}
       <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-          <Button variant="outlined" size="small" startIcon={<FileUploadIcon />} onClick={() => importInputRef.current?.click()}>
-            {t('tpl.import')}
-          </Button>
-          <input
-            type="file"
-            accept="application/json,.json"
-            ref={importInputRef}
-            hidden
-            aria-label={t('tpl.importFileAria')}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportTemplates(f); e.currentTarget.value = '' } }}
-          />
-          <Button variant="outlined" size="small" startIcon={<FileDownloadIcon />} onClick={handleExportTemplates}>
-            {t('tpl.export')}
-          </Button>
+
         </Stack>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Select
-          size="small"
-          value={selectedTemplateId || ''}
-          onChange={(e) => {
-            const id = String(e.target.value || '')
-            setSelectedTemplateId(id)
-            const tpl = templates.find(t => t.id === id)
-            if (tpl) applyTemplate(tpl)
-          }}
-          displayEmpty
-          sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
-          renderValue={(val) => {
-            const id = String(val || '')
-            const item = templates.find(tp => tp.id === id)
-            const name = item?.name || ''
-            const display = name || t('tpl.notSelected')
-            return (
-              <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>{display}</Typography>
-            )
-          }}
-          MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-        >
-          <MenuItem value=""><em>{t('tpl.notSelected')}</em></MenuItem>
-          {templates.map((tpl) => (
-            <MenuItem key={tpl.id} value={tpl.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {isRenaming && renameId === tpl.id ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e)=>e.stopPropagation()}>
-                  <TextField
-                    size="small"
-                    placeholder={t('tpl.inputName')}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); confirmRename() }; if (e.key === 'Escape') { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') } }}
-                    autoFocus
-                    inputRef={(el) => { renameInputRef.current = el; if (el) { el.focus(); el.select() } }}
-                    inputProps={{ 'aria-label': t('tpl.inputName') }}
-                    sx={{ flex: 1, minWidth: 0 }}
-                  />
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={(e)=>{ e.stopPropagation(); confirmRename() }}
-                    aria-label={t('tpl.rename')}
-                  >
-                    <CheckIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={(e)=>{ e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') }}
-                    aria-label={t('tpl.cancel') || t('common.cancel') || '取消'}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              ) : (
-                <>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" noWrap title={tpl.name}>{tpl.name}</Typography>
-                  </Box>
-                  <Tooltip title={t('tpl.rename')}>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(tpl.id) }}
-                      aria-label={t('tpl.rename')}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title={t('tpl.delete')}>
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(tpl.id) }}
-                      aria-label={t('tpl.delete')}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-            </MenuItem>
-          ))}
-        </Select>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<SaveIcon />}
-            onClick={handleCreateTemplate}
-            disabled={templates.length >= 200}
-          >{t('tpl.save')}</Button>
+          {isRenaming ? (
+            <TextField
+                size="small"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={confirmRename}
+                onKeyDown={(e) => e.key === 'Enter' && confirmRename()}
+                autoFocus
+                sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
+            />
+          ) : (
+            <Select
+              size="small"
+              value={selectedTemplateId || ''}
+              onChange={(e) => {
+                const id = String(e.target.value || '')
+                setSelectedTemplateId(id)
+                const tpl = templates.find(t => t.id === id)
+                if (tpl) applyTemplate(tpl)
+              }}
+              displayEmpty
+              sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
+              renderValue={(val) => {
+                const id = String(val || '')
+                const item = templates.find(tp => tp.id === id)
+                const name = item?.name || ''
+                const display = name || t('tpl.notSelected')
+                return (
+                  <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>{display}</Typography>
+                )
+              }}
+              MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+            >
+              <MenuItem value=""><em>{t('tpl.notSelected')}</em></MenuItem>
+              {templates.map((tpl) => (
+                <MenuItem key={tpl.id} value={tpl.id}>
+                   <Typography variant="body2" noWrap title={tpl.name}>{tpl.name}</Typography>
+                </MenuItem>
+              ))}
+            </Select>
+          )}
+
+           <Tooltip title={t('tpl.save') || '保存为新模板'}>
+             <Button
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: 0, px: 1 }}
+                onClick={handleCreateTemplate}
+                disabled={templates.length >= 200}
+             >
+                <AddIcon />
+             </Button>
+           </Tooltip>
+
+           <Tooltip title={t('tpl.rename') || '重命名'}>
+             <Button
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: 0, px: 1 }}
+                onClick={() => selectedTemplateId && startRenameTemplate(selectedTemplateId)}
+                disabled={!selectedTemplateId || isRenaming}
+             >
+                <EditIcon />
+             </Button>
+           </Tooltip>
+
+           <Tooltip title={t('tpl.delete') || '删除'}>
+             <Button
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: 0, px: 1 }}
+                color="error"
+                onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                disabled={!selectedTemplateId}
+             >
+                <DeleteIcon />
+             </Button>
+           </Tooltip>
         </Stack>
       </Box>
       
