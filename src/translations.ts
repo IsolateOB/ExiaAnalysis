@@ -67,6 +67,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'common.back': '返回',
     'common.confirm': '确认',
     'common.save': '保存',
+    'common.replace': '替换',
 
     // Analyse Page
     langLabel: '中文',
@@ -315,6 +316,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'common.back': 'Back',
     'common.confirm': 'Confirm',
     'common.save': 'Save',
+    'common.replace': 'Replace',
 
     // Analyse Page
     langLabel: 'EN',

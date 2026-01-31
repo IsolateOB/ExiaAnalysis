@@ -537,14 +537,13 @@ const App: React.FC = () => {
 
         <Dialog open={authDialogOpen} onClose={closeAuthDialog} maxWidth="xs" fullWidth>
           <DialogTitle>{authTitle}</DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 3 }}>
             <TextField
               label={t('auth.username') || '用户名'}
               value={authForm.username}
               onChange={(e) => setAuthForm(prev => ({ ...prev, username: e.target.value }))}
               fullWidth
               autoFocus
-              InputLabelProps={{ sx: { bgcolor: 'background.paper', px: 0.5 } }}
             />
             <TextField
               label={t('auth.password') || '密码'}
@@ -552,7 +551,6 @@ const App: React.FC = () => {
               value={authForm.password}
               onChange={(e) => setAuthForm(prev => ({ ...prev, password: e.target.value }))}
               fullWidth
-              InputLabelProps={{ sx: { bgcolor: 'background.paper', px: 0.5 } }}
             />
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
