@@ -537,7 +537,7 @@ const App: React.FC = () => {
 
         <Dialog open={authDialogOpen} onClose={closeAuthDialog} maxWidth="xs" fullWidth>
           <DialogTitle>{authTitle}</DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 3 }}>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 3, overflow: 'visible' }}>
             <TextField
               label={t('auth.username') || '用户名'}
               value={authForm.username}
