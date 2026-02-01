@@ -2,12 +2,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Switch, FormControlLabel, CircularProgress, IconButton, Popover } from '@mui/material'
-import SettingsIcon from '@mui/icons-material/Settings'
+import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress } from '@mui/material'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import TeamBuilder from './components/TeamBuilder'
-import SingleJsonUpload, { AccountsPayload } from './components/SingleJsonUpload'
+import { fetchNikkeList } from './services/nikkeList'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
 import UnionRaidStats from './components/UnionRaidStats'
 import type { Character, AttributeCoefficients } from './types'
@@ -106,12 +105,11 @@ const App: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [authUsername, setAuthUsername] = useState<string | null>(null)
+  const [authAvatarUrl, setAuthAvatarUrl] = useState<string | null>(null)
   const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [authForm, setAuthForm] = useState({ username: '', password: '' })
   const [authSubmitting, setAuthSubmitting] = useState(false)
-  const [authConflictOpen, setAuthConflictOpen] = useState(false)
-  const [authConflictCloudAccounts, setAuthConflictCloudAccounts] = useState<any[] | null>(null)
   const authSyncCheckedRef = useRef(false)
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null)
   const [notification, setNotification] = useState<{
@@ -136,6 +134,191 @@ const App: React.FC = () => {
     setNotification(prev => ({ ...prev, open: false }))
   }
 
+  const fetchProfile = async (token: string) => {
+    const res = await fetch(`${API_BASE_URL}/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!res.ok) return null
+    return res.json()
+  }
+
+  const parseCookieValue = (cookieStr: string, name: string) => {
+    if (!cookieStr) return ''
+    const match = cookieStr.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
+    return match ? match[1] : ''
+  }
+
+  const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: any) => {
+    const res = await fetch(`/api/${scope}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Game-Cookie': cookie
+      },
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(text || `HTTP ${res.status}`)
+    }
+    return res.json()
+  }
+
+  const buildAccountsFromCookies = async (rawAccounts: any[]) => {
+    if (!rawAccounts || rawAccounts.length === 0) return []
+    const { nikkes } = await fetchNikkeList()
+    const nikkeMap = new Map<string, Character>()
+    nikkes.forEach((n) => {
+      nikkeMap.set(String(n.id), n)
+      nikkeMap.set(String(n.name_code), n)
+    })
+
+    const elementKeys = ['Electronic', 'Fire', 'Wind', 'Water', 'Iron', 'Utility']
+
+    const buildEquipments = (char: any, effectsMap: Record<string, any>) => {
+      const equipments: Record<number, any[]> = {}
+      const equipSlots = ['head', 'torso', 'arm', 'leg']
+      equipSlots.forEach((slot, idx) => {
+        const details: any[] = []
+        for (let i = 1; i <= 3; i += 1) {
+          const optionKey = `${slot}_equip_option${i}_id`
+          const optionId = char[optionKey]
+          if (optionId && optionId !== 0) {
+            const effect = effectsMap[String(optionId)]
+            if (effect?.function_details) {
+              effect.function_details.forEach((func: any) => {
+                details.push({
+                  function_type: func.function_type,
+                  function_value: Math.abs(func.function_value) / 100,
+                  level: func.level
+                })
+              })
+            }
+          }
+        }
+        equipments[idx] = details
+      })
+      return equipments
+    }
+
+    const resolveItemRare = (tid: number | undefined) => {
+      if (!tid) return ''
+      const tidStr = String(tid)
+      const firstDigit = Number(tidStr.charAt(0))
+      const lastDigit = Number(tidStr.charAt(tidStr.length - 1))
+      if (firstDigit === 2) return 'SSR'
+      if (firstDigit === 1) return lastDigit === 1 ? 'R' : lastDigit === 2 ? 'SR' : ''
+      return ''
+    }
+
+    const accounts = await Promise.all(rawAccounts.map(async (raw) => {
+      const cookie = raw?.cookie || ''
+      if (!cookie) return null
+      const playerInfo = await postProxy('ugc', 'direct/standalonesite/User/GetUserGamePlayerInfo', cookie, {})
+      const areaId = String(playerInfo?.data?.area_id || '')
+      const roleName = playerInfo?.data?.role_name || ''
+      if (!areaId) return null
+
+      const outpost = await postProxy('game', 'proxy/Game/GetUserProfileOutpostInfo', cookie, { nikke_area_id: parseInt(areaId) })
+      const outpostInfo = outpost?.data?.outpost_info || {}
+      const synchroLevel = Number.isFinite(outpostInfo.synchro_level) ? outpostInfo.synchro_level : 0
+      const outpostLevel = Number.isFinite(outpostInfo.outpost_battle_level) ? outpostInfo.outpost_battle_level : 0
+
+      const intlOpenId = parseCookieValue(cookie, 'game_openid')
+      const payloadBase: any = { nikke_area_id: parseInt(areaId) }
+      if (intlOpenId) payloadBase.intl_open_id = intlOpenId
+
+      const charsResp = await postProxy('game', 'proxy/Game/GetUserCharacters', cookie, payloadBase)
+      const userChars = Array.isArray(charsResp?.data?.characters) ? charsResp.data.characters : []
+      const nameCodes = Array.from(new Set(userChars.map((c: any) => c.name_code).filter((v: any) => v !== undefined && v !== null)))
+
+      let detailList: any[] = []
+      let effectsMap: Record<string, any> = {}
+      if (nameCodes.length) {
+        const detailsResp = await postProxy('game', 'proxy/Game/GetUserCharacterDetails', cookie, {
+          ...payloadBase,
+          name_codes: nameCodes
+        })
+        detailList = Array.isArray(detailsResp?.data?.character_details) ? detailsResp.data.character_details : []
+        const stateEffects = Array.isArray(detailsResp?.data?.state_effects) ? detailsResp.data.state_effects : []
+        stateEffects.forEach((effect: any) => {
+          effectsMap[String(effect.id)] = effect
+        })
+      }
+
+      const detailMap: Record<string, any> = {}
+      detailList.forEach((d: any) => {
+        detailMap[String(d.name_code)] = d
+      })
+
+      const elements: Record<string, any[]> = {}
+      elementKeys.forEach((k) => { elements[k] = [] })
+
+      userChars.forEach((uc: any) => {
+        const detail = detailMap[String(uc.name_code)]
+        const nikke = nikkeMap.get(String(uc.name_code))
+        const elementKey = nikke?.element || 'Utility'
+        const itemLevel = detail?.favorite_item_lv >= 0 ? detail.favorite_item_lv : ''
+        const itemRare = resolveItemRare(detail?.favorite_item_tid)
+        elements[elementKey] = elements[elementKey] || []
+        elements[elementKey].push({
+          id: uc.name_code,
+          name_code: uc.name_code,
+          lv: uc.lv || 1,
+          combat: uc.combat || 0,
+          core: uc.core || 0,
+          grade: uc.grade || 0,
+          costume_id: uc.costume_id || 0,
+          skill1_level: detail?.skill1_lv || 1,
+          skill2_level: detail?.skill2_lv || 1,
+          skill_burst_level: detail?.ulti_skill_lv || 1,
+          item_level: itemLevel,
+          item_rare: itemRare,
+          limit_break: { grade: uc.grade || 0, core: uc.core || 0 },
+          equipments: detail ? buildEquipments(detail, effectsMap) : undefined,
+          synchroLevel,
+          outpostLevel,
+          AtkElemLbScore: uc.atk_elem_lb_score || uc.AtkElemLbScore || 0
+        })
+      })
+
+      return {
+        name: roleName,
+        role_name: roleName,
+        area_id: areaId,
+        game_uid: raw?.game_uid || raw?.gameUid || '',
+        cookie,
+        synchroLevel,
+        outpostLevel,
+        elements
+      }
+    }))
+
+    return accounts.filter(Boolean)
+  }
+
+  const loadAccountsFromBackend = async (token: string, gameAccounts?: any[]) => {
+    try {
+      const source = Array.isArray(gameAccounts) && gameAccounts.length
+        ? gameAccounts
+        : (await fetchCloudAccounts(token)) || []
+
+      if (!Array.isArray(source) || source.length === 0) {
+        setAccounts([])
+        setUploadedFileName(undefined)
+        setTeamChars([])
+        setCoeffsMap({})
+        return
+      }
+
+      const built = await buildAccountsFromCookies(source)
+      setAccounts(built)
+      setUploadedFileName('云端数据')
+    } catch (error) {
+      console.error('Failed to load accounts from backend:', error)
+    }
+  }
+
   const fetchCloudAccounts = async (token: string) => {
     const res = await fetch(`${API_BASE_URL}/accounts`, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -144,51 +327,6 @@ const App: React.FC = () => {
     if (!res.ok) throw new Error('Failed to fetch cloud accounts')
     const json = await res.json()
     return Array.isArray(json?.account_data) ? json.account_data : null
-  }
-
-  const mergeAccountsToCloud = async (token: string, list: any[]) => {
-    const res = await fetch(`${API_BASE_URL}/accounts/merge`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ account_data: list })
-    })
-    if (!res.ok) throw new Error('Failed to merge cloud accounts')
-  }
-
-  const handlePostLoginSync = async (token: string, localAccounts: any[]) => {
-    try {
-      const cloudAccounts = await fetchCloudAccounts(token)
-      if (!cloudAccounts) {
-        if (localAccounts.length > 0) {
-          await mergeAccountsToCloud(token, localAccounts)
-          const merged = await fetchCloudAccounts(token)
-          if (merged) {
-            setAccounts(merged)
-            setUploadedFileName('云端数据')
-          }
-        }
-        return
-      }
-
-      if (localAccounts.length === 0) {
-        setAccounts(cloudAccounts)
-        setUploadedFileName('云端数据')
-        return
-      }
-
-      if (JSON.stringify(cloudAccounts) !== JSON.stringify(localAccounts)) {
-        setAuthConflictCloudAccounts(cloudAccounts)
-        setAuthConflictOpen(true)
-        return
-      }
-
-      setUploadedFileName('云端数据')
-    } catch (error) {
-      console.error('Failed to sync after login:', error)
-    }
   }
 
   useEffect(() => {
@@ -200,6 +338,7 @@ const App: React.FC = () => {
         if (parsedAuth?.token && parsedAuth?.username) {
           setAuthToken(parsedAuth.token)
           setAuthUsername(parsedAuth.username)
+          setAuthAvatarUrl(parsedAuth.avatar_url || null)
         }
       }
 
@@ -243,12 +382,27 @@ const App: React.FC = () => {
     try {
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
         token: authToken,
-        username: authUsername
+        username: authUsername,
+        avatar_url: authAvatarUrl
       }))
     } catch (error) {
       console.error('Failed to persist auth:', error)
     }
-  }, [authToken, authUsername])
+  }, [authToken, authUsername, authAvatarUrl])
+
+  useEffect(() => {
+    if (!authToken || authAvatarUrl) return
+    fetchProfile(authToken)
+      .then((profile) => {
+        if (profile?.avatar_url) {
+          setAuthAvatarUrl(profile.avatar_url)
+        }
+        if (profile?.username && !authUsername) {
+          setAuthUsername(profile.username)
+        }
+      })
+      .catch(() => {})
+  }, [authToken, authAvatarUrl, authUsername])
   
   // Cloud Sync: Resolve on login
   useEffect(() => {
@@ -259,45 +413,8 @@ const App: React.FC = () => {
     if (!accountsLoaded) return
     if (authSyncCheckedRef.current) return
     authSyncCheckedRef.current = true
-    handlePostLoginSync(authToken, accounts)
-  }, [authToken, accountsLoaded, accounts])
-
-  const handleAccountsLoaded = async (payload: AccountsPayload) => {
-    setAccounts(payload.accounts)
-    setUploadedFileName(payload.fileName || undefined)
-    if (!payload.accounts.length) {
-      setTeamChars([])
-      setCoeffsMap({})
-    }
-    
-    if (authToken && payload.accounts.length > 0) {
-      try {
-        await fetch(`${API_BASE_URL}/accounts/merge`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify({ account_data: payload.accounts })
-        })
-
-        const mergedRes = await fetch(`${API_BASE_URL}/accounts`, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        })
-        if (mergedRes.ok) {
-          const json = await mergedRes.json()
-          if (json && json.account_data && Array.isArray(json.account_data)) {
-            setAccounts(json.account_data)
-            setUploadedFileName('云端数据')
-          }
-        }
-        handleStatusChange('账号数据已同步至云端', 'success')
-      } catch (e) {
-        console.error(e)
-        handleStatusChange('同步账号数据失败', 'error')
-      }
-    }
-  }
+    loadAccountsFromBackend(authToken)
+  }, [authToken, accountsLoaded])
 
   const collapseSidebar = () => setSidebarCollapsed(true)
   const expandSidebar = () => setSidebarCollapsed(false)
@@ -360,9 +477,14 @@ const App: React.FC = () => {
       const data = await res.json()
       if (data?.token) {
         setAuthToken(data.token)
-        setAuthUsername(authForm.username.trim())
+        const profile = await fetchProfile(data.token)
+        const nextUsername = profile?.username || data?.username || authForm.username.trim()
+        const nextAvatar = profile?.avatar_url || data?.avatar_url || null
+        setAuthUsername(nextUsername)
+        setAuthAvatarUrl(nextAvatar)
         setAuthDialogOpen(false)
         authSyncCheckedRef.current = false
+        await loadAccountsFromBackend(data.token, data?.game_accounts || [])
         handleStatusChange(t('auth.successLogin') || '登录成功', 'success')
       } else {
         handleStatusChange(t('auth.failedLogin') || '登录失败', 'error')
@@ -378,43 +500,19 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setAuthToken(null)
     setAuthUsername(null)
+    setAuthAvatarUrl(null)
     authSyncCheckedRef.current = false
-    setAuthConflictOpen(false)
-    setAuthConflictCloudAccounts(null)
     handleStatusChange(t('auth.logoutSuccess') || '已退出', 'success')
-  }
-
-  const handleConflictUseLocal = async () => {
-    if (!authToken) return
-    try {
-      await mergeAccountsToCloud(authToken, accounts)
-      const merged = await fetchCloudAccounts(authToken)
-      if (merged) {
-        setAccounts(merged)
-        setUploadedFileName('云端数据')
-      }
-      setAuthConflictOpen(false)
-    } catch (error) {
-      console.error('Failed to upload local accounts:', error)
-    }
-  }
-
-  const handleConflictUseCloud = () => {
-    if (authConflictCloudAccounts) {
-      setAccounts(authConflictCloudAccounts)
-      setUploadedFileName('云端数据')
-    }
-    setAuthConflictOpen(false)
-  }
-
-  const handleConflictLogout = () => {
-    handleLogout()
   }
 
   const handleUpdateUser = (newToken: string, newUsername: string) => {
     setAuthToken(newToken)
     setAuthUsername(newUsername)
     sessionStorage.setItem(AUTH_STORAGE_KEY, newToken)
+  }
+
+  const handleUpdateAvatar = (newAvatarUrl: string) => {
+    setAuthAvatarUrl(newAvatarUrl)
   }
 
   return (
@@ -424,6 +522,7 @@ const App: React.FC = () => {
   <Header
     title={t('appTitle')}
     username={authUsername ?? undefined}
+    avatarUrl={authAvatarUrl}
     onLoginClick={openLoginDialog}
     onLogoutClick={handleLogout}
     onSettingsClick={() => setCurrentPage('settings')}
@@ -505,10 +604,6 @@ const App: React.FC = () => {
                         <ToggleButton value="unionRaid">{t('page.unionRaid')}</ToggleButton>
                       </ToggleButtonGroup>
                     </Box>
-
-                      <SingleJsonUpload
-                        onAccountsLoaded={handleAccountsLoaded}
-                      />
                   </Box>
 
                   <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', mt: 2 }}>
@@ -580,8 +675,10 @@ const App: React.FC = () => {
                   <SettingsPage 
                     authToken={authToken} 
                     username={authUsername}
+                    avatarUrl={authAvatarUrl}
                     onLogout={handleLogout}
                     onUpdateUser={handleUpdateUser}
+                    onUpdateAvatar={handleUpdateAvatar}
                     onNotify={handleStatusChange}
                   />
                 </Box>
@@ -628,26 +725,6 @@ const App: React.FC = () => {
             {notification.message}
           </Alert>
         </Snackbar>
-
-        <Dialog open={authConflictOpen} onClose={() => {}} maxWidth="xs" fullWidth>
-          <DialogTitle>{t('auth.conflictTitle') || '检测到云端冲突'}</DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {t('auth.conflictDesc') || '本地账号与云端账号不一致，请选择处理方式。'}
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-            <Button onClick={handleConflictUseLocal}>
-              {t('auth.conflictUseLocal') || '本地上传到云'}
-            </Button>
-            <Button onClick={handleConflictUseCloud}>
-              {t('auth.conflictUseCloud') || '云覆盖本地'}
-            </Button>
-            <Button color="error" onClick={handleConflictLogout}>
-              {t('auth.conflictLogout') || '退出登录'}
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         <Dialog open={authDialogOpen} onClose={closeAuthDialog} maxWidth="xs" fullWidth>
           <DialogTitle>{authTitle}</DialogTitle>

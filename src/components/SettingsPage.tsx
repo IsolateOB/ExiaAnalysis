@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Typography,
@@ -17,26 +17,36 @@ import {
   DialogActions,
   CircularProgress,
   ToggleButton,
-  ToggleButtonGroup
+  ToggleButtonGroup,
+  Avatar
 } from '@mui/material'
 import { useI18n } from '../i18n'
+import { AVATAR_URLS } from '../data/avatarUrls'
 
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 
 interface SettingsPageProps {
   authToken: string | null
   username: string | null
+  avatarUrl: string | null
   onLogout: () => void
   onUpdateUser: (newToken: string, newUsername: string) => void
+  onUpdateAvatar: (newAvatarUrl: string) => void
   onNotify: (msg: string, severity: 'success' | 'error' | 'info' | 'warning') => void
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, onLogout, onUpdateUser, onNotify }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatarUrl, onLogout, onUpdateUser, onUpdateAvatar, onNotify }) => {
   const { t, lang, toggleLang } = useI18n()
 
   // 修改用户名状态
   const [newUsername, setNewUsername] = useState(username || '')
   const [usernameLoading, setUsernameLoading] = useState(false)
+  const [selectedAvatar, setSelectedAvatar] = useState(avatarUrl || '')
+  const [avatarLoading, setAvatarLoading] = useState(false)
+
+  useEffect(() => {
+    setSelectedAvatar(avatarUrl || '')
+  }, [avatarUrl])
 
   // 修改密码状态
   const [pwdForm, setPwdForm] = useState({ current: '', new: '', confirm: '' })
@@ -151,6 +161,36 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, onLogo
     }
   }
 
+  const handleUpdateAvatar = async () => {
+    if (!authToken) return
+    if (!selectedAvatar) {
+      onNotify(t('settings.avatarRequired') || '请选择头像', 'warning')
+      return
+    }
+    setAvatarLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/change-avatar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ avatar_url: selectedAvatar })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        onNotify(data.error || (t('settings.changeAvatarFailed') || '头像修改失败'), 'error')
+      } else {
+        onNotify(t('settings.changeAvatarSuccess') || '头像修改成功', 'success')
+        onUpdateAvatar(selectedAvatar)
+      }
+    } catch (error) {
+      onNotify(t('settings.changeAvatarFailed') || '头像修改失败', 'error')
+    } finally {
+      setAvatarLoading(false)
+    }
+  }
+
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>{t('settings.title') || '设置'}</Typography>
@@ -201,6 +241,41 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, onLogo
                         </Button>
                     </Box>
                 </Box>
+            </Paper>
+
+            {/* 头像设置 */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>{t('settings.avatar') || '头像'}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {t('settings.avatarHelp') || '选择一个头像并保存'}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                <Avatar src={selectedAvatar || avatarUrl || ''} sx={{ width: 56, height: 56 }} />
+                <Button
+                  variant="contained"
+                  onClick={handleUpdateAvatar}
+                  disabled={avatarLoading || !selectedAvatar || selectedAvatar === (avatarUrl || '')}
+                >
+                  {avatarLoading ? <CircularProgress size={24} /> : (t('common.save') || '保存')}
+                </Button>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 1 }}>
+                {AVATAR_URLS.map((url) => (
+                  <Box
+                    key={url}
+                    onClick={() => setSelectedAvatar(url)}
+                    sx={{
+                      cursor: 'pointer',
+                      borderRadius: '50%',
+                      border: url === selectedAvatar ? '2px solid #1976d2' : '2px solid transparent',
+                      p: 0.25,
+                      '&:hover': { borderColor: 'primary.main' }
+                    }}
+                  >
+                    <Avatar src={url} sx={{ width: 48, height: 48 }} />
+                  </Box>
+                ))}
+              </Box>
             </Paper>
 
             {/* 修改密码 */}

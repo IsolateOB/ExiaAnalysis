@@ -10,6 +10,7 @@ import { useI18n } from '../i18n'
 interface HeaderProps {
   title?: string
   username?: string
+  avatarUrl?: string | null
   onLoginClick?: () => void
   onLogoutClick?: () => void
   onSettingsClick?: () => void
@@ -17,7 +18,7 @@ interface HeaderProps {
 
 const AVATAR_URL = 'https://sg-cdn.blablalink.com/socialmedia/_58913bdbcfe6bf42a8d5e92a0483c9c9d7fc3dfa-1200x1200-ori_s_80_50_ori_q_80.webp'
 
-const Header: React.FC<HeaderProps> = ({ title = 'ExiaAnalysis', username, onLoginClick, onLogoutClick, onSettingsClick }) => {
+const Header: React.FC<HeaderProps> = ({ title = 'ExiaAnalysis', username, avatarUrl, onLoginClick, onLogoutClick, onSettingsClick }) => {
   const { t } = useI18n()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const menuOpen = Boolean(anchorEl)
@@ -52,7 +53,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'ExiaAnalysis', username, onLog
           {username ? (
             <>
               <Avatar
-                src={AVATAR_URL}
+                src={avatarUrl || AVATAR_URL}
                 alt={username}
                 onClick={handleAvatarClick}
                 sx={{

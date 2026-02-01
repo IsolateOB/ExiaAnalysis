@@ -18,14 +18,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 从请求头获取 cookie
     const gameCookie = req.headers['x-game-cookie'] as string
     if (!gameCookie) {
       return res.status(400).json({ error: 'Missing X-Game-Cookie header' })
     }
 
-    // 转发请求到实际 API
-    const response = await fetch('https://api.blablalink.com/api/game/proxy/Game/GetUnionRaidData', {
+    const url = new URL(req.url || '', 'http://localhost')
+    const match = url.pathname.match(/^\/api\/(game|ugc)\/(.+)$/)
+    if (!match) {
+      return res.status(400).json({ error: 'Invalid proxy path' })
+    }
+    const target = `https://api.blablalink.com/api/${match[1]}/${match[2]}`
+
+    const response = await fetch(target, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

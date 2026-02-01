@@ -5,6 +5,10 @@
     {
       "source": "/api/game/:path*",
       "destination": "/api/proxy"
+    },
+    {
+      "source": "/api/ugc/:path*",
+      "destination": "/api/proxy"
     }
   ]
 }
