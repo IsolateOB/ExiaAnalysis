@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Switch, FormControlLabel, CircularProgress, IconButton, Popover } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
@@ -99,6 +99,7 @@ const App: React.FC = () => {
   const { t, lang, toggleLang } = useI18n()
   const [accounts, setAccounts] = useState<any[]>([])
   const [uploadedFileName, setUploadedFileName] = useState<string | undefined>(undefined)
+  const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [currentPage, setCurrentPage] = useState<'analysis' | 'unionRaid' | 'settings'>('analysis')
@@ -109,6 +110,9 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [authForm, setAuthForm] = useState({ username: '', password: '' })
   const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [authConflictOpen, setAuthConflictOpen] = useState(false)
+  const [authConflictCloudAccounts, setAuthConflictCloudAccounts] = useState<any[] | null>(null)
+  const authSyncCheckedRef = useRef(false)
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null)
   const [notification, setNotification] = useState<{
     open: boolean
@@ -130,6 +134,61 @@ const App: React.FC = () => {
 
   const handleCloseNotification = () => {
     setNotification(prev => ({ ...prev, open: false }))
+  }
+
+  const fetchCloudAccounts = async (token: string) => {
+    const res = await fetch(`${API_BASE_URL}/accounts`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error('Failed to fetch cloud accounts')
+    const json = await res.json()
+    return Array.isArray(json?.account_data) ? json.account_data : null
+  }
+
+  const mergeAccountsToCloud = async (token: string, list: any[]) => {
+    const res = await fetch(`${API_BASE_URL}/accounts/merge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ account_data: list })
+    })
+    if (!res.ok) throw new Error('Failed to merge cloud accounts')
+  }
+
+  const handlePostLoginSync = async (token: string, localAccounts: any[]) => {
+    try {
+      const cloudAccounts = await fetchCloudAccounts(token)
+      if (!cloudAccounts) {
+        if (localAccounts.length > 0) {
+          await mergeAccountsToCloud(token, localAccounts)
+          const merged = await fetchCloudAccounts(token)
+          if (merged) {
+            setAccounts(merged)
+            setUploadedFileName('云端数据')
+          }
+        }
+        return
+      }
+
+      if (localAccounts.length === 0) {
+        setAccounts(cloudAccounts)
+        setUploadedFileName('云端数据')
+        return
+      }
+
+      if (JSON.stringify(cloudAccounts) !== JSON.stringify(localAccounts)) {
+        setAuthConflictCloudAccounts(cloudAccounts)
+        setAuthConflictOpen(true)
+        return
+      }
+
+      setUploadedFileName('云端数据')
+    } catch (error) {
+      console.error('Failed to sync after login:', error)
+    }
   }
 
   useEffect(() => {
@@ -154,6 +213,8 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load accounts from storage:', error)
+    } finally {
+      setAccountsLoaded(true)
     }
   }, [])
 
@@ -189,25 +250,17 @@ const App: React.FC = () => {
     }
   }, [authToken, authUsername])
   
-  // Cloud Sync: Fetch Accounts
+  // Cloud Sync: Resolve on login
   useEffect(() => {
-    if (!authToken) return
-    const fetchAccounts = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/accounts`, {
-           headers: { 'Authorization': `Bearer ${authToken}` }
-        })
-        if (res.ok) {
-           const json = await res.json()
-           if (json && json.account_data && Array.isArray(json.account_data)) {
-               setAccounts(json.account_data)
-               setUploadedFileName('云端数据')
-           }
-        }
-      } catch (e) { console.error('Failed to fetch cloud accounts', e) }
+    if (!authToken) {
+      authSyncCheckedRef.current = false
+      return
     }
-    fetchAccounts()
-  }, [authToken])
+    if (!accountsLoaded) return
+    if (authSyncCheckedRef.current) return
+    authSyncCheckedRef.current = true
+    handlePostLoginSync(authToken, accounts)
+  }, [authToken, accountsLoaded, accounts])
 
   const handleAccountsLoaded = async (payload: AccountsPayload) => {
     setAccounts(payload.accounts)
@@ -218,20 +271,31 @@ const App: React.FC = () => {
     }
     
     if (authToken && payload.accounts.length > 0) {
-        try {
-            await fetch(`${API_BASE_URL}/accounts`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`
-                },
-                body: JSON.stringify({ account_data: payload.accounts })
-            })
-            handleStatusChange('账号数据已同步至云端', 'success')
-        } catch (e) {
-            console.error(e)
-            handleStatusChange('同步账号数据失败', 'error')
+      try {
+        await fetch(`${API_BASE_URL}/accounts/merge`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ account_data: payload.accounts })
+        })
+
+        const mergedRes = await fetch(`${API_BASE_URL}/accounts`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+        if (mergedRes.ok) {
+          const json = await mergedRes.json()
+          if (json && json.account_data && Array.isArray(json.account_data)) {
+            setAccounts(json.account_data)
+            setUploadedFileName('云端数据')
+          }
         }
+        handleStatusChange('账号数据已同步至云端', 'success')
+      } catch (e) {
+        console.error(e)
+        handleStatusChange('同步账号数据失败', 'error')
+      }
     }
   }
 
@@ -298,6 +362,7 @@ const App: React.FC = () => {
         setAuthToken(data.token)
         setAuthUsername(authForm.username.trim())
         setAuthDialogOpen(false)
+        authSyncCheckedRef.current = false
         handleStatusChange(t('auth.successLogin') || '登录成功', 'success')
       } else {
         handleStatusChange(t('auth.failedLogin') || '登录失败', 'error')
@@ -313,7 +378,37 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setAuthToken(null)
     setAuthUsername(null)
+    authSyncCheckedRef.current = false
+    setAuthConflictOpen(false)
+    setAuthConflictCloudAccounts(null)
     handleStatusChange(t('auth.logoutSuccess') || '已退出', 'success')
+  }
+
+  const handleConflictUseLocal = async () => {
+    if (!authToken) return
+    try {
+      await mergeAccountsToCloud(authToken, accounts)
+      const merged = await fetchCloudAccounts(authToken)
+      if (merged) {
+        setAccounts(merged)
+        setUploadedFileName('云端数据')
+      }
+      setAuthConflictOpen(false)
+    } catch (error) {
+      console.error('Failed to upload local accounts:', error)
+    }
+  }
+
+  const handleConflictUseCloud = () => {
+    if (authConflictCloudAccounts) {
+      setAccounts(authConflictCloudAccounts)
+      setUploadedFileName('云端数据')
+    }
+    setAuthConflictOpen(false)
+  }
+
+  const handleConflictLogout = () => {
+    handleLogout()
   }
 
   const handleUpdateUser = (newToken: string, newUsername: string) => {
@@ -411,10 +506,9 @@ const App: React.FC = () => {
                       </ToggleButtonGroup>
                     </Box>
 
-                    <SingleJsonUpload
-                      onAccountsLoaded={handleAccountsLoaded}
-                      persistedFileName={uploadedFileName}
-                    />
+                      <SingleJsonUpload
+                        onAccountsLoaded={handleAccountsLoaded}
+                      />
                   </Box>
 
                   <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', mt: 2 }}>
@@ -534,6 +628,26 @@ const App: React.FC = () => {
             {notification.message}
           </Alert>
         </Snackbar>
+
+        <Dialog open={authConflictOpen} onClose={() => {}} maxWidth="xs" fullWidth>
+          <DialogTitle>{t('auth.conflictTitle') || '检测到云端冲突'}</DialogTitle>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {t('auth.conflictDesc') || '本地账号与云端账号不一致，请选择处理方式。'}
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+            <Button onClick={handleConflictUseLocal}>
+              {t('auth.conflictUseLocal') || '本地上传到云'}
+            </Button>
+            <Button onClick={handleConflictUseCloud}>
+              {t('auth.conflictUseCloud') || '云覆盖本地'}
+            </Button>
+            <Button color="error" onClick={handleConflictLogout}>
+              {t('auth.conflictLogout') || '退出登录'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Dialog open={authDialogOpen} onClose={closeAuthDialog} maxWidth="xs" fullWidth>
           <DialogTitle>{authTitle}</DialogTitle>

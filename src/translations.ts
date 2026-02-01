@@ -34,6 +34,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'auth.successRegister': '注册成功，请登录',
     'auth.loggedIn': '已登录',
     'auth.greeting': '出刀吧！',
+    'auth.conflictTitle': '检测到云端冲突',
+    'auth.conflictDesc': '本地账号与云端账号不一致，请选择处理方式。',
+    'auth.conflictUseLocal': '本地上传到云',
+    'auth.conflictUseCloud': '云覆盖本地',
+    'auth.conflictLogout': '退出登录',
 
     // Settings & Security
     'settings.menu': '设置',
@@ -283,6 +288,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'auth.successRegister': 'Registration successful, please log in',
     'auth.loggedIn': 'Logged in',
     'auth.greeting': 'Time to Strike!',
+    'auth.conflictTitle': 'Cloud conflict detected',
+    'auth.conflictDesc': 'Local accounts differ from cloud data. Choose how to proceed.',
+    'auth.conflictUseLocal': 'Upload local to cloud',
+    'auth.conflictUseCloud': 'Overwrite local with cloud',
+    'auth.conflictLogout': 'Log out',
 
     // Settings & Security
     'settings.menu': 'Settings',
