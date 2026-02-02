@@ -86,6 +86,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'page.analysis': '账号分析',
     'page.unionRaid': '联盟突袭',
 
+    // 账号列表
+    'accountList.label': '账号列表',
+    'accountList.default': '默认账号列表',
+    'accountList.unnamed': '未命名账号列表',
+
     // 分析页
     accountAnalysis: '账号分析',
     account: '账号',
@@ -344,6 +349,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     // Page switch
     'page.analysis': 'Account Analysis',
     'page.unionRaid': 'Union Raid',
+
+    // Account list
+    'accountList.label': 'Account List',
+    'accountList.default': 'Default Account List',
+    'accountList.unnamed': 'Unnamed Account List',
 
     // Analyzer
     accountAnalysis: 'Account Analysis',

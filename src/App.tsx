@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress } from '@mui/material'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, FormControl, InputLabel, Select, MenuItem } from '@mui/material'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import TeamBuilder from './components/TeamBuilder'
@@ -97,11 +98,19 @@ const SIDEBAR_TOGGLE_SIZE = 44
 const App: React.FC = () => {
   const { t, lang, toggleLang } = useI18n()
   const [accounts, setAccounts] = useState<any[]>([])
+  const [accountLists, setAccountLists] = useState<Array<{ id: string; name: string; data: any[] }>>([])
+  const [selectedAccountListId, setSelectedAccountListId] = useState<string>('')
   const [uploadedFileName, setUploadedFileName] = useState<string | undefined>(undefined)
   const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
-  const [currentPage, setCurrentPage] = useState<'analysis' | 'unionRaid' | 'settings'>('analysis')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const currentPage = useMemo<'analysis' | 'unionRaid' | 'settings'>(() => {
+    if (location.pathname.startsWith('/setting')) return 'settings'
+    if (location.pathname.startsWith('/union-raid')) return 'unionRaid'
+    return 'analysis'
+  }, [location.pathname])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [authUsername, setAuthUsername] = useState<string | null>(null)
@@ -121,6 +130,7 @@ const App: React.FC = () => {
     message: '',
     severity: 'info'
   })
+  const builtAccountsCacheRef = useRef<Record<string, any[]>>({})
 
   const handleStatusChange = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setNotification({
@@ -297,36 +307,92 @@ const App: React.FC = () => {
     return accounts.filter(Boolean)
   }
 
+  const normalizeAccountLists = useCallback((input: any, fallbackName: string) => {
+    if (Array.isArray(input)) {
+      if (input.length > 0 && (input[0]?.data || input[0]?.accounts || input[0]?.name || input[0]?.id)) {
+        return input
+          .map((item: any, idx: number) => {
+            const data = Array.isArray(item?.data) ? item.data : (Array.isArray(item?.accounts) ? item.accounts : [])
+            const id = item?.id ?? item?.list_id ?? String(idx + 1)
+            return {
+              id: id === undefined || id === null ? '' : String(id),
+              name: item?.name || fallbackName,
+              data,
+            }
+          })
+          .filter((item: any) => item.id || item.name)
+      }
+      return [{ id: 'default', name: fallbackName, data: input }]
+    }
+    return []
+  }, [])
+
+  const buildAccountsForList = useCallback(async (list: { id: string; name: string; data: any[] }) => {
+    if (!list?.id) return []
+    const cached = builtAccountsCacheRef.current[list.id]
+    if (cached) return cached
+    const built = await buildAccountsFromCookies(list.data || [])
+    builtAccountsCacheRef.current[list.id] = built
+    return built
+  }, [buildAccountsFromCookies])
+
+  const applyAccountListSelection = useCallback(async (listId: string, lists: Array<{ id: string; name: string; data: any[] }>) => {
+    const target = lists.find((item) => item.id === listId) || lists[0]
+    if (!target) {
+      setAccounts([])
+      setUploadedFileName(undefined)
+      setTeamChars([])
+      setCoeffsMap({})
+      return
+    }
+    setSelectedAccountListId(target.id)
+    setUploadedFileName(target.name || '云端数据')
+    setTeamChars([])
+    setCoeffsMap({})
+    const built = await buildAccountsForList(target)
+    setAccounts(built)
+  }, [buildAccountsForList])
+
   const loadAccountsFromBackend = async (token: string, gameAccounts?: any[]) => {
     try {
       const source = Array.isArray(gameAccounts) && gameAccounts.length
         ? gameAccounts
-        : (await fetchCloudAccounts(token)) || []
+        : (await fetchCloudAccountLists(token)) || []
 
-      if (!Array.isArray(source) || source.length === 0) {
+      const normalized = normalizeAccountLists(source, t('accountList.default') || '默认账号列表')
+
+      if (!Array.isArray(normalized) || normalized.length === 0) {
         setAccounts([])
         setUploadedFileName(undefined)
         setTeamChars([])
         setCoeffsMap({})
+        setAccountLists([])
+        setSelectedAccountListId('')
         return
       }
 
-      const built = await buildAccountsFromCookies(source)
-      setAccounts(built)
-      setUploadedFileName('云端数据')
+      builtAccountsCacheRef.current = {}
+      setAccountLists(normalized)
+      const preferredId = selectedAccountListId && normalized.some((item) => item.id === selectedAccountListId)
+        ? selectedAccountListId
+        : (normalized[0]?.id || '')
+      await applyAccountListSelection(preferredId, normalized)
     } catch (error) {
       console.error('Failed to load accounts from backend:', error)
     }
   }
 
-  const fetchCloudAccounts = async (token: string) => {
+  const fetchCloudAccountLists = async (token: string) => {
     const res = await fetch(`${API_BASE_URL}/accounts`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     if (res.status === 404) return null
     if (!res.ok) throw new Error('Failed to fetch cloud accounts')
     const json = await res.json()
-    return Array.isArray(json?.account_data) ? json.account_data : null
+    if (Array.isArray(json?.lists)) return json.lists
+    if (Array.isArray(json?.account_data)) return json.account_data
+    if (Array.isArray(json?.accounts)) return json.accounts
+    return null
   }
 
   useEffect(() => {
@@ -345,8 +411,22 @@ const App: React.FC = () => {
       const raw = window.localStorage.getItem(ACCOUNTS_STORAGE_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw)
-      if (!parsed || !Array.isArray(parsed.accounts)) return
-      setAccounts(parsed.accounts)
+      if (!parsed) return
+      if (Array.isArray(parsed.accountLists)) {
+        setAccountLists(parsed.accountLists)
+      }
+      if (typeof parsed.selectedAccountListId === 'string') {
+        setSelectedAccountListId(parsed.selectedAccountListId)
+      }
+      if (Array.isArray(parsed.accounts)) {
+        setAccounts(parsed.accounts)
+        if (!Array.isArray(parsed.accountLists)) {
+          const fallbackId = 'default'
+          setAccountLists([{ id: fallbackId, name: t('accountList.default') || '默认账号列表', data: parsed.accounts }])
+          setSelectedAccountListId(fallbackId)
+          builtAccountsCacheRef.current[fallbackId] = parsed.accounts
+        }
+      }
       if (typeof parsed.fileName === 'string') {
         setUploadedFileName(parsed.fileName)
       }
@@ -359,19 +439,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (!accounts || accounts.length === 0) {
+    if ((!accounts || accounts.length === 0) && (!accountLists || accountLists.length === 0)) {
       window.localStorage.removeItem(ACCOUNTS_STORAGE_KEY)
       return
     }
     try {
       window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify({
         accounts,
-        fileName: uploadedFileName ?? null
+        fileName: uploadedFileName ?? null,
+        accountLists,
+        selectedAccountListId
       }))
     } catch (error) {
       console.error('Failed to persist accounts:', error)
     }
-  }, [accounts, uploadedFileName])
+  }, [accounts, uploadedFileName, accountLists, selectedAccountListId])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -403,6 +485,13 @@ const App: React.FC = () => {
       })
       .catch(() => {})
   }, [authToken, authAvatarUrl, authUsername])
+
+  useEffect(() => {
+    if (!accountLists.length) return
+    if (!selectedAccountListId || !accountLists.some((item) => item.id === selectedAccountListId)) {
+      setSelectedAccountListId(accountLists[0]?.id || '')
+    }
+  }, [accountLists, selectedAccountListId])
   
   // Cloud Sync: Resolve on login
   useEffect(() => {
@@ -525,7 +614,7 @@ const App: React.FC = () => {
     avatarUrl={authAvatarUrl}
     onLoginClick={openLoginDialog}
     onLogoutClick={handleLogout}
-    onSettingsClick={() => setCurrentPage('settings')}
+    onSettingsClick={() => navigate('/setting')}
   />
         <Container maxWidth={false} disableGutters sx={{ flex: 1, pt: 0, pb: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ display: 'flex', gap: 0, flex: 1, minHeight: 0, position: 'relative' }}>
@@ -593,10 +682,36 @@ const App: React.FC = () => {
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
                     <Box>
+                      <FormControl fullWidth size="small">
+                        <InputLabel id="account-list-select-label">{t('accountList.label') || '账号列表'}</InputLabel>
+                        <Select
+                          labelId="account-list-select-label"
+                          value={selectedAccountListId}
+                          label={t('accountList.label') || '账号列表'}
+                          onChange={async (event) => {
+                            const nextId = String(event.target.value || '')
+                            if (!nextId || nextId === selectedAccountListId) return
+                            await applyAccountListSelection(nextId, accountLists)
+                          }}
+                          disabled={accountLists.length === 0}
+                        >
+                          {accountLists.map((list) => (
+                            <MenuItem key={list.id} value={list.id}>
+                              {list.name || t('accountList.unnamed') || '未命名账号列表'}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Box>
+                    <Box>
                       <ToggleButtonGroup
                         value={currentPage}
                         exclusive
-                        onChange={(_, val) => val && setCurrentPage(val)}
+                        onChange={(_, val) => {
+                          if (!val) return
+                          if (val === 'analysis') navigate('/')
+                          if (val === 'unionRaid') navigate('/union-raid')
+                        }}
                         size="small"
                         fullWidth
                       >

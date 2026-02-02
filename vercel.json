@@ -9,6 +9,10 @@
     {
       "source": "/api/ugc/:path*",
       "destination": "/api/proxy"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
