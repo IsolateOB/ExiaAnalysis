@@ -7,7 +7,6 @@ import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Containe
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import TeamBuilder from './components/TeamBuilder'
-import { fetchNikkeList } from './services/nikkeList'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
 import UnionRaidStats from './components/UnionRaidStats'
 import type { Character, AttributeCoefficients } from './types'
@@ -105,6 +104,7 @@ const App: React.FC = () => {
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const location = useLocation()
   const navigate = useNavigate()
+  const rebuildAccountsRef = useRef(false)
   const currentPage = useMemo<'analysis' | 'unionRaid' | 'settings'>(() => {
     if (location.pathname.startsWith('/setting')) return 'settings'
     if (location.pathname.startsWith('/union-raid')) return 'unionRaid'
@@ -143,6 +143,7 @@ const App: React.FC = () => {
     setNotification(prev => ({ ...prev, open: false }))
   }
 
+
   const fetchProfile = async (token: string) => {
     const res = await fetch(`${API_BASE_URL}/me`, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -155,6 +156,60 @@ const App: React.FC = () => {
     if (!cookieStr) return ''
     const match = cookieStr.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
     return match ? match[1] : ''
+  }
+
+  const buildEquipments = (char: any, effectsMap: Record<string, any>) => {
+    const equipments: Record<number, any[]> = {}
+    const equipSlots = ['head', 'torso', 'arm', 'leg']
+    equipSlots.forEach((slot, idx) => {
+      const details: any[] = []
+      for (let i = 1; i <= 3; i += 1) {
+        const optionKey = `${slot}_equip_option${i}_id`
+        const optionId = char[optionKey]
+        if (optionId && optionId !== 0) {
+          const effect = effectsMap[String(optionId)]
+          if (effect?.function_details) {
+            effect.function_details.forEach((func: any) => {
+              details.push({
+                function_type: func.function_type,
+                function_value: Math.abs(func.function_value) / 100,
+                level: func.level
+              })
+            })
+          }
+        }
+      }
+      equipments[idx] = details
+    })
+    return equipments
+  }
+
+  const resolveItemRare = (tid: number | undefined) => {
+    if (!tid) return ''
+    const tidStr = String(tid)
+    const firstDigit = Number(tidStr.charAt(0))
+    const lastDigit = Number(tidStr.charAt(tidStr.length - 1))
+    if (firstDigit === 2) return 'SSR'
+    if (firstDigit === 1) return lastDigit === 1 ? 'R' : lastDigit === 2 ? 'SR' : ''
+    return ''
+  }
+
+  const getEquipSumStats = (equipments: Record<number, any[]> | undefined) => {
+    const sum = { IncElementDmg: 0, StatAtk: 0 }
+    if (!equipments) return sum
+    for (let slot = 0; slot < 4; slot += 1) {
+      const eqList = Array.isArray(equipments?.[slot]) ? equipments[slot] : []
+      eqList.forEach(({ function_type, function_value }: any) => {
+        const v = typeof function_value === 'number' ? function_value / 100 : 0
+        if (function_type === 'IncElementDmg') sum.IncElementDmg += v
+        if (function_type === 'StatAtk') sum.StatAtk += v
+      })
+    }
+    return sum
+  }
+
+  const computeAELScore = (grade: number, core: number, atk: number, elem: number) => {
+    return (1 + 0.9 * atk) * (1 + (elem + 0.10)) * (grade * 0.03 + core * 0.02 + 1)
   }
 
   const getRoleInfoByCookie = async (cookie: string) => {
@@ -194,61 +249,108 @@ const App: React.FC = () => {
     return res.json()
   }
 
+  const accountDetailCacheRef = useRef<Record<string, Set<number>>>({})
+
+  const getAccountCacheKey = (acc: any, index: number) => {
+    return String(acc?.game_uid || acc?.gameUid || acc?.cookie || acc?.name || index)
+  }
+
+  const enrichAccountsWithDetails = useCallback(async (nameCodes: number[]) => {
+    if (!nameCodes.length) return
+    const uniqueCodes = Array.from(new Set(nameCodes.filter((c) => Number.isFinite(c))))
+    if (!uniqueCodes.length) return
+
+    console.debug('[AEL] request details for name_codes:', uniqueCodes)
+
+    for (let idx = 0; idx < accounts.length; idx += 1) {
+      const acc = accounts[idx]
+      const cookie = acc?.cookie
+      const areaId = acc?.area_id
+      if (!cookie || !areaId) continue
+
+      const cacheKey = getAccountCacheKey(acc, idx)
+      if (!accountDetailCacheRef.current[cacheKey]) {
+        accountDetailCacheRef.current[cacheKey] = new Set()
+      }
+      const cacheSet = accountDetailCacheRef.current[cacheKey]
+      const missingCodes = uniqueCodes.filter((code) => !cacheSet.has(code))
+      if (!missingCodes.length) continue
+
+      console.debug('[AEL] account', idx, 'missing codes:', missingCodes.length)
+
+      const intlOpenId = parseCookieValue(cookie, 'game_openid')
+      const payloadBase: any = { nikke_area_id: parseInt(areaId) }
+      if (intlOpenId) payloadBase.intl_open_id = intlOpenId
+
+      try {
+        const detailsResp = await postProxy('game', 'proxy/Game/GetUserCharacterDetails', cookie, {
+          ...payloadBase,
+          name_codes: missingCodes
+        })
+        const detailList = Array.isArray(detailsResp?.data?.character_details) ? detailsResp.data.character_details : []
+        const stateEffects = Array.isArray(detailsResp?.data?.state_effects) ? detailsResp.data.state_effects : []
+        console.debug('[AEL] detail response size:', detailList.length, 'effects:', stateEffects.length)
+        const effectsMap: Record<string, any> = {}
+        stateEffects.forEach((effect: any) => {
+          effectsMap[String(effect.id)] = effect
+        })
+        const normalizedDetails: Record<string, any> = {}
+        detailList.forEach((detail: any) => {
+          const nameCode = detail?.name_code
+          if (nameCode == null) return
+          const equipments = buildEquipments(detail, effectsMap)
+          const limitBreak = {
+            grade: typeof detail?.grade === 'number' ? detail.grade : 0,
+            core: typeof detail?.core === 'number' ? detail.core : 0
+          }
+          const itemLevel = detail?.favorite_item_lv >= 0 ? detail.favorite_item_lv : ''
+          const itemRare = resolveItemRare(detail?.favorite_item_tid)
+          const equipStats = getEquipSumStats(equipments)
+          const ael = computeAELScore(limitBreak.grade, limitBreak.core, equipStats.StatAtk, equipStats.IncElementDmg)
+          normalizedDetails[String(nameCode)] = {
+            ...detail,
+            name_code: nameCode,
+            limit_break: limitBreak,
+            skill1_level: detail?.skill1_lv || 1,
+            skill2_level: detail?.skill2_lv || 1,
+            skill_burst_level: detail?.ulti_skill_lv || 1,
+            item_level: itemLevel,
+            item_rare: itemRare,
+            equipments,
+            AtkElemLbScore: Number.isFinite(ael) ? Number(ael.toFixed(2)) : undefined
+          }
+        })
+
+        setAccounts((prev) => {
+          const next = [...prev]
+          const target = next[idx]
+          if (!target) return prev
+          const prevMap = target.characterDetailsByCode || {}
+          const merged = { ...prevMap, ...normalizedDetails }
+          console.debug('[AEL] updated account', idx, 'details keys:', Object.keys(merged).length)
+          next[idx] = { ...target, characterDetailsByCode: merged }
+          return next
+        })
+
+        missingCodes.forEach((code) => cacheSet.add(code))
+      } catch (error) {
+        console.error('Failed to fetch character details:', error)
+      }
+    }
+  }, [accounts])
+
   const buildAccountsFromCookies = async (rawAccounts: any[]) => {
     if (!rawAccounts || rawAccounts.length === 0) return []
-    const { nikkes } = await fetchNikkeList()
-    const nikkeMap = new Map<string, Character>()
-    nikkes.forEach((n) => {
-      nikkeMap.set(String(n.id), n)
-      nikkeMap.set(String(n.name_code), n)
-    })
-
-    const elementKeys = ['Electronic', 'Fire', 'Wind', 'Water', 'Iron', 'Utility']
-
-    const buildEquipments = (char: any, effectsMap: Record<string, any>) => {
-      const equipments: Record<number, any[]> = {}
-      const equipSlots = ['head', 'torso', 'arm', 'leg']
-      equipSlots.forEach((slot, idx) => {
-        const details: any[] = []
-        for (let i = 1; i <= 3; i += 1) {
-          const optionKey = `${slot}_equip_option${i}_id`
-          const optionId = char[optionKey]
-          if (optionId && optionId !== 0) {
-            const effect = effectsMap[String(optionId)]
-            if (effect?.function_details) {
-              effect.function_details.forEach((func: any) => {
-                details.push({
-                  function_type: func.function_type,
-                  function_value: Math.abs(func.function_value) / 100,
-                  level: func.level
-                })
-              })
-            }
-          }
-        }
-        equipments[idx] = details
-      })
-      return equipments
-    }
-
-    const resolveItemRare = (tid: number | undefined) => {
-      if (!tid) return ''
-      const tidStr = String(tid)
-      const firstDigit = Number(tidStr.charAt(0))
-      const lastDigit = Number(tidStr.charAt(tidStr.length - 1))
-      if (firstDigit === 2) return 'SSR'
-      if (firstDigit === 1) return lastDigit === 1 ? 'R' : lastDigit === 2 ? 'SR' : ''
-      return ''
-    }
 
     const normalizeBuiltAccount = (raw: any, fallbackName: string) => {
       const name = raw?.name || raw?.role_name || fallbackName
+      const { elements: _elements, ...rest } = raw || {}
       return {
-        ...raw,
+        ...rest,
         name,
         role_name: raw?.role_name || name,
         game_uid: raw?.game_uid ?? raw?.gameUid ?? raw?.gameUID ?? '',
-        elements: raw?.elements && typeof raw.elements === 'object' ? raw.elements : {},
+        characterDetailsByCode: raw?.characterDetailsByCode || {},
         synchroLevel: Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)),
         outpostLevel: Number.isFinite(raw?.outpostLevel) ? raw.outpostLevel : (Number.isFinite(raw?.outpost_level) ? raw.outpost_level : 0)
       }
@@ -256,10 +358,6 @@ const App: React.FC = () => {
 
     const accounts = await Promise.all(rawAccounts.map(async (raw, idx) => {
       const fallbackName = raw?.name || raw?.role_name || raw?.game_uid || raw?.gameUid || `账号${idx + 1}`
-      if (raw?.elements && typeof raw.elements === 'object') {
-        return normalizeBuiltAccount(raw, fallbackName)
-      }
-
       const cookie = raw?.cookie || ''
       if (!cookie) {
         return normalizeBuiltAccount(raw, fallbackName)
@@ -278,64 +376,6 @@ const App: React.FC = () => {
         const synchroLevel = Number.isFinite(outpostInfo.synchro_level) ? outpostInfo.synchro_level : 0
         const outpostLevel = Number.isFinite(outpostInfo.outpost_battle_level) ? outpostInfo.outpost_battle_level : 0
 
-        const intlOpenId = parseCookieValue(cookie, 'game_openid')
-        const payloadBase: any = { nikke_area_id: parseInt(areaId) }
-        if (intlOpenId) payloadBase.intl_open_id = intlOpenId
-
-      const charsResp = await postProxy('game', 'proxy/Game/GetUserCharacters', cookie, payloadBase)
-      const userChars = Array.isArray(charsResp?.data?.characters) ? charsResp.data.characters : []
-      const nameCodes = Array.from(new Set(userChars.map((c: any) => c.name_code).filter((v: any) => v !== undefined && v !== null)))
-
-      let detailList: any[] = []
-      let effectsMap: Record<string, any> = {}
-      if (nameCodes.length) {
-        const detailsResp = await postProxy('game', 'proxy/Game/GetUserCharacterDetails', cookie, {
-          ...payloadBase,
-          name_codes: nameCodes
-        })
-        detailList = Array.isArray(detailsResp?.data?.character_details) ? detailsResp.data.character_details : []
-        const stateEffects = Array.isArray(detailsResp?.data?.state_effects) ? detailsResp.data.state_effects : []
-        stateEffects.forEach((effect: any) => {
-          effectsMap[String(effect.id)] = effect
-        })
-      }
-
-      const detailMap: Record<string, any> = {}
-      detailList.forEach((d: any) => {
-        detailMap[String(d.name_code)] = d
-      })
-
-      const elements: Record<string, any[]> = {}
-      elementKeys.forEach((k) => { elements[k] = [] })
-
-      userChars.forEach((uc: any) => {
-        const detail = detailMap[String(uc.name_code)]
-        const nikke = nikkeMap.get(String(uc.name_code))
-        const elementKey = nikke?.element || 'Utility'
-        const itemLevel = detail?.favorite_item_lv >= 0 ? detail.favorite_item_lv : ''
-        const itemRare = resolveItemRare(detail?.favorite_item_tid)
-        elements[elementKey] = elements[elementKey] || []
-        elements[elementKey].push({
-          id: uc.name_code,
-          name_code: uc.name_code,
-          lv: uc.lv || 1,
-          combat: uc.combat || 0,
-          core: uc.core || 0,
-          grade: uc.grade || 0,
-          costume_id: uc.costume_id || 0,
-          skill1_level: detail?.skill1_lv || 1,
-          skill2_level: detail?.skill2_lv || 1,
-          skill_burst_level: detail?.ulti_skill_lv || 1,
-          item_level: itemLevel,
-          item_rare: itemRare,
-          limit_break: { grade: uc.grade || 0, core: uc.core || 0 },
-          equipments: detail ? buildEquipments(detail, effectsMap) : undefined,
-          synchroLevel,
-          outpostLevel,
-          AtkElemLbScore: uc.atk_elem_lb_score || uc.AtkElemLbScore || 0
-        })
-      })
-
         return {
           name: roleName || fallbackName,
           role_name: roleName || fallbackName,
@@ -344,7 +384,7 @@ const App: React.FC = () => {
           cookie,
           synchroLevel,
           outpostLevel,
-          elements
+          characterDetailsByCode: {}
         }
       } catch (error) {
         console.error('Failed to build account data, fallback to raw:', error)
@@ -504,7 +544,15 @@ const App: React.FC = () => {
     if (!accountLists.length || !selectedAccountListId) return
     const hasMissingArea = accounts.some((acc) => acc?.cookie && !acc?.area_id)
     if (accounts.length === 0 || hasMissingArea) {
-      applyAccountListSelection(selectedAccountListId, accountLists)
+      if (rebuildAccountsRef.current) return
+      rebuildAccountsRef.current = true
+      ;(async () => {
+        try {
+          await applyAccountListSelection(selectedAccountListId, accountLists)
+        } finally {
+          rebuildAccountsRef.current = false
+        }
+      })()
     }
   }, [accountLists, selectedAccountListId, accounts, applyAccountListSelection])
   
@@ -752,7 +800,14 @@ const App: React.FC = () => {
                         externalTeam={teamChars}
                         authToken={authToken}
                         onTeamSelectionChange={(chars, coeffs) => {
-                          setTeamChars(chars); setCoeffsMap(coeffs)
+                          setTeamChars(chars)
+                          setCoeffsMap(coeffs)
+                          const selectedNameCodes = chars
+                            .map((c) => c?.name_code)
+                            .filter((id): id is number => typeof id === 'number' && Number.isFinite(id))
+                          if (selectedNameCodes.length) {
+                            enrichAccountsWithDetails(selectedNameCodes)
+                          }
                         }}
                       />
                     </Box>

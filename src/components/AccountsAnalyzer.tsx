@@ -52,13 +52,9 @@ const AccountsAnalyzer: React.FC<AccountsAnalyzerProps> = ({ accounts = [], team
           const coeff = coefficientsMap?.[pos + 1] || getDefaultCoefficients()
           // 找到该账号中的对应角色数据
           let target: any = null
-          if (acc?.elements) {
-            for (const list of Object.values(acc.elements) as any[]) {
-              if (Array.isArray(list)) {
-                const f = list.find((x: any) => String(x.id) === String(ch.id))
-                if (f) { target = f; break }
-              }
-            }
+          const nameCode = (ch as any)?.name_code
+          if (nameCode != null) {
+            target = acc?.characterDetailsByCode?.[String(nameCode)]
           }
           // AEL 直接读取
           const ael = Number(target?.AtkElemLbScore || target?.atkElemLbScore || 0)
