@@ -533,6 +533,30 @@ const App: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!(window as any).BroadcastChannel) return
+    const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
+    channel.onmessage = (event) => {
+      const payload = event?.data || {}
+      if (payload.type === 'auth:clear') {
+        setAuthToken(null)
+        setAuthUsername(null)
+        setAuthAvatarUrl(null)
+        handleStatusChange(t('auth.logoutSuccess') || '已退出', 'info')
+        return
+      }
+      if (payload.type === 'auth:update' && payload.token) {
+        setAuthToken(payload.token)
+        setAuthUsername(payload.username || null)
+        setAuthAvatarUrl(payload.avatar_url || null)
+      }
+    }
+    return () => {
+      channel.close()
+    }
+  }, [t])
+
+  useEffect(() => {
     if (authToken && authUsername) {
       broadcastAuth({
         type: 'auth:update',
