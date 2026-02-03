@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, FormControl, InputLabel, Select, MenuItem } from '@mui/material'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
@@ -89,7 +89,6 @@ const theme = createTheme({
   },
 })
 
-const ACCOUNTS_STORAGE_KEY = 'exia-analysis-accounts'
 const AUTH_STORAGE_KEY = 'exia-analysis-auth'
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 const SIDEBAR_WIDTH_MD = 400
@@ -158,6 +157,27 @@ const App: React.FC = () => {
     return match ? match[1] : ''
   }
 
+  const getRoleInfoByCookie = async (cookie: string) => {
+    const oldResp = await postProxy('ugc', 'direct/standalonesite/User/GetUserGamePlayerInfo', cookie, {})
+      .catch(() => null)
+
+    const areaId = oldResp?.data?.area_id ? String(oldResp.data.area_id) : ''
+    const oldName = oldResp?.data?.role_name || ''
+
+    if (areaId) {
+      const intlOpenId = parseCookieValue(cookie, 'game_openid')
+      const payload: any = { nikke_area_id: parseInt(areaId) }
+      if (intlOpenId) payload.intl_open_id = intlOpenId
+      const basicResp = await postProxy('game', 'proxy/Game/GetUserProfileBasicInfo', cookie, payload)
+        .catch(() => null)
+      const info = basicResp?.data?.basic_info || {}
+      const finalName = info.nickname || oldName || ''
+      return { role_name: finalName, area_id: info.area_id || areaId }
+    }
+
+    return { role_name: oldName || '', area_id: areaId }
+  }
+
   const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: any) => {
     const res = await fetch(`/api/${scope}/${path}`, {
       method: 'POST',
@@ -221,22 +241,46 @@ const App: React.FC = () => {
       return ''
     }
 
-    const accounts = await Promise.all(rawAccounts.map(async (raw) => {
+    const normalizeBuiltAccount = (raw: any, fallbackName: string) => {
+      const name = raw?.name || raw?.role_name || fallbackName
+      return {
+        ...raw,
+        name,
+        role_name: raw?.role_name || name,
+        game_uid: raw?.game_uid ?? raw?.gameUid ?? raw?.gameUID ?? '',
+        elements: raw?.elements && typeof raw.elements === 'object' ? raw.elements : {},
+        synchroLevel: Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)),
+        outpostLevel: Number.isFinite(raw?.outpostLevel) ? raw.outpostLevel : (Number.isFinite(raw?.outpost_level) ? raw.outpost_level : 0)
+      }
+    }
+
+    const accounts = await Promise.all(rawAccounts.map(async (raw, idx) => {
+      const fallbackName = raw?.name || raw?.role_name || raw?.game_uid || raw?.gameUid || `账号${idx + 1}`
+      if (raw?.elements && typeof raw.elements === 'object') {
+        return normalizeBuiltAccount(raw, fallbackName)
+      }
+
       const cookie = raw?.cookie || ''
-      if (!cookie) return null
-      const playerInfo = await postProxy('ugc', 'direct/standalonesite/User/GetUserGamePlayerInfo', cookie, {})
-      const areaId = String(playerInfo?.data?.area_id || '')
-      const roleName = playerInfo?.data?.role_name || ''
-      if (!areaId) return null
+      if (!cookie) {
+        return normalizeBuiltAccount(raw, fallbackName)
+      }
 
-      const outpost = await postProxy('game', 'proxy/Game/GetUserProfileOutpostInfo', cookie, { nikke_area_id: parseInt(areaId) })
-      const outpostInfo = outpost?.data?.outpost_info || {}
-      const synchroLevel = Number.isFinite(outpostInfo.synchro_level) ? outpostInfo.synchro_level : 0
-      const outpostLevel = Number.isFinite(outpostInfo.outpost_battle_level) ? outpostInfo.outpost_battle_level : 0
+      try {
+        const roleInfo = await getRoleInfoByCookie(cookie)
+        const areaId = String(roleInfo?.area_id || '')
+        const roleName = roleInfo?.role_name || ''
+        if (!areaId) {
+          return normalizeBuiltAccount({ ...raw, name: roleName }, fallbackName)
+        }
 
-      const intlOpenId = parseCookieValue(cookie, 'game_openid')
-      const payloadBase: any = { nikke_area_id: parseInt(areaId) }
-      if (intlOpenId) payloadBase.intl_open_id = intlOpenId
+        const outpost = await postProxy('game', 'proxy/Game/GetUserProfileOutpostInfo', cookie, { nikke_area_id: parseInt(areaId) })
+        const outpostInfo = outpost?.data?.outpost_info || {}
+        const synchroLevel = Number.isFinite(outpostInfo.synchro_level) ? outpostInfo.synchro_level : 0
+        const outpostLevel = Number.isFinite(outpostInfo.outpost_battle_level) ? outpostInfo.outpost_battle_level : 0
+
+        const intlOpenId = parseCookieValue(cookie, 'game_openid')
+        const payloadBase: any = { nikke_area_id: parseInt(areaId) }
+        if (intlOpenId) payloadBase.intl_open_id = intlOpenId
 
       const charsResp = await postProxy('game', 'proxy/Game/GetUserCharacters', cookie, payloadBase)
       const userChars = Array.isArray(charsResp?.data?.characters) ? charsResp.data.characters : []
@@ -292,15 +336,19 @@ const App: React.FC = () => {
         })
       })
 
-      return {
-        name: roleName,
-        role_name: roleName,
-        area_id: areaId,
-        game_uid: raw?.game_uid || raw?.gameUid || '',
-        cookie,
-        synchroLevel,
-        outpostLevel,
-        elements
+        return {
+          name: roleName || fallbackName,
+          role_name: roleName || fallbackName,
+          area_id: areaId,
+          game_uid: raw?.game_uid || raw?.gameUid || '',
+          cookie,
+          synchroLevel,
+          outpostLevel,
+          elements
+        }
+      } catch (error) {
+        console.error('Failed to build account data, fallback to raw:', error)
+        return normalizeBuiltAccount(raw, fallbackName)
       }
     }))
 
@@ -407,53 +455,12 @@ const App: React.FC = () => {
           setAuthAvatarUrl(parsedAuth.avatar_url || null)
         }
       }
-
-      const raw = window.localStorage.getItem(ACCOUNTS_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (!parsed) return
-      if (Array.isArray(parsed.accountLists)) {
-        setAccountLists(parsed.accountLists)
-      }
-      if (typeof parsed.selectedAccountListId === 'string') {
-        setSelectedAccountListId(parsed.selectedAccountListId)
-      }
-      if (Array.isArray(parsed.accounts)) {
-        setAccounts(parsed.accounts)
-        if (!Array.isArray(parsed.accountLists)) {
-          const fallbackId = 'default'
-          setAccountLists([{ id: fallbackId, name: t('accountList.default') || '默认账号列表', data: parsed.accounts }])
-          setSelectedAccountListId(fallbackId)
-          builtAccountsCacheRef.current[fallbackId] = parsed.accounts
-        }
-      }
-      if (typeof parsed.fileName === 'string') {
-        setUploadedFileName(parsed.fileName)
-      }
     } catch (error) {
-      console.error('Failed to load accounts from storage:', error)
+      console.error('Failed to load auth from storage:', error)
     } finally {
       setAccountsLoaded(true)
     }
   }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if ((!accounts || accounts.length === 0) && (!accountLists || accountLists.length === 0)) {
-      window.localStorage.removeItem(ACCOUNTS_STORAGE_KEY)
-      return
-    }
-    try {
-      window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify({
-        accounts,
-        fileName: uploadedFileName ?? null,
-        accountLists,
-        selectedAccountListId
-      }))
-    } catch (error) {
-      console.error('Failed to persist accounts:', error)
-    }
-  }, [accounts, uploadedFileName, accountLists, selectedAccountListId])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -492,6 +499,14 @@ const App: React.FC = () => {
       setSelectedAccountListId(accountLists[0]?.id || '')
     }
   }, [accountLists, selectedAccountListId])
+
+  useEffect(() => {
+    if (!accountLists.length || !selectedAccountListId) return
+    const hasMissingArea = accounts.some((acc) => acc?.cookie && !acc?.area_id)
+    if (accounts.length === 0 || hasMissingArea) {
+      applyAccountListSelection(selectedAccountListId, accountLists)
+    }
+  }, [accountLists, selectedAccountListId, accounts, applyAccountListSelection])
   
   // Cloud Sync: Resolve on login
   useEffect(() => {
@@ -590,6 +605,13 @@ const App: React.FC = () => {
     setAuthToken(null)
     setAuthUsername(null)
     setAuthAvatarUrl(null)
+    setAccounts([])
+    setAccountLists([])
+    setSelectedAccountListId('')
+    setUploadedFileName(undefined)
+    setTeamChars([])
+    setCoeffsMap({})
+    builtAccountsCacheRef.current = {}
     authSyncCheckedRef.current = false
     handleStatusChange(t('auth.logoutSuccess') || '已退出', 'success')
   }
