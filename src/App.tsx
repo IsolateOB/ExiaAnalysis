@@ -92,6 +92,7 @@ const AUTH_STORAGE_KEY = 'exia-analysis-auth'
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 const SIDEBAR_WIDTH_MD = 400
 const SIDEBAR_TOGGLE_SIZE = 44
+const AUTH_BROADCAST_CHANNEL = 'exia-auth'
 
 const App: React.FC = () => {
   const { t, lang, toggleLang } = useI18n()
@@ -518,6 +519,31 @@ const App: React.FC = () => {
       console.error('Failed to persist auth:', error)
     }
   }, [authToken, authUsername, authAvatarUrl])
+
+  const broadcastAuth = useCallback((payload: any) => {
+    if (typeof window === 'undefined') return
+    if (!(window as any).BroadcastChannel) return
+    try {
+      const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
+      channel.postMessage(payload)
+      channel.close()
+    } catch (error) {
+      console.error('Failed to broadcast auth:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (authToken && authUsername) {
+      broadcastAuth({
+        type: 'auth:update',
+        token: authToken,
+        username: authUsername,
+        avatar_url: authAvatarUrl || null
+      })
+      return
+    }
+    broadcastAuth({ type: 'auth:clear' })
+  }, [authToken, authUsername, authAvatarUrl, broadcastAuth])
 
   useEffect(() => {
     if (!authToken || authAvatarUrl) return

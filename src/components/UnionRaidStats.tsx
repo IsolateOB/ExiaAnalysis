@@ -8,6 +8,7 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   Tooltip,
+  IconButton,
   FormControl,
   InputLabel,
   Select,
@@ -24,6 +25,9 @@ import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import SaveIcon from '@mui/icons-material/Save'
+import CheckIcon from '@mui/icons-material/Check'
+import CloseIcon from '@mui/icons-material/Close'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import CircularProgress from '@mui/material/CircularProgress'
 import type { SelectChangeEvent } from '@mui/material/Select'
 import type { Character } from '../types'
@@ -173,95 +177,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     loadPlans()
   }, [authToken])
 
-  // Silent Polling for updates (every 5 seconds)
-  useEffect(() => {
-    if (!authToken) return
-
-    const poll = async () => {
-        try {
-            const res = await fetch(`${API_BASE_URL}/raid-plan`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            })
-            if (res.ok) {
-                const json = await res.json()
-                if (json && json.plan_data && Array.isArray(json.plan_data)) {
-                    const serverPlans = json.plan_data as RaidPlan[]
-                    
-                    setPlans(prevLocalPlans => {
-                        // Compare timestamps or content to decide update
-                        // Simple strategy: Update list if server has fresher data for any plan
-                        // OR simpler: Just replace list, React handles diff?
-                        // But need to update ACTIVE plan if it changed.
-                        
-                        let hasChanges = false
-                        if (serverPlans.length !== prevLocalPlans.length) hasChanges = true
-                        else {
-                            // Check updated timestamps
-                            for (const sp of serverPlans) {
-                                const lp = prevLocalPlans.find(l => l.id === sp.id)
-                                if (!lp || sp.updatedAt > lp.updatedAt) {
-                                    hasChanges = true
-                                    break
-                                }
-                            }
-                        }
-
-                        if (!hasChanges) return prevLocalPlans
-
-                        // If current plan updated, refresh UI
-                        // Need currentPlanId from closure? 
-                        // It is available in the effect scope if we include it in deps, 
-                        // but we want polling to be independent.
-                        // We can solve this by functional update or ref.
-                        // Let's rely on setPlans callback or separate effect.
-                        return serverPlans
-                    })
-                }
-            }
-        } catch (e) {
-            // Ignore polling errors
-            console.warn('Polling failed', e)
-        }
-    }
-
-    const intervalId = setInterval(poll, 5000)
-    return () => clearInterval(intervalId)
-  }, [authToken])
-
-  // Effect to update UI if Current Plan's data changed in "plans" array (via Polling)
-  // distinct from the "Sync planningState -> plans" logic.
-  // We need to detect: "plans" array updated from SERVER, and current active plan has new data.
-  // BUT avoid loop: Server update -> setPlans -> Effect -> replaceAllPlanning -> planningState change -> Effect -> setPlans -> Save...
-  // Mechanism:
-  // 1. Polling updates `plans`.
-  // 2. We compare `plans.find(current).data` with `planningState`.
-  // 3. If significantly different (and plan timestamp is new), we `replaceAllPlanning`.
-  // To verify strict "Newer from Server", we check updatedAt.
-  
-  // Ref to track last seen update time for current plan to avoid loop
-  const lastLoadedUpdateRef = useRef<number>(0)
-  
-  useEffect(() => {
-    if (!currentPlanId || plans.length === 0) return
-    const currentListPlan = plans.find(p => p.id === currentPlanId)
-    if (!currentListPlan) return
-
-    // If the plan in the list has a newer timestamp than what we last loaded/saved
-    if (currentListPlan.updatedAt > lastLoadedUpdateRef.current) {
-        // It's an update from server (or another tab)
-        // Check if data is actually different to avoid unnecessary UI flash
-        if (JSON.stringify(currentListPlan.data) !== JSON.stringify(planningState)) {
-             console.log('Auto-updating active plan from cloud...')
-             replaceAllPlanning(currentListPlan.data)
-             lastLoadedUpdateRef.current = currentListPlan.updatedAt
-        } else {
-             // Data matches, just update ref
-             lastLoadedUpdateRef.current = currentListPlan.updatedAt
-        }
-    }
-  }, [plans, currentPlanId, replaceAllPlanning, planningState])
-
-  // Modify "Sync planningState -> current plan" effect to update the Ref
+    // Modify "Sync planningState -> current plan" effect to update the Ref
   useEffect(() => {
     if (!currentPlanId) return
     
@@ -274,7 +190,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
              if (JSON.stringify(p.data) === JSON.stringify(planningState)) return p;
              
              // Valid local edit
-             lastLoadedUpdateRef.current = now // Update Ref so we don't re-import our own change
              return { ...p, data: planningState, updatedAt: now }
         }
         return p
@@ -331,10 +246,51 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       }
   }
 
+  const startRenamePlanById = (id: string) => {
+    const p = plans.find(plan => plan.id === id)
+    if (!p) return
+    setCurrentPlanId(id)
+    setRenamePlanName(p.name)
+    setIsRenamingPlan(true)
+  }
+
+  const cancelRenamePlan = () => {
+    setIsRenamingPlan(false)
+    setRenamePlanName('')
+  }
+
+  const handleDeletePlanById = (id: string) => {
+    if (!id) return
+    if (plans[0]?.id === id) {
+      onNotify?.(t('common.error') || '默认规划不可删除', 'warning')
+      return
+    }
+    const rest = plans.filter(p => p.id !== id)
+    setPlans(rest)
+    setCurrentPlanId(rest[0].id)
+    replaceAllPlanning(rest[0].data)
+  }
+
   const confirmRenamePlan = () => {
       if (!renamePlanName.trim()) return
       setPlans(prev => prev.map(p => p.id === currentPlanId ? { ...p, name: renamePlanName } : p))
       setIsRenamingPlan(false)
+  }
+
+  const handleDuplicatePlanById = (id: string) => {
+    const p = plans.find(plan => plan.id === id)
+    if (!p) return
+    const copyLabel = t('common.copy') || '复制'
+    const newPlan = {
+      ...p,
+      id: Math.random().toString(36).slice(2),
+      name: `${p.name} ${copyLabel}`,
+      data: JSON.parse(JSON.stringify(p.data || {})),
+      updatedAt: Date.now()
+    }
+    setPlans(prev => [...prev, newPlan])
+    setCurrentPlanId(newPlan.id)
+    replaceAllPlanning(newPlan.data)
   }
 
   useEffect(() => {
@@ -904,52 +860,99 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
           )}
           {authToken && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {isRenamingPlan ? (
-                    <TextField
-                        size="small"
-                        value={renamePlanName}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRenamePlanName(e.target.value)}
-                        onBlur={confirmRenamePlan}
-                        onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && confirmRenamePlan()}
-                        autoFocus
-                    />
-                ) : (
-                    <Select
-                        size="small"
-                        value={currentPlanId}
-                        onChange={(e) => {
-                            const newId = e.target.value
-                            const p = plans.find(pl => pl.id === newId)
-                            if (p) {
-                                setCurrentPlanId(newId)
-                                replaceAllPlanning(p.data)
-                            }
-                        }}
-                        sx={{ minWidth: 120 }}
-                    >
-                        {plans.map(p => (
-                            <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                        ))}
-                    </Select>
-                )}
+                <Select
+                    size="small"
+                    value={currentPlanId}
+                    onChange={(e) => {
+                        const newId = e.target.value
+                        const p = plans.find(pl => pl.id === newId)
+                        if (p) {
+                            setCurrentPlanId(newId)
+                            replaceAllPlanning(p.data)
+                        }
+                    }}
+                    sx={{ minWidth: 200, width: 240 }}
+                    renderValue={(val) => {
+                      const id = String(val || '')
+                      const item = plans.find((pl) => pl.id === id)
+                      const display = item?.name || ''
+                      return (
+                        <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>
+                          {display}
+                        </Typography>
+                      )
+                    }}
+                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                >
+                    {plans.map((p, index) => (
+                      <MenuItem key={p.id} value={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {isRenamingPlan && currentPlanId === p.id ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                              <TextField
+                                size="small"
+                                value={renamePlanName}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRenamePlanName(e.target.value)}
+                                onKeyDown={(e: React.KeyboardEvent) => {
+                                  if (e.key === 'Enter') {
+                                    e.stopPropagation()
+                                    confirmRenamePlan()
+                                  }
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation()
+                                    cancelRenamePlan()
+                                  }
+                                }}
+                                autoFocus
+                                sx={{ flex: 1, minWidth: 0 }}
+                              />
+                              <IconButton size="small" color="primary" aria-label={t('common.confirm') || '确认'} onClick={(e) => { e.stopPropagation(); confirmRenamePlan() }}>
+                                <CheckIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton size="small" aria-label={t('common.cancel') || '取消'} onClick={(e) => { e.stopPropagation(); cancelRenamePlan() }}>
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          ) : (
+                            <>
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Typography variant="body2" noWrap title={p.name}>{p.name}</Typography>
+                              </Box>
+                              <Tooltip title={t('common.edit') || '重命名'}>
+                                <IconButton size="small" aria-label={t('common.edit') || '重命名'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenamePlanById(p.id) }}>
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={t('common.copy') || '复制'}>
+                                <IconButton size="small" aria-label={t('common.copy') || '复制'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDuplicatePlanById(p.id) }}>
+                                  <ContentCopyIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={t('common.delete') || '删除'}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    aria-label={t('common.delete') || '删除'}
+                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeletePlanById(p.id) }}
+                                    disabled={index === 0}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </>
+                          )}
+                        </MenuItem>
+                    ))}
+                </Select>
                 
                 <Tooltip title={t('common.add') || '新建'}>
-                    <Button variant="outlined" sx={{ minWidth: 0, px: 1 }} onClick={handleCreatePlan}>
-                        <AddIcon />
-                    </Button>
+                  <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreatePlan}>
+                    {t('common.add') || '新建'}
+                  </Button>
                 </Tooltip>
                 
-                <Tooltip title={t('common.edit') || '重命名'}>
-                    <Button variant="outlined" sx={{ minWidth: 0, px: 1 }} onClick={handleRenamePlan} disabled={isRenamingPlan}>
-                        <EditIcon />
-                    </Button>
-                </Tooltip>
-
-                <Tooltip title={t('common.delete') || '删除'}>
-                    <Button variant="outlined" sx={{ minWidth: 0, px: 1 }} color="error" onClick={handleDeletePlan}>
-                        <DeleteIcon />
-                    </Button>
-                </Tooltip>
+                
                 
                 {cloudLoading && <CircularProgress size={20} />}
             </Box>

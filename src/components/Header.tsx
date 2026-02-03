@@ -108,7 +108,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'ExiaAnalysis', username, avata
                   <ListItemIcon>
                     <SettingsIcon fontSize="small" />
                   </ListItemIcon>
-                    {t('settings.menu') || '设置'}
+                    {t('settings.menu') || '用户设置'}
                 </MenuItem>
                 <MenuItem onClick={handleLogout} sx={{ py: 1.5 }}>
                   <ListItemIcon>

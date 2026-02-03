@@ -41,7 +41,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'auth.conflictLogout': '退出登录',
 
     // Settings & Security
-    'settings.menu': '设置',
+    'settings.menu': '用户设置',
     'settings.title': '设置',
     'settings.profile': '个人资料',
     'settings.username': '用户名',
@@ -77,6 +77,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'common.back': '返回',
     'common.confirm': '确认',
     'common.save': '保存',
+    'common.add': '新建',
+    'common.copy': '复制',
     'common.replace': '替换',
 
     // Analyse Page
@@ -175,6 +177,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.import': '导入模板',
     'tpl.export': '导出模板',
     'tpl.save': '保存',
+    'tpl.create': '新建',
+    'tpl.copy': '复制',
     'tpl.rename': '重命名',
     'tpl.delete': '删除',
     'tpl.notSelected': '未选择',
@@ -305,7 +309,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'auth.conflictLogout': 'Log out',
 
     // Settings & Security
-    'settings.menu': 'Settings',
+    'settings.menu': 'User Settings',
     'settings.title': 'Settings',
     'settings.profile': 'Profile',
     'settings.username': 'Username',
@@ -341,6 +345,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'common.back': 'Back',
     'common.confirm': 'Confirm',
     'common.save': 'Save',
+    'common.add': 'Create',
+    'common.copy': 'Copy',
     'common.replace': 'Replace',
 
     // Analyse Page
@@ -440,6 +446,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.import': 'Import Templates',
     'tpl.export': 'Export Templates',
     'tpl.save': 'Save',
+    'tpl.create': 'Create',
+    'tpl.copy': 'Copy',
     'tpl.rename': 'Rename',
     'tpl.delete': 'Delete',
     'tpl.notSelected': 'Not selected',

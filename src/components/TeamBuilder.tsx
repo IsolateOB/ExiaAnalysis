@@ -12,6 +12,9 @@ import EditIcon from '@mui/icons-material/Edit'
 import SaveIcon from '@mui/icons-material/Save'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
+import CheckIcon from '@mui/icons-material/Check'
+import CloseIcon from '@mui/icons-material/Close'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 
 import { fetchNikkeList } from '../services/nikkeList'
 import { useI18n } from '../i18n'
@@ -33,6 +36,8 @@ interface TeamBuilderProps {
 }
 
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
+const DEFAULT_TEMPLATE_ID = 'default'
+const DEFAULT_TEMPLATE_NAME = '默认模板'
 
 // 计算角色强度的工具函数
 const calculateCharacterStrength = async (characterData: any, character: Character, rootData?: any, lang: Lang = 'zh'): Promise<number> => {
@@ -121,6 +126,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   // 模板管理
   const [templates, setTemplates] = useState<TeamTemplate[]>(() => listTemplates())
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+  const defaultTemplateInitRef = useRef(false)
   const refreshTemplates = () => setTemplates(listTemplates())
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
   const [menuTplId, setMenuTplId] = useState<string>('')
@@ -213,6 +219,52 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     while (existing.includes(`模板${n}`)) n++
     return `模板${n}`
   }
+
+  const buildTemplateFromTeam = (id: string, name: string, sourceTeam: TeamCharacter[] = team): TeamTemplate => {
+    const members = sourceTeam.map(t => ({
+      position: t.position,
+      characterId: t.character ? String(t.character.id) : undefined,
+      damageCoefficient: t.damageCoefficient || 0,
+      coefficients: normalizeCoefficients(coefficientsMap[t.position]),
+    }))
+    const totalDamageCoefficient = sourceTeam.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
+    return {
+      id,
+      name,
+      createdAt: Date.now(),
+      members,
+      totalDamageCoefficient,
+    }
+  }
+
+  const createEmptyTeam = () => (
+    Array.from({ length: 5 }, (_, index) => ({
+      position: index + 1,
+      damageCoefficient: 1.0,
+    }))
+  )
+
+  useEffect(() => {
+    if (defaultTemplateInitRef.current) return
+    const existing = listTemplates()
+    const hasDefault = existing.some(t => t.id === DEFAULT_TEMPLATE_ID)
+    if (!hasDefault) {
+      const tpl = buildTemplateFromTeam(DEFAULT_TEMPLATE_ID, DEFAULT_TEMPLATE_NAME)
+      saveTemplate(tpl)
+    }
+    defaultTemplateInitRef.current = true
+    const next = listTemplates()
+    setTemplates(next)
+    if (!selectedTemplateId && next.length > 0) {
+      setSelectedTemplateId(next[0].id)
+    }
+  }, [coefficientsMap, selectedTemplateId, team])
+
+  useEffect(() => {
+    if (!selectedTemplateId && templates.length > 0) {
+      setSelectedTemplateId(templates[0].id)
+    }
+  }, [selectedTemplateId, templates])
 
   // 载入远端人物目录（不落地本地文件）用于根据 id 还原 Character
   const [nikkeList, setNikkeList] = useState<Character[]>([])
@@ -423,13 +475,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   // 模板保存
   // 新建模板
   const handleCreateTemplate = () => {
-    const members = team.map(t => ({
+    const emptyTeam = createEmptyTeam()
+    const members = emptyTeam.map(t => ({
       position: t.position,
-      characterId: t.character ? String(t.character.id) : undefined,
+      characterId: undefined,
       damageCoefficient: t.damageCoefficient || 0,
-      coefficients: normalizeCoefficients(coefficientsMap[t.position]),
+      coefficients: normalizeCoefficients(getDefaultCoefficients()),
     }))
-    const totalDamageCoefficient = team.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
+    const totalDamageCoefficient = 0
     // 新建
     const id = Math.random().toString(36).slice(2)
     const tpl: TeamTemplate = {
@@ -442,6 +495,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     saveTemplate(tpl)
     refreshTemplates()
     setSelectedTemplateId(tpl.id)
+    setTeam(emptyTeam)
+    setCoefficientsMap({})
   }
 
   // 导出全部模板
@@ -504,7 +559,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     // 还原队伍
     const nextTeam: TeamCharacter[] = team.map(slot => {
       const m = tpl.members.find(mm => mm.position === slot.position)
-      let character: Character | undefined = slot.character
+      let character: Character | undefined = undefined
       if (m?.characterId && characterFromList) {
         const ch = characterFromList(m.characterId)
         if (ch) character = ch
@@ -532,6 +587,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const handleDeleteTemplate = (id?: string) => {
     const targetId = id || selectedTemplateId
     if (!targetId) return
+    if (targetId === DEFAULT_TEMPLATE_ID) return
     deleteTemplate(targetId)
     refreshTemplates()
     if (selectedTemplateId === targetId) setSelectedTemplateId('')
@@ -576,10 +632,17 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const list = listTemplates()
     const tpl = list.find(t => t.id === id)
     if (!tpl) return
-    const copy: TeamTemplate = { ...tpl, id: Math.random().toString(36).slice(2), name: generateNextDefaultName(), createdAt: Date.now() }
+    const copy: TeamTemplate = {
+      ...tpl,
+      id: Math.random().toString(36).slice(2),
+      name: generateNextDefaultName(),
+      createdAt: Date.now(),
+      members: Array.isArray(tpl.members) ? tpl.members.map(m => ({ ...m })) : []
+    }
     saveTemplate(copy)
     refreshTemplates()
     setSelectedTemplateId(copy.id)
+    applyTemplate(copy)
   }
 
   // 根据角色ID查找对应的JSON数据中的角色
@@ -621,84 +684,104 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
         </Stack>
         <Stack direction="row" spacing={1} alignItems="center">
-          {isRenaming ? (
-            <TextField
-                size="small"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={confirmRename}
-                onKeyDown={(e) => e.key === 'Enter' && confirmRename()}
-                autoFocus
-                sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
-            />
-          ) : (
-            <Select
-              size="small"
-              value={selectedTemplateId || ''}
-              onChange={(e) => {
-                const id = String(e.target.value || '')
-                setSelectedTemplateId(id)
-                const tpl = templates.find(t => t.id === id)
-                if (tpl) applyTemplate(tpl)
-              }}
-              displayEmpty
-              sx={{ minWidth: 160, width: '100%', maxWidth: { md: 300 }, flex: 1 }}
-              renderValue={(val) => {
-                const id = String(val || '')
-                const item = templates.find(tp => tp.id === id)
-                const name = item?.name || ''
-                const display = name || t('tpl.notSelected')
-                return (
-                  <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>{display}</Typography>
-                )
-              }}
-              MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-            >
-              <MenuItem value=""><em>{t('tpl.notSelected')}</em></MenuItem>
-              {templates.map((tpl) => (
-                <MenuItem key={tpl.id} value={tpl.id}>
-                   <Typography variant="body2" noWrap title={tpl.name}>{tpl.name}</Typography>
-                </MenuItem>
-              ))}
-            </Select>
-          )}
+          <Select
+            size="small"
+            value={selectedTemplateId || ''}
+            onChange={(e) => {
+              const id = String(e.target.value || '')
+              setSelectedTemplateId(id)
+              const tpl = templates.find(t => t.id === id)
+              if (tpl) applyTemplate(tpl)
+            }}
+            sx={{ minWidth: 200, width: 240, flex: 1 }}
+            renderValue={(val) => {
+              const id = String(val || '')
+              const item = templates.find(tp => tp.id === id)
+              const display = item?.name || ''
+              return (
+                <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>{display}</Typography>
+              )
+            }}
+            MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+          >
+            {templates.map((tpl) => (
+              <MenuItem key={tpl.id} value={tpl.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {isRenaming && renameId === tpl.id ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                    <TextField
+                      size="small"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.stopPropagation()
+                          confirmRename()
+                        }
+                        if (e.key === 'Escape') {
+                          e.stopPropagation()
+                          setIsRenaming(false)
+                          setRenameId('')
+                          setRenameValue('')
+                        }
+                      }}
+                      autoFocus
+                      inputRef={renameInputRef}
+                      sx={{ flex: 1, minWidth: 0 }}
+                    />
+                    <IconButton size="small" color="primary" aria-label={t('common.confirm') || '确认'} onClick={(e) => { e.stopPropagation(); confirmRename() }}>
+                      <CheckIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" aria-label={t('common.cancel') || '取消'} onClick={(e) => { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') }}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ) : (
+                  <>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" noWrap title={tpl.name}>{tpl.name}</Typography>
+                    </Box>
+                    <Tooltip title={t('tpl.rename') || '重命名'}>
+                      <IconButton size="small" aria-label={t('tpl.rename') || '重命名'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(tpl.id) }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t('tpl.copy') || '复制'}>
+                      <IconButton size="small" aria-label={t('tpl.copy') || '复制'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDuplicateTemplate(tpl.id) }}>
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t('tpl.delete') || '删除'}>
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          aria-label={t('tpl.delete') || '删除'}
+                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(tpl.id) }}
+                          disabled={tpl.id === DEFAULT_TEMPLATE_ID}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </>
+                )}
+              </MenuItem>
+            ))}
+          </Select>
 
-           <Tooltip title={t('tpl.save') || '保存为新模板'}>
+            <Tooltip title={t('tpl.save') || '保存为新模板'}>
              <Button
-                variant="outlined"
-                size="small"
-                sx={{ minWidth: 0, px: 1 }}
-                onClick={handleCreateTemplate}
-                disabled={templates.length >= 200}
+               variant="contained"
+               size="small"
+               startIcon={<AddIcon />}
+               onClick={handleCreateTemplate}
+               disabled={templates.length >= 200}
              >
-                <AddIcon />
+               {t('tpl.create') || '新建'}
              </Button>
-           </Tooltip>
+            </Tooltip>
 
-           <Tooltip title={t('tpl.rename') || '重命名'}>
-             <Button
-                variant="outlined"
-                size="small"
-                sx={{ minWidth: 0, px: 1 }}
-                onClick={() => selectedTemplateId && startRenameTemplate(selectedTemplateId)}
-                disabled={!selectedTemplateId || isRenaming}
-             >
-                <EditIcon />
-             </Button>
-           </Tooltip>
-
-           <Tooltip title={t('tpl.delete') || '删除'}>
-             <Button
-                variant="outlined"
-                size="small"
-                sx={{ minWidth: 0, px: 1 }}
-                color="error"
-                onClick={() => handleDeleteTemplate(selectedTemplateId)}
-                disabled={!selectedTemplateId}
-             >
-                <DeleteIcon />
-             </Button>
-           </Tooltip>
+           
         </Stack>
       </Box>
       
