@@ -120,6 +120,8 @@ const App: React.FC = () => {
   const [authForm, setAuthForm] = useState({ username: '', password: '' })
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const authSyncCheckedRef = useRef(false)
+  const authInitRef = useRef(false)
+  const prevAuthTokenRef = useRef<string | null>(null)
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null)
   const [notification, setNotification] = useState<{
     open: boolean
@@ -499,6 +501,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Failed to load auth from storage:', error)
     } finally {
+      authInitRef.current = true
       setAccountsLoaded(true)
     }
   }, [])
@@ -557,6 +560,7 @@ const App: React.FC = () => {
   }, [t])
 
   useEffect(() => {
+    if (!authInitRef.current) return
     if (authToken && authUsername) {
       broadcastAuth({
         type: 'auth:update',
@@ -564,9 +568,13 @@ const App: React.FC = () => {
         username: authUsername,
         avatar_url: authAvatarUrl || null
       })
+      prevAuthTokenRef.current = authToken
       return
     }
-    broadcastAuth({ type: 'auth:clear' })
+    if (prevAuthTokenRef.current) {
+      broadcastAuth({ type: 'auth:clear' })
+      prevAuthTokenRef.current = null
+    }
   }, [authToken, authUsername, authAvatarUrl, broadcastAuth])
 
   useEffect(() => {
