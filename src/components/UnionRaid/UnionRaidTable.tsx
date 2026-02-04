@@ -64,7 +64,6 @@ export type UnionRaidTableProps = {
   onSort: (key: SortKey) => void
   onPlanStepChange: (accountKey: string, planIndex: number, value: string) => void
   onPredictedDamageChange: (accountKey: string, planIndex: number, value: string) => void
-  onPredictedDamageBlur: (accountKey: string, planIndex: number) => void
   onRemovePlanCharacter: (accountKey: string, planIndex: number, characterId: number) => void
   onOpenCharacterPicker: (accountKey: string, planIndex: number) => void
   onCopyTeam: (squad: any[]) => void
@@ -88,7 +87,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   onSort,
   onPlanStepChange,
   onPredictedDamageChange,
-  onPredictedDamageBlur,
   onRemovePlanCharacter,
   onOpenCharacterPicker,
   onCopyTeam,
@@ -685,15 +683,15 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                             >
                               <TextField
                                 size="small"
-                                value={plan.predictedDamageInput}
+                                type="text"
+                                inputMode="numeric"
+                                value={plan.predictedDamage ?? ''}
                                 onChange={(e) => onPredictedDamageChange(accountKey, view.planIndex, e.target.value)}
-                                onBlur={() => onPredictedDamageBlur(accountKey, view.planIndex)}
                                 fullWidth
                                 placeholder={t('unionRaid.plan.predictedDamage')}
                                 inputProps={{
                                   'aria-label': t('unionRaid.plan.predictedDamage'),
-                                  inputMode: 'numeric',
-                                  pattern: '[0-9, ]*',
+                                  pattern: '[0-9]*',
                                   style: { ...NUMERIC_VALUE_INPUT_STYLE, textAlign: 'center' }
                                 }}
                               />

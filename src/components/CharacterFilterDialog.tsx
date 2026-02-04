@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -26,7 +26,6 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { Character, CharacterFilter } from '../types'
-import { fetchNikkeList } from '../services/nikkeList'
 import { useI18n } from '../i18n'
 
 interface CharacterFilterDialogProps {
@@ -38,6 +37,7 @@ interface CharacterFilterDialogProps {
   onConfirmSelection?: (characters: Character[]) => void
   initialSelectedCharacters?: Character[]
   maxSelection?: number
+  nikkeList?: Character[]
 }
 
 const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
@@ -48,7 +48,8 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   multiSelect = false,
   onConfirmSelection,
   initialSelectedCharacters,
-  maxSelection = 5
+  maxSelection = 5,
+  nikkeList: propNikkeList,
 }) => {
   const { t, lang } = useI18n()
   const [filters, setFilters] = useState<CharacterFilter>({
@@ -61,49 +62,24 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     original_rare: '',
   })
 
-  const [nikkeList, setNikkeList] = useState<Character[]>([])
+  // 直接使用从父组件传入的 nikkeList
+  const nikkeList = useMemo(() => {
+    if (!propNikkeList || propNikkeList.length === 0) return []
+    return propNikkeList.filter((nikke: any) =>
+      nikke.id &&
+      nikke.name_cn &&
+      nikke.name_en &&
+      nikke.class &&
+      nikke.element &&
+      nikke.use_burst_skill &&
+      nikke.corporation &&
+      nikke.weapon_type &&
+      nikke.original_rare
+    )
+  }, [propNikkeList])
+  
   const [filteredCharacters, setFilteredCharacters] = useState<Character[]>([])
-  const [loading, setLoading] = useState(false)
   const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([])
-
-  // 加载角色数据：仅首次打开或本地列表为空时请求，避免闪烁
-  useEffect(() => {
-    let cancelled = false
-    const loadCharacters = async () => {
-      setLoading(true)
-      try {
-        const { nikkes } = await fetchNikkeList()
-        // 过滤掉不完整的角色数据（理论上已在服务层处理）
-        const validCharacters = nikkes.filter((nikke: any) =>
-          nikke.id &&
-          nikke.name_cn &&
-          nikke.name_en &&
-          nikke.class &&
-          nikke.element &&
-          nikke.use_burst_skill &&
-          nikke.corporation &&
-          nikke.weapon_type &&
-          nikke.original_rare
-        )
-        if (!cancelled) setNikkeList(validCharacters)
-      } catch (error) {
-        if (!cancelled) setNikkeList([])
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    if (open) {
-      if (nikkeList.length === 0) {
-        // 首次打开或清空后再打开：请求并显示加载
-        loadCharacters()
-      } else {
-        // 已有缓存数据：不显示“未找到”，直接用现有列表
-        setLoading(false)
-      }
-    }
-    return () => { cancelled = true }
-  }, [open, nikkeList.length])
 
   // 重置筛选条件
   useEffect(() => {
@@ -352,7 +328,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
 
           {/* 结果列表 */}
           <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
-            { (loading || (open && nikkeList.length === 0)) ? (
+            { nikkeList.length === 0 ? (
               <Typography color="textSecondary" sx={{ textAlign: 'center', py: 4 }}>
                 {t('filter.loading')}
               </Typography>
@@ -361,7 +337,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
                 {filteredCharacters.map((character) => (
                   <ListItem
                     key={character.id}
-                    alignItems="stretch"
+                    alignItems="flex-start"
                     sx={{ py: 0.5 }}
                     secondaryAction={
                       <Button
@@ -506,7 +482,6 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
           <Button
             variant="contained"
             onClick={handleConfirmSelection}
-            disabled={selectionCount === 0}
             sx={{ minWidth: 120, px: 2.5, py: 0.75 }}
           >
             {t('filter.confirmSelection')}

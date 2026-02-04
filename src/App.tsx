@@ -10,6 +10,7 @@ import TeamBuilder from './components/TeamBuilder'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
 import UnionRaidStats from './components/UnionRaidStats'
 import type { Character, AttributeCoefficients } from './types'
+import { fetchNikkeList } from './services/nikkeList'
 import Header from './components/Header'
 import SettingsPage from './components/SettingsPage'
 import { useI18n } from './i18n'
@@ -103,6 +104,7 @@ const App: React.FC = () => {
   const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
+  const [nikkeList, setNikkeList] = useState<Character[]>([])
   const location = useLocation()
   const navigate = useNavigate()
   const rebuildAccountsRef = useRef(false)
@@ -547,6 +549,21 @@ const App: React.FC = () => {
     return null
   }
 
+  // 首次加载 nikkeList（全局只请求一次）
+  useEffect(() => {
+    let cancelled = false
+    const loadNikkeList = async () => {
+      try {
+        const { nikkes } = await fetchNikkeList()
+        if (!cancelled) setNikkeList(nikkes)
+      } catch (e) {
+        console.warn('Failed to load nikke list:', e)
+      }
+    }
+    loadNikkeList()
+    return () => { cancelled = true }
+  }, [])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
@@ -916,6 +933,7 @@ const App: React.FC = () => {
                       <TeamBuilder
                         externalTeam={teamChars}
                         authToken={authToken}
+                        nikkeList={nikkeList}
                         onTeamSelectionChange={(chars, coeffs) => {
                           setTeamChars(chars)
                           setCoeffsMap(coeffs)
@@ -999,6 +1017,7 @@ const App: React.FC = () => {
                   <Box sx={{ display: currentPage === 'unionRaid' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
                     <UnionRaidStats 
                       accounts={accounts} 
+                      nikkeList={nikkeList}
                       uploadedFileName={uploadedFileName}
                       teamBuilderTeam={teamChars}
                       authToken={authToken}

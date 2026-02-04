@@ -32,15 +32,12 @@ import CircularProgress from '@mui/material/CircularProgress'
 import type { SelectChangeEvent } from '@mui/material/Select'
 import type { Character } from '../types'
 import { useI18n } from '../i18n'
-import { fetchNikkeList } from '../services/nikkeList'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { UnionRaidTable } from './UnionRaid/UnionRaidTable'
 import { useUnionRaidPlanning } from './UnionRaid/useUnionRaidPlanning'
 import { mapIdsToCharacters } from '../utils/characters'
 import {
   formatActualDamage,
-  formatPredictedDamage,
-  parsePredictedDamage,
   ensurePlanArray,
   buildStrikeViews,
   createEmptyPlanSlot,
@@ -117,6 +114,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const [currentPlanId, setCurrentPlanId] = useState<string>('')
   const [isRenamingPlan, setIsRenamingPlan] = useState(false)
   const [renamePlanName, setRenamePlanName] = useState('')
+  const isInitialLoadRef = useRef(true)
 
   const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
 
@@ -172,6 +170,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
             onNotify?.(t('unionRaid.cloudDownloadFailed') || '加载云端数据失败', 'error')
         } finally {
             setCloudLoading(false)
+            isInitialLoadRef.current = false
         }
     }
     loadPlans()
@@ -199,6 +198,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   // Cloud Sync: Auto Save (Debounced)
   useEffect(() => {
       if (!authToken || plans.length === 0) return
+      // 跳过初始加载触发的保存
+      if (isInitialLoadRef.current) return
       const timer = setTimeout(async () => {
           try {
               await fetch(`${API_BASE_URL}/raid-plan`, {
@@ -293,30 +294,14 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     replaceAllPlanning(newPlan.data)
   }
 
+  // 直接从父组件传入的 nikkeList 构建 nikkeMap
   useEffect(() => {
-    if (nikkeList && nikkeList.length > 0) {
-      const map: Record<number, Character> = {}
-      nikkeList.forEach(char => {
-        map[char.id] = char
-      })
-      setNikkeMap(map)
-      return
-    }
-
-    const loadNikkeData = async () => {
-      try {
-        const { nikkes } = await fetchNikkeList()
-        const map: Record<number, Character> = {}
-        nikkes.forEach(char => {
-          map[char.id] = char
-        })
-        setNikkeMap(map)
-      } catch (err) {
-        console.error('Failed to load Nikke data:', err)
-      }
-    }
-
-    loadNikkeData()
+    if (!nikkeList || nikkeList.length === 0) return
+    const map: Record<number, Character> = {}
+    nikkeList.forEach(char => {
+      map[char.id] = char
+    })
+    setNikkeMap(map)
   }, [nikkeList])
 
   const scheduleNextFetch = useCallback((seconds: number) => {
@@ -651,17 +636,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   }, [mutatePlan, mutatePlanSlot])
 
   const handlePredictedDamageChange = useCallback((accountKey: string, planIndex: number, value: string) => {
+    // 只允许数字输入
+    const numericValue = value.replace(/[^0-9]/g, '')
     mutatePlan(accountKey, planIndex, (plan) => {
-      plan.predictedDamageInput = value
-      plan.predictedDamage = parsePredictedDamage(value)
-    })
-  }, [mutatePlan])
-
-  const handlePredictedDamageBlur = useCallback((accountKey: string, planIndex: number) => {
-    mutatePlan(accountKey, planIndex, (plan) => {
-      const parsed = parsePredictedDamage(plan.predictedDamageInput)
-      plan.predictedDamage = parsed
-      plan.predictedDamageInput = parsed ? formatPredictedDamage(parsed) : ''
+      plan.predictedDamage = numericValue ? Number(numericValue) : null
     })
   }, [mutatePlan])
 
@@ -1001,7 +979,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         onSort={handleSort}
         onPlanStepChange={handlePlanStepChange}
         onPredictedDamageChange={handlePredictedDamageChange}
-        onPredictedDamageBlur={handlePredictedDamageBlur}
         onRemovePlanCharacter={handleRemovePlanCharacter}
         onOpenCharacterPicker={handleOpenCharacterPicker}
         onCopyTeam={handleCopyTeam}
@@ -1025,6 +1002,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         maxSelection={MAX_PLAN_CHARACTERS}
         initialSelectedCharacters={activePlanCharacters}
         onConfirmSelection={handleCharactersSelected}
+        nikkeList={nikkeList}
       />
 
     </Box>

@@ -6,7 +6,6 @@ export type PlanSlot = {
   step: number | null
   characterIds: number[]
   predictedDamage: number | null
-  predictedDamageInput: string
 }
 
 export type ActualStrike = {

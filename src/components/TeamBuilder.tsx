@@ -16,7 +16,6 @@ import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 
-import { fetchNikkeList } from '../services/nikkeList'
 import { useI18n } from '../i18n'
 import { itemData } from '../data/item'
 import { fetchRoledata } from '../services/roledata'
@@ -33,6 +32,7 @@ interface TeamBuilderProps {
 
   externalTeam?: (Character | undefined)[]
   authToken?: string | null
+  nikkeList?: Character[]
 }
 
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
@@ -109,6 +109,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   externalTeam,
   authToken,
+  nikkeList: propNikkeList,
 }) => {
   const { t, lang } = useI18n()
   const [team, setTeam] = useState<TeamCharacter[]>(() =>
@@ -267,21 +268,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }, [selectedTemplateId, templates])
 
   // 载入远端人物目录（不落地本地文件）用于根据 id 还原 Character
-  const [nikkeList, setNikkeList] = useState<Character[]>([])
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const { nikkes } = await fetchNikkeList()
-        if (!cancelled) setNikkeList(nikkes)
-      } catch (e) {
-        console.warn('获取人物目录失败', e)
-        if (!cancelled) setNikkeList([])
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  // 直接使用从父组件传入的 nikkeList
+  const nikkeList = propNikkeList || []
 
   // 监听外部队伍变化(用于复制功能)
   const isInternalUpdate = useRef(false)
@@ -826,6 +814,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         maxSelection={team.length}
         initialSelectedCharacters={team.map((teamChar) => teamChar.character).filter((char): char is Character => Boolean(char))}
         onConfirmSelection={handleConfirmSelectedCharacters}
+        nikkeList={nikkeList}
       />
   </Box>
   )

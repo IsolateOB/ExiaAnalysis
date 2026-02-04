@@ -4,18 +4,18 @@ import type { ActualStrike, PlanSlot, StrikeView } from './types'
 export const createEmptyPlanSlot = (): PlanSlot => ({
   step: null,
   characterIds: [],
-  predictedDamage: null,
-  predictedDamageInput: ''
+  predictedDamage: null
 })
 
 export const planHasData = (plan: PlanSlot) => {
   if (!plan) return false
-  return plan.step !== null || plan.characterIds.length > 0 || (plan.predictedDamageInput ?? '') !== ''
+  return plan.step !== null || plan.characterIds.length > 0 || plan.predictedDamage !== null
 }
 
-export const parsePredictedDamage = (value: string): number | null => {
-  if (!value) return null
-  const normalized = value.replace(/[,，\s]/g, '')
+export const parsePredictedDamage = (value: string | number | null | undefined): number | null => {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : null
+  const normalized = String(value).replace(/[,，\s]/g, '')
   const num = Number(normalized)
   return Number.isFinite(num) && num > 0 ? num : null
 }
@@ -47,18 +47,12 @@ export const hydratePlanSlot = (slot?: Partial<PlanSlot> | null): PlanSlot => {
   const characterIds = Array.isArray(slot.characterIds)
     ? slot.characterIds.map(id => Number(id)).filter(id => Number.isFinite(id))
     : []
-  const predictedDamageInput = typeof slot.predictedDamageInput === 'string'
-    ? slot.predictedDamageInput
-    : slot.predictedDamage != null
-      ? formatPredictedDamage(Number(slot.predictedDamage))
-      : ''
-  const predictedDamage = parsePredictedDamage(predictedDamageInput)
+  const predictedDamage = parsePredictedDamage(slot.predictedDamage)
   return {
     ...base,
     step,
     characterIds,
-    predictedDamage,
-    predictedDamageInput
+    predictedDamage
   }
 }
 
@@ -77,8 +71,7 @@ export const serializePlanSlots = (plans?: PlanSlot[]): (Partial<PlanSlot> | nul
     return {
       step: plan.step,
       characterIds: [...plan.characterIds],
-      predictedDamage: plan.predictedDamage,
-      predictedDamageInput: plan.predictedDamageInput
+      predictedDamage: plan.predictedDamage
     }
   })
 }
@@ -96,8 +89,7 @@ export const arePlansEqual = (a: PlanSlot, b: PlanSlot) => {
   return (
     a.step === b.step &&
     arraysEqual(a.characterIds, b.characterIds) &&
-    a.predictedDamage === b.predictedDamage &&
-    a.predictedDamageInput === b.predictedDamageInput
+    a.predictedDamage === b.predictedDamage
   )
 }
 
