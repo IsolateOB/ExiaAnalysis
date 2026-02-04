@@ -273,11 +273,10 @@ const App: React.FC = () => {
 
     console.debug('[AEL] request details for name_codes:', uniqueCodes)
 
-    for (let idx = 0; idx < accounts.length; idx += 1) {
-      const acc = accounts[idx]
+    await Promise.all(accounts.map(async (acc, idx) => {
       const cookie = acc?.cookie
       const areaId = acc?.area_id
-      if (!cookie || !areaId) continue
+      if (!cookie || !areaId) return
 
       const cacheKey = getAccountCacheKey(acc, idx)
       if (!accountDetailCacheRef.current[cacheKey]) {
@@ -285,7 +284,7 @@ const App: React.FC = () => {
       }
       const cacheSet = accountDetailCacheRef.current[cacheKey]
       const missingCodes = uniqueCodes.filter((code) => !cacheSet.has(code))
-      if (!missingCodes.length) continue
+      if (!missingCodes.length) return
 
       console.debug('[AEL] account', idx, 'missing codes:', missingCodes.length)
 
@@ -338,7 +337,7 @@ const App: React.FC = () => {
           if (!target) return prev
           const prevMap = target.characterDetailsByCode || {}
           const merged = { ...prevMap, ...normalizedDetails }
-          console.debug('[AEL] updated account', idx, 'details keys:', Object.keys(merged).length)
+          // console.debug('[AEL] updated account', idx, 'details keys:', Object.keys(merged).length)
           next[idx] = { ...target, characterDetailsByCode: merged }
           return next
         })
@@ -347,7 +346,7 @@ const App: React.FC = () => {
       } catch (error) {
         console.error('Failed to fetch character details:', error)
       }
-    }
+    }))
   }, [accounts])
 
   const buildAccountsFromCookies = async (rawAccounts: any[]) => {
