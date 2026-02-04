@@ -349,19 +349,67 @@ const App: React.FC = () => {
     }))
   }, [accounts])
 
+  const parseGameOpenIdFromCookie = (cookieStr: string) => {
+    if (!cookieStr) return ''
+    const match = cookieStr.match(/(?:^|;\\s*)game_openid=([^;]*)/)
+    return match ? match[1] : ''
+  }
+
+  const fetchGuildSyncLevels = async (accounts: any[]) => {
+    const validAcc = accounts.find(acc => acc.cookie)
+    if (!validAcc) return new Map<string, number>()
+
+    try {
+      const myGuildResp = await postProxy('game', 'proxy/Game/GetMyGuildInfo', validAcc.cookie, { ignore_toast: true })
+      const guildInfo = myGuildResp?.data?.card
+      if (!guildInfo?.guild_id || !guildInfo?.nikke_area_id) return new Map<string, number>()
+
+      const membersResp = await postProxy('game', 'proxy/Game/GetGuildMembers', validAcc.cookie, {
+        guild_id: String(guildInfo.guild_id),
+        nikke_area_id: Number(guildInfo.nikke_area_id)
+      })
+      const items = membersResp?.data?.items
+      if (!Array.isArray(items)) return new Map<string, number>()
+
+      const levelMap = new Map<string, number>()
+      items.forEach((item: any) => {
+        const mid = String(item.member_id)
+        const slv = Number(item.synchro_level)
+        if (mid && Number.isFinite(slv)) {
+          levelMap.set(mid, slv)
+        }
+      })
+      return levelMap
+    } catch (e) {
+      console.warn('Failed to fetch guild sync levels:', e)
+      return new Map<string, number>()
+    }
+  }
+
   const buildAccountsFromCookies = async (rawAccounts: any[]) => {
     if (!rawAccounts || rawAccounts.length === 0) return []
+
+    // 预取工会同步等级
+    const guildSyncLevels = await fetchGuildSyncLevels(rawAccounts)
 
     const normalizeBuiltAccount = (raw: any, fallbackName: string) => {
       const name = raw?.name || raw?.role_name || fallbackName
       const { elements: _elements, ...rest } = raw || {}
+      
+      const gameOpenId = raw?.game_openid || raw?.gameOpenId || parseGameOpenIdFromCookie(raw?.cookie) || ''
+      // 如果映射表里有，优先用映射表的；否则用 raw 里缓存的；再否则 0
+      const synchroLevel = guildSyncLevels.has(gameOpenId) 
+        ? guildSyncLevels.get(gameOpenId)!
+        : (Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)))
+
       return {
         ...rest,
         name,
         role_name: raw?.role_name || name,
         game_uid: raw?.game_uid ?? raw?.gameUid ?? raw?.gameUID ?? '',
+        game_openid: gameOpenId,
         characterDetailsByCode: raw?.characterDetailsByCode || {},
-        synchroLevel: Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)),
+        synchroLevel,
         outpostLevel: Number.isFinite(raw?.outpostLevel) ? raw.outpostLevel : (Number.isFinite(raw?.outpost_level) ? raw.outpost_level : 0)
       }
     }
@@ -377,20 +425,26 @@ const App: React.FC = () => {
         const roleInfo = await getRoleInfoByCookie(cookie)
         const areaId = String(roleInfo?.area_id || '')
         const roleName = roleInfo?.role_name || ''
+        const gameOpenId = raw?.game_openid || raw?.gameOpenId || parseGameOpenIdFromCookie(cookie) || ''
+        
         if (!areaId) {
           return normalizeBuiltAccount({ ...raw, name: roleName }, fallbackName)
         }
 
-        const outpost = await postProxy('game', 'proxy/Game/GetUserProfileOutpostInfo', cookie, { nikke_area_id: parseInt(areaId) })
-        const outpostInfo = outpost?.data?.outpost_info || {}
-        const synchroLevel = Number.isFinite(outpostInfo.synchro_level) ? outpostInfo.synchro_level : 0
-        const outpostLevel = Number.isFinite(outpostInfo.outpost_battle_level) ? outpostInfo.outpost_battle_level : 0
+        // 不再请求 GetUserProfileOutpostInfo，直接查表
+        const synchroLevel = guildSyncLevels.has(gameOpenId) 
+          ? guildSyncLevels.get(gameOpenId)! 
+          : 0
+        
+        // outpostLevel 默认为 raw 中的值或 0 (因为不再请求 outpost info)
+        const outpostLevel = Number.isFinite(raw?.outpostLevel) ? raw.outpostLevel : (Number.isFinite(raw?.outpost_level) ? raw.outpost_level : 0)
 
         return {
           name: roleName || fallbackName,
           role_name: roleName || fallbackName,
           area_id: areaId,
           game_uid: raw?.game_uid || raw?.gameUid || '',
+          game_openid: gameOpenId,
           cookie,
           synchroLevel,
           outpostLevel,
