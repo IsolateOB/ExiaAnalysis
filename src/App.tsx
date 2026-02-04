@@ -528,7 +528,7 @@ const App: React.FC = () => {
       const preferredId = selectedAccountListId && normalized.some((item) => item.id === selectedAccountListId)
         ? selectedAccountListId
         : (normalized[0]?.id || '')
-      await applyAccountListSelection(preferredId, normalized)
+      setSelectedAccountListId(preferredId)
     } catch (error) {
       console.error('Failed to load accounts from backend:', error)
     }
