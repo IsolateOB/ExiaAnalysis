@@ -109,8 +109,27 @@ const App: React.FC = () => {
   const currentPage = useMemo<'analysis' | 'unionRaid' | 'settings'>(() => {
     if (location.pathname.startsWith('/setting')) return 'settings'
     if (location.pathname.startsWith('/union-raid')) return 'unionRaid'
-    return 'analysis'
+    if (location.pathname.startsWith('/analysis')) return 'analysis'
+    if (location.pathname === '/login') return 'unionRaid'
+    // Default to unionRaid if at root, but useEffect below handles navigation
+    return 'unionRaid'
   }, [location.pathname])
+
+  // Initial routing logic
+  useEffect(() => {
+    // If at root path, redirect to union-raid
+    if (location.pathname === '/' || location.pathname === '') {
+      navigate('/union-raid', { replace: true })
+    }
+    // Check for login route
+    if (location.pathname.includes('/login')) {
+      // Small timeout to ensure state is ready
+      setTimeout(() => {
+        setAuthMode('login')
+        setAuthDialogOpen(true)
+      }, 100)
+    }
+  }, [location.pathname, navigate])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [authUsername, setAuthUsername] = useState<string | null>(null)
@@ -835,7 +854,7 @@ const App: React.FC = () => {
                         exclusive
                         onChange={(_, val) => {
                           if (!val) return
-                          if (val === 'analysis') navigate('/')
+                          if (val === 'analysis') navigate('/analysis')
                           if (val === 'unionRaid') navigate('/union-raid')
                         }}
                         size="small"
