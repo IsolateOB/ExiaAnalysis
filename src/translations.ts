@@ -73,6 +73,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'settings.deleteConfirmTitle': '确认注销账号？',
     'settings.deleteConfirmContent': '此操作无法撤销，您的所有数据将被永久删除。是否继续？',
     'settings.loginRequired': '请登录以访问账号安全设置',
+    'user.feedback': '交流/反馈',
     
     'common.back': '返回',
     'common.confirm': '确认',
@@ -341,6 +342,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'settings.deleteConfirmTitle': 'Delete Account?',
     'settings.deleteConfirmContent': 'This action cannot be undone. All your data will be permanently lost. Continue?',
     'settings.loginRequired': 'Please login to access security settings',
+    'user.feedback': 'Community / Feedback',
 
     'common.back': 'Back',
     'common.confirm': 'Confirm',
