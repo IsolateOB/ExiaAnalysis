@@ -563,16 +563,14 @@ const App: React.FC = () => {
     if (!authInitRef.current) return
     if (authToken && authUsername) {
       broadcastAuth({
-        type: 'auth:update',
-        token: authToken,
-        username: authUsername,
-        avatar_url: authAvatarUrl || null
+        type: 'auth:status',
+        loggedIn: true
       })
       prevAuthTokenRef.current = authToken
       return
     }
     if (prevAuthTokenRef.current) {
-      broadcastAuth({ type: 'auth:clear' })
+      broadcastAuth({ type: 'auth:status', loggedIn: false })
       prevAuthTokenRef.current = null
     }
   }, [authToken, authUsername, authAvatarUrl, broadcastAuth])
