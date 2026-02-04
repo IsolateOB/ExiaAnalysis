@@ -239,20 +239,9 @@ const App: React.FC = () => {
       .catch(() => null)
 
     const areaId = oldResp?.data?.area_id ? String(oldResp.data.area_id) : ''
-    const oldName = oldResp?.data?.role_name || ''
+    const roleName = oldResp?.data?.role_name || ''
 
-    if (areaId) {
-      const intlOpenId = parseCookieValue(cookie, 'game_openid')
-      const payload: any = { nikke_area_id: parseInt(areaId) }
-      if (intlOpenId) payload.intl_open_id = intlOpenId
-      const basicResp = await postProxy('game', 'proxy/Game/GetUserProfileBasicInfo', cookie, payload)
-        .catch(() => null)
-      const info = basicResp?.data?.basic_info || {}
-      const finalName = info.nickname || oldName || ''
-      return { role_name: finalName, area_id: info.area_id || areaId }
-    }
-
-    return { role_name: oldName || '', area_id: areaId }
+    return { role_name: roleName, area_id: areaId }
   }
 
   const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: any) => {
