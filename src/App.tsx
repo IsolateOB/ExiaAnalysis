@@ -158,17 +158,16 @@ const App: React.FC = () => {
           const val = String(header).toLowerCase()
           if (val.includes('game') && val.includes('uid')) gameUidCol = index
           else if (val.includes('账号') || val.includes('username') || val.includes('name')) usernameCol = index
-          else if (val.includes('cookie')) cookieCol = index
+          else if (val.includes('cookie') && !val.includes('更新') && !val.includes('updated') && !val.includes('date') && cookieCol === -1) cookieCol = index
         })
 
         const localAccounts: any[] = []
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i] as any[]
           if (!row || row.length === 0) continue
-          
-          const game_uid = gameUidCol >= 0 ? String(row[gameUidCol] || '') : ''
-          const username = usernameCol >= 0 ? String(row[usernameCol] || '') : ''
-          const cookie = cookieCol >= 0 ? String(row[cookieCol] || '') : ''
+          const game_uid = gameUidCol >= 0 ? String(row[gameUidCol] || '').trim() : ''
+          const username = usernameCol >= 0 ? String(row[usernameCol] || '').trim() : ''
+          const cookie = cookieCol >= 0 ? String(row[cookieCol] || '').trim() : ''
           
           if (game_uid || username || cookie) {
             localAccounts.push({
