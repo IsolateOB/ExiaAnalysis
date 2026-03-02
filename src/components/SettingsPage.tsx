@@ -29,13 +29,14 @@ interface SettingsPageProps {
   authToken: string | null
   username: string | null
   avatarUrl: string | null
+  restricted?: boolean
   onLogout: () => void
   onUpdateUser: (newToken: string, newUsername: string) => void
   onUpdateAvatar: (newAvatarUrl: string) => void
   onNotify: (msg: string, severity: 'success' | 'error' | 'info' | 'warning') => void
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatarUrl, onLogout, onUpdateUser, onUpdateAvatar, onNotify }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatarUrl, restricted = false, onLogout, onUpdateUser, onUpdateAvatar, onNotify }) => {
   const { t, lang, toggleLang } = useI18n()
 
   // 修改用户名状态
@@ -55,6 +56,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
   // 删除账号对话框状态
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // 受限模式密码设置状态
+  const [restrictedPwdForm, setRestrictedPwdForm] = useState({ restricted: '', confirm: '' })
+  const [restrictedPwdLoading, setRestrictedPwdLoading] = useState(false)
 
   const handleUpdateUsername = async () => {
     if (!authToken) return
@@ -161,6 +166,52 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
     }
   }
 
+  const submitSetRestrictedPassword = async () => {
+    if (!authToken) return
+    const isDisabling = !restrictedPwdForm.restricted && !restrictedPwdForm.confirm
+    if (!isDisabling) {
+      if (!restrictedPwdForm.restricted) {
+        onNotify(t('settings.restrictedPwdRequired') || '请填写受限密码', 'warning')
+        return
+      }
+      if (restrictedPwdForm.restricted !== restrictedPwdForm.confirm) {
+        onNotify(t('settings.pwdMismatch') || '两次密码输入不一致', 'error')
+        return
+      }
+      if (restrictedPwdForm.restricted.length < 6) {
+        onNotify(t('settings.pwdTooShort') || '密码不能少于6位', 'warning')
+        return
+      }
+    }
+    setRestrictedPwdLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/set-restricted-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          restricted_password: restrictedPwdForm.restricted
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        onNotify(data.error || (t('settings.setRestrictedPwdFailed') || '设置受限密码失败'), 'error')
+      } else {
+        const msg = isDisabling
+          ? (t('settings.restrictedPwdDisabled') || '受限模式已关闭')
+          : (t('settings.restrictedPwdSet') || '受限密码设置成功')
+        onNotify(msg, 'success')
+        setRestrictedPwdForm({ restricted: '', confirm: '' })
+      }
+    } catch {
+      onNotify(t('settings.setRestrictedPwdFailed') || '设置受限密码失败', 'error')
+    } finally {
+      setRestrictedPwdLoading(false)
+    }
+  }
+
   const handleUpdateAvatar = async () => {
     if (!authToken) return
     if (!selectedAvatar) {
@@ -216,8 +267,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
         </ToggleButtonGroup>
       </Paper>
 
-      {/* 账号安全区域，仅登录后可见 */}
-      {authToken ? (
+      {/* 账号安全区域，仅非受限模式登录后可见 */}
+      {authToken && !restricted ? (
         <>
             {/* 个人资料 (用户名) */}
             <Paper sx={{ p: 3 }}>
@@ -314,6 +365,39 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
             </Box>
             </Paper>
 
+            {/* 受限模式密码 */}
+            <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>{t('settings.restrictedMode') || '受限模式'}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t('settings.restrictedModeDesc') || '设置一个独立的受限密码，让他人可用该密码登录并查看数据，但无法修改密码、上传数据等敏感操作。留空受限密码并保存可关闭受限模式。'}
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 400 }}>
+                <TextField
+                label={t('settings.restrictedPwd') || '受限密码（留空则关闭受限模式）'}
+                type="password"
+                value={restrictedPwdForm.restricted}
+                onChange={(e) => setRestrictedPwdForm(prev => ({ ...prev, restricted: e.target.value }))}
+                disabled={restrictedPwdLoading}
+                />
+                <TextField
+                label={t('settings.confirmPwd') || '确认受限密码'}
+                type="password"
+                value={restrictedPwdForm.confirm}
+                onChange={(e) => setRestrictedPwdForm(prev => ({ ...prev, confirm: e.target.value }))}
+                disabled={restrictedPwdLoading || !restrictedPwdForm.restricted}
+                helperText={!restrictedPwdForm.restricted ? (t('settings.restrictedDisableHint') || '不填写受限密码即为关闭受限模式') : ''}
+                />
+                <Button
+                  variant="contained"
+                  onClick={submitSetRestrictedPassword}
+                  disabled={restrictedPwdLoading}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {restrictedPwdLoading ? <CircularProgress size={24} /> : (t('common.save') || '保存')}
+                </Button>
+            </Box>
+            </Paper>
+
             {/* 危险区域 */}
             <Paper sx={{ p: 3, borderColor: 'error.main' }}>
             <Typography variant="h6" color="error" gutterBottom>{t('settings.dangerZone') || '危险区域'}</Typography>
@@ -350,6 +434,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
                 </DialogActions>
             </Dialog>
         </>
+      ) : authToken && restricted ? (
+        <Alert severity="info">{t('settings.restrictedNoEdit') || '受限模式下无法访问账号设置'}</Alert>
       ) : (
         <Alert severity="info">{t('settings.loginRequired') || '请登录以访问账号安全设置'}</Alert>
       )}

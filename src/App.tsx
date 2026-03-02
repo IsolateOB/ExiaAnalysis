@@ -622,7 +622,7 @@ const App: React.FC = () => {
       handleStatusChange(t('auth.usernameRequired') || '请填写用户名', 'warning')
       return
     }
-    if (authMode === 'register' && !authForm.password.trim()) {
+    if (!authForm.password.trim()) {
       handleStatusChange(t('auth.passwordRequired') || '请填写密码', 'warning')
       return
     }
@@ -939,6 +939,7 @@ const App: React.FC = () => {
                     authToken={authToken} 
                     username={authUsername}
                     avatarUrl={authAvatarUrl}
+                    restricted={authRestricted}
                     onLogout={handleLogout}
                     onUpdateUser={handleUpdateUser}
                     onUpdateAvatar={handleUpdateAvatar}
