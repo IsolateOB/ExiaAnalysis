@@ -14,82 +14,30 @@ import { fetchNikkeList } from './services/nikkeList'
 import Header from './components/Header'
 import SettingsPage from './components/SettingsPage'
 import { useI18n } from './i18n'
+import * as XLSX from 'xlsx'
+import { AuthDialog } from './components/AuthDialog'
 
-// 创建主题
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f5f5f5',
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Microsoft YaHei", "PingFang SC", sans-serif',
-  },
-  shape: { borderRadius: 8 },
-  components: {
-    MuiAppBar: {
-      defaultProps: { elevation: 4 },
-      styleOverrides: {
-        root: ({ theme }) => ({
-          boxShadow: theme.shadows[4],
-          border: 'none',
-          // 避免被全局 Paper 的 outlined 覆盖
-          ['&.MuiPaper-outlined' as any]: {
-            border: 'none',
-          },
-          ['&.MuiPaper-elevation0' as any]: {
-            boxShadow: theme.shadows[4],
-          },
-        }),
-      },
-    },
-    MuiTextField: {
-      defaultProps: { size: 'small' },
-    },
-    MuiSelect: {
-      defaultProps: { size: 'small' },
-    },
-    MuiAutocomplete: {
-      defaultProps: { size: 'small' },
-    },
-    MuiIconButton: {
-      defaultProps: { size: 'small' },
-    },
-    MuiButton: {
-      defaultProps: { size: 'small' },
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-        },
-      },
-    },
-    MuiPaper: {
-      defaultProps: { variant: 'outlined' },
-      styleOverrides: {
-        root: {
-          boxShadow: 'none',
-          borderColor: '#e5e7eb',
-        },
-      },
-    },
-    MuiDialog: {
-      styleOverrides: {
-        paper: {
-          borderRadius: 8,
-        },
-      },
-    },
-  },
-})
+import { theme } from './theme'
+import {
+  parseCookieValue,
+  parseGameOpenIdFromCookie,
+  buildEquipments,
+  resolveItemRare,
+  getEquipSumStats,
+  computeAELScore,
+  normalizeAccountLists
+} from './utils/accountUtils'
+import {
+  fetchProfile,
+  postProxy,
+  getRoleInfoByCookie,
+  fetchGuildSyncLevels,
+  fetchCloudAccountLists
+} from './services/api'
+
 
 const AUTH_STORAGE_KEY = 'exia-analysis-auth'
+const LOCAL_LISTS_STORAGE_KEY = 'exia-analysis-local-lists'
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 const SIDEBAR_WIDTH_MD = 400
 const SIDEBAR_TOGGLE_SIZE = 44
@@ -167,100 +115,103 @@ const App: React.FC = () => {
     setNotification(prev => ({ ...prev, open: false }))
   }
 
+  // Load local lists on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
+      if (savedLocalListsJson) {
+        const savedLocalLists = JSON.parse(savedLocalListsJson)
+        if (Array.isArray(savedLocalLists) && savedLocalLists.length > 0) {
+          setAccountLists(prev => {
+            const localIds = new Set(savedLocalLists.map(l => l.id))
+            const nonLocalPrev = prev.filter(p => !localIds.has(p.id))
+            return [...savedLocalLists, ...nonLocalPrev]
+          })
+        }
+      }
+    } catch(e) { /* ignore */ }
+  }, [])
 
-  const fetchProfile = async (token: string) => {
-    const res = await fetch(`${API_BASE_URL}/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (!res.ok) return null
-    return res.json()
-  }
+  const handleUploadAccountList = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1 })
+        
+        if (rows.length < 2) {
+          handleStatusChange('表格数据为空', 'error')
+          return
+        }
 
-  const parseCookieValue = (cookieStr: string, name: string) => {
-    if (!cookieStr) return ''
-    const match = cookieStr.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
-    return match ? match[1] : ''
-  }
+        const headers = rows[0] as string[]
+        let gameUidCol = -1, usernameCol = -1, cookieCol = -1
+        
+        headers.forEach((header, index) => {
+          if (!header) return
+          const val = String(header).toLowerCase()
+          if (val.includes('game') && val.includes('uid')) gameUidCol = index
+          else if (val.includes('账号') || val.includes('username') || val.includes('name')) usernameCol = index
+          else if (val.includes('cookie')) cookieCol = index
+        })
 
-  const buildEquipments = (char: any, effectsMap: Record<string, any>) => {
-    const equipments: Record<number, any[]> = {}
-    const equipSlots = ['head', 'torso', 'arm', 'leg']
-    equipSlots.forEach((slot, idx) => {
-      const details: any[] = []
-      for (let i = 1; i <= 3; i += 1) {
-        const optionKey = `${slot}_equip_option${i}_id`
-        const optionId = char[optionKey]
-        if (optionId && optionId !== 0) {
-          const effect = effectsMap[String(optionId)]
-          if (effect?.function_details) {
-            effect.function_details.forEach((func: any) => {
-              details.push({
-                function_type: func.function_type,
-                function_value: Math.abs(func.function_value) / 100,
-                level: func.level
-              })
+        const localAccounts: any[] = []
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i] as any[]
+          if (!row || row.length === 0) continue
+          
+          const game_uid = gameUidCol >= 0 ? String(row[gameUidCol] || '') : ''
+          const username = usernameCol >= 0 ? String(row[usernameCol] || '') : ''
+          const cookie = cookieCol >= 0 ? String(row[cookieCol] || '') : ''
+          
+          if (game_uid || username || cookie) {
+            localAccounts.push({
+              game_uid,
+              name: username || `本地账号${i}`,
+              role_name: username || `本地账号${i}`,
+              cookie,
+              synchroLevel: 0,
+              outpostLevel: 0
             })
           }
         }
+
+        if (localAccounts.length === 0) {
+          handleStatusChange('未解析到账号数据', 'error')
+          return
+        }
+
+        const localListId = `local_uploaded_${Date.now()}`
+        const newLocalList = {
+          id: localListId,
+          name: file.name.replace(/\.[^/.]+$/, ""),
+          data: localAccounts
+        }
+
+        const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
+        const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) : []
+        savedLocalLists.push(newLocalList)
+        window.localStorage.setItem(LOCAL_LISTS_STORAGE_KEY, JSON.stringify(savedLocalLists))
+
+        setAccountLists(prev => [newLocalList, ...prev.filter(list => list.id !== localListId)])
+        setSelectedAccountListId(localListId)
+        handleStatusChange(`成功导入 ${localAccounts.length} 个本地账号`, 'success')
+
+      } catch (error) {
+        console.error(error)
+        handleStatusChange('解析 Excel 失败', 'error')
       }
-      equipments[idx] = details
-    })
-    return equipments
-  }
-
-  const resolveItemRare = (tid: number | undefined) => {
-    if (!tid) return ''
-    const tidStr = String(tid)
-    const firstDigit = Number(tidStr.charAt(0))
-    const lastDigit = Number(tidStr.charAt(tidStr.length - 1))
-    if (firstDigit === 2) return 'SSR'
-    if (firstDigit === 1) return lastDigit === 1 ? 'R' : lastDigit === 2 ? 'SR' : ''
-    return ''
-  }
-
-  const getEquipSumStats = (equipments: Record<number, any[]> | undefined) => {
-    const sum = { IncElementDmg: 0, StatAtk: 0 }
-    if (!equipments) return sum
-    for (let slot = 0; slot < 4; slot += 1) {
-      const eqList = Array.isArray(equipments?.[slot]) ? equipments[slot] : []
-      eqList.forEach(({ function_type, function_value }: any) => {
-        const v = typeof function_value === 'number' ? function_value / 100 : 0
-        if (function_type === 'IncElementDmg') sum.IncElementDmg += v
-        if (function_type === 'StatAtk') sum.StatAtk += v
-      })
     }
-    return sum
+    reader.readAsArrayBuffer(file)
+    event.target.value = ''
   }
 
-  const computeAELScore = (grade: number, core: number, atk: number, elem: number) => {
-    return (1 + 0.9 * atk) * (1 + (elem + 0.10)) * (grade * 0.03 + core * 0.02 + 1)
-  }
-
-  const getRoleInfoByCookie = async (cookie: string) => {
-    const oldResp = await postProxy('ugc', 'direct/standalonesite/User/GetUserGamePlayerInfo', cookie, {})
-      .catch(() => null)
-
-    const areaId = oldResp?.data?.area_id ? String(oldResp.data.area_id) : ''
-    const roleName = oldResp?.data?.role_name || ''
-
-    return { role_name: roleName, area_id: areaId }
-  }
-
-  const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: any) => {
-    const res = await fetch(`/api/${scope}/${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Game-Cookie': cookie
-      },
-      body: JSON.stringify(body)
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(text || `HTTP ${res.status}`)
-    }
-    return res.json()
-  }
 
   const accountDetailCacheRef = useRef<Record<string, Set<number>>>({})
 
@@ -351,43 +302,6 @@ const App: React.FC = () => {
     }))
   }, [accounts])
 
-  const parseGameOpenIdFromCookie = (cookieStr: string) => {
-    if (!cookieStr) return ''
-    const match = cookieStr.match(/(?:^|;\\s*)game_openid=([^;]*)/)
-    return match ? match[1] : ''
-  }
-
-  const fetchGuildSyncLevels = async (accounts: any[]) => {
-    const validAcc = accounts.find(acc => acc.cookie)
-    if (!validAcc) return new Map<string, number>()
-
-    try {
-      const myGuildResp = await postProxy('game', 'proxy/Game/GetMyGuildInfo', validAcc.cookie, { ignore_toast: true })
-      const guildInfo = myGuildResp?.data?.card
-      if (!guildInfo?.guild_id || !guildInfo?.nikke_area_id) return new Map<string, number>()
-
-      const membersResp = await postProxy('game', 'proxy/Game/GetGuildMembers', validAcc.cookie, {
-        guild_id: String(guildInfo.guild_id),
-        nikke_area_id: Number(guildInfo.nikke_area_id)
-      })
-      const items = membersResp?.data?.items
-      if (!Array.isArray(items)) return new Map<string, number>()
-
-      const levelMap = new Map<string, number>()
-      items.forEach((item: any) => {
-        const mid = String(item.member_id)
-        const slv = Number(item.synchro_level)
-        if (mid && Number.isFinite(slv)) {
-          levelMap.set(mid, slv)
-        }
-      })
-      return levelMap
-    } catch (e) {
-      console.warn('Failed to fetch guild sync levels:', e)
-      return new Map<string, number>()
-    }
-  }
-
   const buildAccountsFromCookies = async (rawAccounts: any[]) => {
     if (!rawAccounts || rawAccounts.length === 0) return []
 
@@ -461,25 +375,6 @@ const App: React.FC = () => {
     return accounts.filter(Boolean)
   }
 
-  const normalizeAccountLists = useCallback((input: any, fallbackName: string) => {
-    if (Array.isArray(input)) {
-      if (input.length > 0 && (input[0]?.data || input[0]?.accounts || input[0]?.name || input[0]?.id)) {
-        return input
-          .map((item: any, idx: number) => {
-            const data = Array.isArray(item?.data) ? item.data : (Array.isArray(item?.accounts) ? item.accounts : [])
-            const id = item?.id ?? item?.list_id ?? String(idx + 1)
-            return {
-              id: id === undefined || id === null ? '' : String(id),
-              name: item?.name || fallbackName,
-              data,
-            }
-          })
-          .filter((item: any) => item.id || item.name)
-      }
-      return [{ id: 'default', name: fallbackName, data: input }]
-    }
-    return []
-  }, [])
 
   const buildAccountsForList = useCallback(async (list: { id: string; name: string; data: any[] }) => {
     if (!list?.id) return []
@@ -515,7 +410,11 @@ const App: React.FC = () => {
 
       const normalized = normalizeAccountLists(source, t('accountList.default') || '默认账号列表')
 
-      if (!Array.isArray(normalized) || normalized.length === 0) {
+      const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
+      const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) : []
+      const combinedLists = [...savedLocalLists, ...normalized]
+
+      if (!Array.isArray(combinedLists) || combinedLists.length === 0) {
         setAccounts([])
         setUploadedFileName(undefined)
         setTeamChars([])
@@ -526,28 +425,16 @@ const App: React.FC = () => {
       }
 
       builtAccountsCacheRef.current = {}
-      setAccountLists(normalized)
-      const preferredId = selectedAccountListId && normalized.some((item) => item.id === selectedAccountListId)
+      setAccountLists(combinedLists)
+      const preferredId = selectedAccountListId && combinedLists.some((item) => item.id === selectedAccountListId)
         ? selectedAccountListId
-        : (normalized[0]?.id || '')
+        : (combinedLists[0]?.id || '')
       setSelectedAccountListId(preferredId)
     } catch (error) {
       console.error('Failed to load accounts from backend:', error)
     }
   }
 
-  const fetchCloudAccountLists = async (token: string) => {
-    const res = await fetch(`${API_BASE_URL}/accounts`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    if (res.status === 404) return null
-    if (!res.ok) throw new Error('Failed to fetch cloud accounts')
-    const json = await res.json()
-    if (Array.isArray(json?.lists)) return json.lists
-    if (Array.isArray(json?.account_data)) return json.account_data
-    if (Array.isArray(json?.accounts)) return json.accounts
-    return null
-  }
 
   // 首次加载 nikkeList（全局只请求一次）
   useEffect(() => {
@@ -787,12 +674,22 @@ const App: React.FC = () => {
     setAuthToken(null)
     setAuthUsername(null)
     setAuthAvatarUrl(null)
-    setAccounts([])
-    setAccountLists([])
-    setSelectedAccountListId('')
-    setUploadedFileName(undefined)
-    setTeamChars([])
-    setCoeffsMap({})
+    
+    // Clear cloud account lists, keep local lists
+    const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
+    const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) : []
+    setAccountLists(savedLocalLists)
+    
+    if (savedLocalLists.length === 0) {
+      setAccounts([])
+      setSelectedAccountListId('')
+      setUploadedFileName(undefined)
+      setTeamChars([])
+      setCoeffsMap({})
+    } else {
+      setSelectedAccountListId(savedLocalLists[0].id)
+    }
+
     builtAccountsCacheRef.current = {}
     authSyncCheckedRef.current = false
     handleStatusChange(t('auth.logoutSuccess') || '已退出', 'success')
@@ -886,26 +783,57 @@ const App: React.FC = () => {
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
                     <Box>
-                      <FormControl fullWidth size="small">
-                        <InputLabel id="account-list-select-label">{t('accountList.label') || '账号列表'}</InputLabel>
-                        <Select
-                          labelId="account-list-select-label"
-                          value={selectedAccountListId}
-                          label={t('accountList.label') || '账号列表'}
-                          onChange={async (event) => {
-                            const nextId = String(event.target.value || '')
-                            if (!nextId || nextId === selectedAccountListId) return
-                            await applyAccountListSelection(nextId, accountLists)
-                          }}
-                          disabled={accountLists.length === 0}
-                        >
-                          {accountLists.map((list) => (
-                            <MenuItem key={list.id} value={list.id}>
-                              {list.name || t('accountList.unnamed') || '未命名账号列表'}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel id="account-list-select-label">{t('accountList.label') || '账号列表'}</InputLabel>
+                          <Select
+                            labelId="account-list-select-label"
+                            value={selectedAccountListId}
+                            label={t('accountList.label') || '账号列表'}
+                            onChange={async (event) => {
+                              const nextId = String(event.target.value || '')
+                              if (!nextId || nextId === selectedAccountListId) return
+                              await applyAccountListSelection(nextId, accountLists)
+                            }}
+                            disabled={accountLists.length === 0}
+                          >
+                            {accountLists.map((list) => (
+                              <MenuItem key={list.id} value={list.id}>
+                                {list.id.startsWith('local_') ? `[本地] ` : ''}{list.name || t('accountList.unnamed') || '未命名账号列表'}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Button component="label" variant="outlined" sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} title="上传ExiaInvasion导出的账号Excel">
+                          上传
+                          <input type="file" hidden accept=".xlsx,.xls" onChange={handleUploadAccountList} />
+                        </Button>
+                        {selectedAccountListId?.startsWith('local_') && (
+                          <Button 
+                            variant="outlined" 
+                            color="error" 
+                            sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} 
+                            title="删除本地列表"
+                            onClick={async () => {
+                              const newList = accountLists.filter(l => l.id !== selectedAccountListId)
+                              setAccountLists(newList)
+                              const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
+                              if (savedLocalListsJson) {
+                                try {
+                                  const saved = JSON.parse(savedLocalListsJson)
+                                  const newSaved = saved.filter((l: any) => l.id !== selectedAccountListId)
+                                  window.localStorage.setItem(LOCAL_LISTS_STORAGE_KEY, JSON.stringify(newSaved))
+                                } catch (e) {}
+                              }
+                              const nextId = newList[0]?.id || ''
+                              setSelectedAccountListId(nextId)
+                              await applyAccountListSelection(nextId, newList)
+                            }}
+                          >
+                            删除
+                          </Button>
+                        )}
+                      </Box>
                     </Box>
                     <Box>
                       <ToggleButtonGroup
@@ -1054,43 +982,18 @@ const App: React.FC = () => {
           </Alert>
         </Snackbar>
 
-        <Dialog open={authDialogOpen} onClose={closeAuthDialog} maxWidth="xs" fullWidth>
-          <DialogTitle>{authTitle}</DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 3, overflow: 'visible' }}>
-            <TextField
-              label={t('auth.username') || '用户名'}
-              value={authForm.username}
-              onChange={(e) => setAuthForm(prev => ({ ...prev, username: e.target.value }))}
-              fullWidth
-              autoFocus
-            />
-            <TextField
-              label={t('auth.password') || '密码'}
-              type="password"
-              value={authForm.password}
-              onChange={(e) => setAuthForm(prev => ({ ...prev, password: e.target.value }))}
-              fullWidth
-            />
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-            {authMode === 'login' ? (
-              <Button onClick={() => setAuthMode('register')} disabled={authSubmitting}>
-                {t('auth.switchToRegister') || '去注册'}
-              </Button>
-            ) : (
-              <Button onClick={() => setAuthMode('login')} disabled={authSubmitting}>
-                {t('auth.switchToLogin') || '去登录'}
-              </Button>
-            )}
-            <Box sx={{ flex: 1 }} />
-            <Button onClick={closeAuthDialog} disabled={authSubmitting}>
-              {t('auth.cancel') || '取消'}
-            </Button>
-            <Button variant="contained" onClick={handleAuthSubmit} disabled={authSubmitting}>
-              {authSubmitting ? <CircularProgress size={18} color="inherit" /> : (authMode === 'login' ? (t('auth.submitLogin') || '登录') : (t('auth.submitRegister') || '注册'))}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <AuthDialog
+          open={authDialogOpen}
+          mode={authMode}
+          title={authTitle}
+          formValues={authForm}
+          isSubmitting={authSubmitting}
+          onClose={closeAuthDialog}
+          onChangeMode={setAuthMode}
+          onChangeForm={setAuthForm}
+          onSubmit={handleAuthSubmit}
+          t={t}
+        />
       </Box>
     </ThemeProvider>
   )
