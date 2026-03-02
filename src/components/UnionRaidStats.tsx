@@ -70,6 +70,7 @@ interface UnionRaidStatsProps {
   onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
   teamBuilderTeam?: (Character | undefined)[]
   authToken?: string | null
+  restricted?: boolean
 }
 
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
@@ -83,7 +84,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   uploadedFileName,
   onNotify,
   teamBuilderTeam,
-  authToken
+  authToken,
+  restricted = false
 }) => {
   const { t, lang } = useI18n()
   const [fatalError, setFatalError] = useState<string>()
@@ -201,6 +203,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       // 跳过初始加载触发的保存
       if (isInitialLoadRef.current) return
       const timer = setTimeout(async () => {
+          setCloudLoading(true)
           try {
               await fetch(`${API_BASE_URL}/raid-plan`, {
                   method: 'POST',
@@ -210,7 +213,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                   },
                   body: JSON.stringify({ plan_data: plans })
               })
-          } catch(e) { console.error(e) }
+          } catch(e) { console.error(e) } finally {
+              setCloudLoading(false)
+          }
       }, 2000)
       return () => clearTimeout(timer)
   }, [plans, authToken])
@@ -747,14 +752,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const formatLevelOption = (level: number) => String(level)
   const formatStepOption = (step: number) => STEP_TO_ROMAN[step] || String(step)
   const isFilterActive = selectedLevel !== 'all' || selectedStep !== 'all'
-  const statsTemplateKey = isFilterActive
-    ? 'unionRaid.filter.stats.filtered'
-    : 'unionRaid.filter.stats.total'
-  const statsTemplate = t(statsTemplateKey) || statsTemplateKey
-  const statsLabel = statsTemplate
-    .replace('{count}', String(matchedActualCount))
-    .replace('{actual}', String(matchedActualCount))
-    .replace('{plan}', String(matchedPlanCount))
+  const actualLabel = lang === 'zh' ? '实际' : 'Actual'
+  const planLabel = lang === 'zh' ? '规划' : 'Plan'
+  const statsLabel = `${actualLabel} ${matchedActualCount} / ${planLabel} ${matchedPlanCount}`
 
   if (fatalError) {
     return (
@@ -788,54 +788,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
             <ToggleButton value={1}>{t('unionRaid.difficulty.normal')}</ToggleButton>
             <ToggleButton value={2}>{t('unionRaid.difficulty.hard')}</ToggleButton>
           </ToggleButtonGroup>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel id="union-raid-level-select-label">{levelLabelText}</InputLabel>
-            <Select
-              labelId="union-raid-level-select-label"
-              id="union-raid-level-select"
-              value={levelSelectValue}
-              label={levelLabelText}
-              onChange={handleLevelChange}
-            >
-              <MenuItem value="all">{allLabelText}</MenuItem>
-              {levelOptions.map((level) => (
-                <MenuItem key={level} value={String(level)}>
-                  {formatLevelOption(level)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel id="union-raid-step-select-label">{stepLabelText}</InputLabel>
-            <Select
-              labelId="union-raid-step-select-label"
-              id="union-raid-step-select"
-              value={stepSelectValue}
-              label={stepLabelText}
-              onChange={handleStepChange}
-              MenuProps={{ disableAutoFocusItem: true }}
-            >
-              <MenuItem value="all">{allLabelText}</MenuItem>
-              {stepOptions.map((step) => (
-                <MenuItem key={step} value={String(step)}>
-                  {formatStepOption(step)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 150, textAlign: 'left' }}>
-            {statsLabel}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {fetchStatus && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'error.main', whiteSpace: 'nowrap' }}>
-              <WarningAmberIcon sx={{ fontSize: '1rem' }} />
-              <Typography variant="body2" sx={{ color: 'inherit' }}>
-                {fetchStatus}
-              </Typography>
-            </Box>
-          )}
           {authToken && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Select
@@ -849,21 +801,21 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                             replaceAllPlanning(p.data)
                         }
                     }}
-                    sx={{ minWidth: 200, width: 240 }}
+                    sx={{ width: 160 }}
                     renderValue={(val) => {
                       const id = String(val || '')
                       const item = plans.find((pl) => pl.id === id)
                       const display = item?.name || ''
                       return (
-                        <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>
+                        <Typography noWrap title={display} sx={{ maxWidth: '100%', fontSize: '0.875rem' }}>
                           {display}
                         </Typography>
                       )
                     }}
-                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                    MenuProps={{ PaperProps: { style: { maxHeight: 300, minWidth: 220 } } }}
                 >
                     {plans.map((p, index) => (
-                      <MenuItem key={p.id} value={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <MenuItem key={p.id} value={p.id} sx={{ display: 'flex', alignItems: 'center' }}>
                           {isRenamingPlan && currentPlanId === p.id ? (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e) => e.stopPropagation()}>
                               <TextField
@@ -930,11 +882,57 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                   </Button>
                 </Tooltip>
                 
-                
-                
                 {cloudLoading && <CircularProgress size={20} />}
             </Box>
           )}
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {fetchStatus && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'error.main', whiteSpace: 'nowrap' }}>
+              <WarningAmberIcon sx={{ fontSize: '1rem' }} />
+              <Typography variant="body2" sx={{ color: 'inherit' }}>
+                {fetchStatus}
+              </Typography>
+            </Box>
+          )}
+          <FormControl size="small" sx={{ minWidth: 80 }}>
+            <InputLabel id="union-raid-level-select-label">{levelLabelText}</InputLabel>
+            <Select
+              labelId="union-raid-level-select-label"
+              id="union-raid-level-select"
+              value={levelSelectValue}
+              label={levelLabelText}
+              onChange={handleLevelChange}
+            >
+              <MenuItem value="all">{allLabelText}</MenuItem>
+              {levelOptions.map((level) => (
+                <MenuItem key={level} value={String(level)}>
+                  {formatLevelOption(level)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 80 }}>
+            <InputLabel id="union-raid-step-select-label">{stepLabelText}</InputLabel>
+            <Select
+              labelId="union-raid-step-select-label"
+              id="union-raid-step-select"
+              value={stepSelectValue}
+              label={stepLabelText}
+              onChange={handleStepChange}
+              MenuProps={{ disableAutoFocusItem: true }}
+            >
+              <MenuItem value="all">{allLabelText}</MenuItem>
+              {stepOptions.map((step) => (
+                <MenuItem key={step} value={String(step)}>
+                  {formatStepOption(step)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap', minWidth: 100, textAlign: 'right' }}>
+            {statsLabel}
+          </Typography>
           <Tooltip title={t('unionRaid.refresh') || '刷新'}>
             <Box
               onClick={handleManualRefresh}
@@ -991,6 +989,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         formatActualDamage={formatActualDamage}
         countRemainingStrikes={countRemainingStrikes}
         t={t}
+        restricted={restricted}
       />
 
       <CharacterFilterDialog

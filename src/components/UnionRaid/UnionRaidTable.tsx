@@ -76,6 +76,7 @@ export type UnionRaidTableProps = {
   formatActualDamage: (value: number | null | undefined) => string
   countRemainingStrikes: (row: any) => number
   t: (key: string) => string
+  restricted?: boolean
 }
 
 export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
@@ -98,7 +99,8 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   sortCharacterIdsByBurst,
   formatActualDamage,
   countRemainingStrikes,
-  t
+  t,
+  restricted = false
 }) => {
   const AVATAR_SIZE = 44
   const AVATAR_GAP = 0.25
@@ -499,6 +501,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                               size="small"
                               value={planStepValue}
                               onChange={(e) => onPlanStepChange(accountKey, view.planIndex, e.target.value)}
+                            disabled={restricted}
                               SelectProps={{
                                 inputProps: {
                                   'aria-label': t('unionRaid.plan.planLabel')
@@ -541,7 +544,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                       <IconButton
                                         size="small"
                                         onClick={() => onPastePlannedTeam(accountKey, view.planIndex)}
-                                        disabled={!canPastePlannedTeam}
+                                        disabled={!canPastePlannedTeam || restricted}
                                         aria-label={t('unionRaid.pastePlanTeam') || '从构建器粘贴队伍'}
                                         sx={{ width: 24, height: 24 }}
                                       >
@@ -556,6 +559,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                   size="small"
                                   startIcon={<EditIcon />}
                                   onClick={() => onOpenCharacterPicker(accountKey, view.planIndex)}
+                                disabled={restricted}
                                   sx={{
                                     flex: '0 0 auto',
                                     height: 24,
@@ -687,6 +691,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                                 inputMode="numeric"
                                 value={plan.predictedDamage ?? ''}
                                 onChange={(e) => onPredictedDamageChange(accountKey, view.planIndex, e.target.value)}
+                              disabled={restricted}
                                 fullWidth
                                 placeholder={t('unionRaid.plan.predictedDamage')}
                                 inputProps={{

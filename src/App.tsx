@@ -84,6 +84,7 @@ const App: React.FC = () => {
   const [authToken, setAuthToken] = useState<string | null>(null)
   const [authUsername, setAuthUsername] = useState<string | null>(null)
   const [authAvatarUrl, setAuthAvatarUrl] = useState<string | null>(null)
+  const [authRestricted, setAuthRestricted] = useState(false)
   const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [authForm, setAuthForm] = useState({ username: '', password: '' })
@@ -460,6 +461,7 @@ const App: React.FC = () => {
           setAuthToken(parsedAuth.token)
           setAuthUsername(parsedAuth.username)
           setAuthAvatarUrl(parsedAuth.avatar_url || null)
+          setAuthRestricted(!!parsedAuth.restricted)
         }
       }
     } catch (error) {
@@ -480,12 +482,13 @@ const App: React.FC = () => {
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
         token: authToken,
         username: authUsername,
-        avatar_url: authAvatarUrl
+        avatar_url: authAvatarUrl,
+        restricted: authRestricted
       }))
     } catch (error) {
       console.error('Failed to persist auth:', error)
     }
-  }, [authToken, authUsername, authAvatarUrl])
+  }, [authToken, authUsername, authAvatarUrl, authRestricted])
 
   const broadcastAuth = useCallback((payload: any) => {
     if (typeof window === 'undefined') return
@@ -615,8 +618,12 @@ const App: React.FC = () => {
   }
 
   const handleAuthSubmit = async () => {
-    if (!authForm.username.trim() || !authForm.password.trim()) {
-      handleStatusChange(t('auth.required') || '请填写用户名和密码', 'warning')
+    if (!authForm.username.trim()) {
+      handleStatusChange(t('auth.usernameRequired') || '请填写用户名', 'warning')
+      return
+    }
+    if (authMode === 'register' && !authForm.password.trim()) {
+      handleStatusChange(t('auth.passwordRequired') || '请填写密码', 'warning')
       return
     }
     setAuthSubmitting(true)
@@ -649,6 +656,7 @@ const App: React.FC = () => {
       const data = await res.json()
       if (data?.token) {
         setAuthToken(data.token)
+        setAuthRestricted(!!data.restricted_mode)
         const profile = await fetchProfile(data.token)
         const nextUsername = profile?.username || data?.username || authForm.username.trim()
         const nextAvatar = profile?.avatar_url || data?.avatar_url || null
@@ -673,6 +681,7 @@ const App: React.FC = () => {
     setAuthToken(null)
     setAuthUsername(null)
     setAuthAvatarUrl(null)
+    setAuthRestricted(false)
     
     // Clear cloud account lists, keep local lists
     const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
@@ -948,6 +957,7 @@ const App: React.FC = () => {
                       uploadedFileName={uploadedFileName}
                       teamBuilderTeam={teamChars}
                       authToken={authToken}
+                      restricted={authRestricted}
                       onCopyTeam={(characters) => {
                         const teamArray: (Character | undefined)[] = Array(5).fill(undefined)
                         characters.forEach((char, idx) => {

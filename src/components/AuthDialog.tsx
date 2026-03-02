@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, CircularProgress, Box } from '@mui/material'
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, CircularProgress, Box, Typography } from '@mui/material'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 
 interface AuthDialogProps {
   open: boolean
@@ -26,6 +27,10 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
   onSubmit,
   t
 }) => {
+  const passwordLabel = mode === 'login'
+    ? (t('auth.passwordOptional') || '密码 (选填，不填进入受限模式)')
+    : (t('auth.password') || '密码')
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
@@ -38,12 +43,21 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
           autoFocus
         />
         <TextField
-          label={t('auth.password') || '密码'}
+          label={passwordLabel}
           type="password"
           value={formValues.password}
           onChange={(e) => onChangeForm({ ...formValues, password: e.target.value })}
           fullWidth
+          required={mode === 'register'}
         />
+        {mode === 'login' && (
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, mt: -0.5 }}>
+            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'info.main', mt: '2px', flexShrink: 0 }} />
+            <Typography variant="caption" color="text.secondary">
+              {t('auth.restrictedModeHint') || '不填写密码将以受限模式登录，部分功能（如修改密码、上传数据等）不可用。'}
+            </Typography>
+          </Box>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
         {mode === 'login' ? (
