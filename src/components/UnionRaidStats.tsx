@@ -81,7 +81,7 @@ interface UnionRaidStatsProps {
   restricted?: boolean
 }
 
-const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
+const API_BASE_URL = 'https://backend.nikke-exia.com'
 
 const countRemainingStrikes = (row: any) => Math.max(3 - (row.actualCount || 0), 0)
 

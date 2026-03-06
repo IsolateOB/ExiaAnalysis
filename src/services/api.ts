@@ -1,6 +1,6 @@
 import { mergeGuildMemberSyncLevel } from '../utils/guildSync'
 
-const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
+const API_BASE_URL = 'https://backend.nikke-exia.com'
 
 const PROXY_RETRY_DELAY_MS = 400
 const TOO_FREQUENT_PATTERN = /Requests are too frequent/i

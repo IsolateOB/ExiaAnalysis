@@ -23,7 +23,7 @@ import {
 import { useI18n } from '../i18n'
 import { AVATAR_URLS } from '../data/avatarUrls'
 
-const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
+const API_BASE_URL = 'https://backend.nikke-exia.com'
 
 interface SettingsPageProps {
   authToken: string | null

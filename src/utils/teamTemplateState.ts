@@ -11,6 +11,7 @@ interface BuildTemplateSnapshotArgs {
   coefficientsMap: { [position: number]: AttributeCoefficients }
   normalizeCoefficients: (coefficients?: AttributeCoefficients) => AttributeCoefficients
   createdAt?: number
+  updatedAt?: number
 }
 
 export function createEmptyTeam() {
@@ -27,6 +28,7 @@ export function buildTemplateSnapshot({
   coefficientsMap,
   normalizeCoefficients,
   createdAt = Date.now(),
+  updatedAt = Date.now(),
 }: BuildTemplateSnapshotArgs): TeamTemplate {
   const members = team.map((slot) => ({
     position: slot.position,
@@ -41,6 +43,7 @@ export function buildTemplateSnapshot({
     id,
     name,
     createdAt,
+    updatedAt,
     members,
     totalDamageCoefficient,
   }

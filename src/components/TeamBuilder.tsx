@@ -1,14 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, Divider, MenuItem, Select } from '@mui/material'
-import { Character, TeamCharacter, AttributeCoefficients } from '../types'
-import CharacterCard from './CharacterCard'
-import CharacterFilterDialog from './CharacterFilterDialog'
-import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
-import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../utils/templates'
-import { buildTemplateSnapshot, createEmptyTeam, upsertTemplateInList } from '../utils/teamTemplateState'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, MenuItem, Select } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
@@ -16,6 +10,32 @@ import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 
+import type { Character, TeamCharacter, AttributeCoefficients } from '../types'
+import CharacterCard from './CharacterCard'
+import CharacterFilterDialog from './CharacterFilterDialog'
+import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
+import {
+  clearTemporaryCopyTemplate,
+  getTemporaryCopyTemplate,
+  listTemplates,
+  mergePersistentTemplates,
+  saveTemplates,
+  saveTemporaryCopyTemplate,
+  type TeamTemplate,
+  TEMPORARY_COPY_TEMPLATE_ID,
+  TEMPORARY_COPY_TEMPLATE_NAME,
+} from '../utils/templates'
+import { buildTemplateSnapshot, createEmptyTeam, upsertTemplateInList } from '../utils/teamTemplateState'
+import {
+  buildTemplateCreatePatch,
+  buildTemplateReplaceMembersPatch,
+  buildTemplateSeedPatches,
+  createOptimisticTemplateState,
+  getNextDispatchableTemplateMutation,
+  reconcileIncomingTemplatePatch,
+  reconcileTemplateAck,
+  type TeamTemplateRealtimePatch,
+} from './TeamBuilder/cloudRealtime'
 import { useI18n } from '../i18n'
 import { itemData } from '../data/item'
 import { fetchRoledata } from '../services/roledata'
@@ -26,21 +46,31 @@ interface TeamBuilderProps {
   targetData?: any
   onTeamStrengthChange?: (baselineStrength: number, targetStrength: number) => void
   onTeamRatioChange?: (scale: number, ratioLabel: string) => void
-  // 新增：将当前选择与系数暴露给父级（给 AccountsAnalyzer 使用）
   onTeamSelectionChange?: (chars: (Character | undefined)[], coeffs: { [position: number]: AttributeCoefficients }) => void
-  // 新增：外部设置队伍(用于复制功能)
-
   externalTeam?: (Character | undefined)[]
   authToken?: string | null
   nikkeList?: Character[]
 }
 
-const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
+const API_BASE_URL = 'https://backend.nikke-exia.com'
+const REALTIME_API_BASE_URL = API_BASE_URL.replace(/^http/, 'ws')
 const DEFAULT_TEMPLATE_ID = 'default'
 const DEFAULT_TEMPLATE_NAME = '默认模板'
+const MAX_TEMPLATES = 200
 
-// 计算角色强度的工具函数
-const calculateCharacterStrength = async (characterData: any, character: Character, rootData?: any, lang: Lang = 'zh'): Promise<number> => {
+const createInitialTeam = (): TeamCharacter[] => (
+  Array.from({ length: 5 }, (_, index) => ({
+    position: index + 1,
+    damageCoefficient: 1.0,
+  }))
+)
+
+const calculateCharacterStrength = async (
+  characterData: any,
+  character: Character,
+  rootData?: any,
+  lang: Lang = 'zh',
+): Promise<number> => {
   if (!characterData || !characterData.equipments) {
     return 0
   }
@@ -48,7 +78,6 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
   let totalIncElementDmg = 0
   let totalStatAtk = 0
 
-  // 遍历所有装备槽 (0-3)
   Object.values(characterData.equipments).forEach((equipmentSlot: any) => {
     if (Array.isArray(equipmentSlot)) {
       equipmentSlot.forEach((equipment: any) => {
@@ -61,7 +90,6 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
     }
   })
 
-  // 计算突破系数
   const breakThrough = characterData.limit_break || {}
   const grade = breakThrough.grade || 0
   const core = breakThrough.core || 0
@@ -79,209 +107,196 @@ const calculateCharacterStrength = async (characterData: any, character: Charact
     const itemArray = itemData.item_atk || []
     let itemAttack = 0
     if (characterData.item_rare === 'SSR') {
-      // SSR按照SR最高等级计算（9688）
       itemAttack = 9688
     } else if (characterData.item_rare === 'SR') {
-      // SR按照item_level作为索引
       const itemLevel = characterData.item_level || 0
       const itemIndex = Math.min(Math.max(itemLevel, 0), itemArray.length - 1)
       itemAttack = itemArray[itemIndex] || 0
     }
 
-    // 计算最终攻击力
     const baseAttack = syncAttack * breakthroughCoeff + itemAttack
     const attackWithStatAtk = baseAttack * (1 + 0.9 * totalStatAtk / 100)
-    const finalStrength = attackWithStatAtk * (1 + totalIncElementDmg / 100)
-
-    return finalStrength
+    return attackWithStatAtk * (1 + totalIncElementDmg / 100)
   } catch (error) {
     console.error('Error computing character strength:', error)
     return 0
   }
 }
 
-const TeamBuilder: React.FC<TeamBuilderProps> = ({ 
-  baselineData, 
-  targetData, 
+const buildCharactersTeam = (characters: (Character | undefined)[]): TeamCharacter[] => (
+  Array.from({ length: 5 }, (_, index) => ({
+    position: index + 1,
+    character: characters[index],
+    damageCoefficient: 1.0,
+  }))
+)
+
+const TeamBuilder: React.FC<TeamBuilderProps> = ({
+  baselineData,
+  targetData,
   onTeamStrengthChange,
   onTeamRatioChange,
   onTeamSelectionChange,
-
   externalTeam,
   authToken,
   nikkeList: propNikkeList,
 }) => {
   const { t, lang } = useI18n()
-  const [team, setTeam] = useState<TeamCharacter[]>(() =>
-    Array.from({ length: 5 }, (_, index) => ({
-      position: index + 1,
-      damageCoefficient: 1.0,
-    }))
-  )
-  
-  const [filterDialogOpen, setFilterDialogOpen] = useState(false)
-  const [selectedPosition, setSelectedPosition] = useState<number>(0)
-  const [characterStrengths, setCharacterStrengths] = useState<{[position: number]: {baseline: number, target: number}}>({})
-  const [coefficientsMap, setCoefficientsMap] = useState<{[position: number]: AttributeCoefficients}>({})
-  const [rawMap, setRawMap] = useState<{[position: number]: { baseline?: any, target?: any }}>({})
-  // 模板管理
-  const [templates, setTemplates] = useState<TeamTemplate[]>(() => listTemplates())
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
-  const defaultTemplateInitRef = useRef(false)
-  const refreshTemplates = () => setTemplates(listTemplates())
-  const isHydratingTemplateRef = useRef(false)
-  const lastAppliedTemplateIdRef = useRef('')
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
-  const [menuTplId, setMenuTplId] = useState<string>('')
-  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null)
-  const [autoOpen, setAutoOpen] = useState(false)
-  const [lockOpen, setLockOpen] = useState(false)
-  const [acOpen, setAcOpen] = useState(false)
+  const nikkeList = propNikkeList || []
 
-  
-  // Cloud Sync Logic
-  useEffect(() => {
-    if (!authToken) return
-    const loadCloudTemplates = async () => {
-        try {
-            const res = await fetch(`${API_BASE_URL}/team-template`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            })
-            if (res.ok) {
-                const json = await res.json()
-                if (json && json.template_data && Array.isArray(json.template_data)) {
-                    const serverTpls = json.template_data as TeamTemplate[]
-                    localStorage.setItem('nikke_team_templates', JSON.stringify(serverTpls))
-                    setTemplates(serverTpls)
-                }
-            }
-        } catch (e) {
-            console.error('Failed to load cloud templates', e)
-        }
-    }
-    loadCloudTemplates()
-  }, [authToken])
-
-  // Auto-save templates when changed (debounced)
-  useEffect(() => {
-    if (!authToken) return
-    const timer = setTimeout(async () => {
-        try {
-            await fetch(`${API_BASE_URL}/team-template`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`
-                },
-                body: JSON.stringify({ template_data: templates })
-            })
-        } catch (e) {
-            console.error('Failed to save cloud templates', e)
-        }
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [templates, authToken])
-
-  // 统一补全/迁移系数：新增基础轴属性系数，迁移旧 hp -> axisHP
-  const normalizeCoefficients = (c?: AttributeCoefficients): AttributeCoefficients => {
-    const base: any = c ? { ...c } : getDefaultCoefficients()
+  const normalizeCoefficients = useCallback((coefficients?: AttributeCoefficients): AttributeCoefficients => {
+    const base: any = coefficients ? { ...coefficients } : getDefaultCoefficients()
     if (base.axisAttack == null) base.axisAttack = 1
     if (base.axisDefense == null) base.axisDefense = 0
     if (base.axisHP == null) base.axisHP = base.hp ? base.hp : 0
-    if (base.hp == null) base.hp = 0 // 保持字段存在以兼容保存结构
+    if (base.hp == null) base.hp = 0
     return base as AttributeCoefficients
-  }
+  }, [])
 
-  // 重命名状态
+  const buildCoefficientsMapForTeam = useCallback((teamState: TeamCharacter[]) => {
+    const next: { [position: number]: AttributeCoefficients } = {}
+    teamState.forEach((slot) => {
+      next[slot.position] = normalizeCoefficients(slot.attributeCoefficients as AttributeCoefficients | undefined)
+    })
+    return next
+  }, [normalizeCoefficients])
+
+  const [team, setTeam] = useState<TeamCharacter[]>(() => createInitialTeam())
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false)
+  const [selectedPosition, setSelectedPosition] = useState(0)
+  const [characterStrengths, setCharacterStrengths] = useState<{ [position: number]: { baseline: number, target: number } }>({})
+  const [coefficientsMap, setCoefficientsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
+  const [rawMap, setRawMap] = useState<{ [position: number]: { baseline?: any, target?: any } }>({})
+  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(() => listTemplates())
+  const [temporaryCopyTemplate, setTemporaryCopyTemplate] = useState<TeamTemplate | null>(() => getTemporaryCopyTemplate())
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
-  const [renameId, setRenameId] = useState<string>('')
-  const [renameValue, setRenameValue] = useState<string>('')
+  const [renameId, setRenameId] = useState('')
+  const [renameValue, setRenameValue] = useState('')
+  const [reconnectNonce, setReconnectNonce] = useState(0)
+
+  const defaultTemplateInitRef = useRef(false)
+  const isHydratingTemplateRef = useRef(false)
+  const isInternalUpdateRef = useRef(false)
+  const lastAppliedTemplateIdRef = useRef('')
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const persistentTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
+  const authoritativeTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
+  const optimisticTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
+  const pendingMutationsRef = useRef<TeamTemplateRealtimePatch[]>([])
+  const inflightMutationIdRef = useRef<string | null>(null)
+  const websocketRef = useRef<WebSocket | null>(null)
+  const currentSocketRef = useRef<WebSocket | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const lastRevisionRef = useRef(0)
+  const sessionIdRef = useRef(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2),
+  )
 
-  const openSettingsMenu = (e: React.MouseEvent<HTMLElement>, tplId: string) => {
-    e.stopPropagation()
-    e.preventDefault()
-    // 使用点击位置作为锚点，避免 Autocomplete 选项卸载导致锚点失效
-    setMenuPos({ left: e.clientX, top: e.clientY })
-    setMenuAnchor(null)
-    setMenuTplId(tplId)
-  // 打开菜单时锁定下拉保持展开
-  setLockOpen(true)
-  }
-  const closeSettingsMenu = () => {
-    setMenuAnchor(null)
-    setMenuTplId('')
-    setMenuPos(null)
-  // 关闭菜单时允许下拉恢复默认行为
-  setLockOpen(false)
-  }
-
-  const generateNextDefaultName = () => {
-    const existing = listTemplates().map(t => t.name)
-    let n = 1
-    while (existing.includes(`模板${n}`)) n++
-    return `模板${n}`
-  }
-
-  useEffect(() => {
-    if (defaultTemplateInitRef.current) return
-    const existing = listTemplates()
-    const hasDefault = existing.some(t => t.id === DEFAULT_TEMPLATE_ID)
-    if (!hasDefault) {
-      const tpl = buildTemplateSnapshot({
-        id: DEFAULT_TEMPLATE_ID,
-        name: DEFAULT_TEMPLATE_NAME,
-        team,
-        coefficientsMap,
-        normalizeCoefficients,
-      })
-      saveTemplate(tpl)
-    }
-    defaultTemplateInitRef.current = true
-    const next = listTemplates()
-    setTemplates(next)
-    if (!selectedTemplateId && next.length > 0) {
-      setSelectedTemplateId(next[0].id)
-    }
-  }, [coefficientsMap, selectedTemplateId, team])
-
-  useEffect(() => {
-    if (!selectedTemplateId && templates.length > 0) {
-      setSelectedTemplateId(templates[0].id)
-    }
-  }, [selectedTemplateId, templates])
-
-  // 载入远端人物目录（不落地本地文件）用于根据 id 还原 Character
-  // 直接使用从父组件传入的 nikkeList
-  const nikkeList = propNikkeList || []
-
-  // 监听外部队伍变化(用于复制功能)
-  const isInternalUpdate = useRef(false)
-  useEffect(() => {
-    if (!externalTeam || externalTeam.length === 0) return
-    if (isInternalUpdate.current) {
-      isInternalUpdate.current = false
-      return
-    }
-    
-    const newTeam = externalTeam.map((char, index) => ({
-      position: index + 1,
-      character: char,
-      damageCoefficient: 1.0,
-      attributeCoefficients: getDefaultCoefficients()
-    }))
-    setTeam(newTeam)
-  }, [externalTeam])
+  const visibleTemplates = useMemo(
+    () => temporaryCopyTemplate ? [temporaryCopyTemplate, ...persistentTemplates] : persistentTemplates,
+    [persistentTemplates, temporaryCopyTemplate],
+  )
 
   const characterFromList = useMemo(() => {
     const map = new Map<string, Character>()
-    nikkeList.forEach((n) => {
-      map.set(String(n.id), n)
+    nikkeList.forEach((nikke) => {
+      map.set(String(nikke.id), nikke)
     })
     return (id: string): Character | undefined => map.get(String(id))
   }, [nikkeList])
 
-  // 与 ExiaInvasion 管理页一致：基于 resource_id 拼接 Nikke-db 头像
+  const getTemplateById = useCallback((templateId: string) => (
+    visibleTemplates.find((template) => template.id === templateId)
+  ), [visibleTemplates])
+
+  const persistPersistentTemplates = useCallback((nextTemplates: TeamTemplate[]) => {
+    persistentTemplatesRef.current = nextTemplates
+    saveTemplates(nextTemplates)
+    setPersistentTemplates(nextTemplates)
+  }, [])
+
+  const persistTemporaryTemplate = useCallback((nextTemplate: TeamTemplate | null) => {
+    if (nextTemplate) {
+      saveTemporaryCopyTemplate(nextTemplate)
+      setTemporaryCopyTemplate(nextTemplate)
+      return
+    }
+    clearTemporaryCopyTemplate()
+    setTemporaryCopyTemplate(null)
+  }, [])
+
+  const commitRealtimeState = useCallback((state: ReturnType<typeof createOptimisticTemplateState>) => {
+    authoritativeTemplatesRef.current = state.authoritativeTemplates
+    optimisticTemplatesRef.current = state.optimisticTemplates
+    pendingMutationsRef.current = state.pendingMutations
+    lastRevisionRef.current = state.lastRevision
+    persistPersistentTemplates(state.optimisticTemplates)
+  }, [persistPersistentTemplates])
+
+  const sendPendingMutations = useCallback(() => {
+    const socket = websocketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+
+    const nextMutation = getNextDispatchableTemplateMutation({
+      pendingMutations: pendingMutationsRef.current,
+      inflightMutationId: inflightMutationIdRef.current,
+    })
+    if (!nextMutation) return
+
+    inflightMutationIdRef.current = nextMutation.clientMutationId
+    socket.send(JSON.stringify(nextMutation))
+  }, [])
+
+  const queueRealtimeMutations = useCallback((mutations: TeamTemplateRealtimePatch[]) => {
+    if (mutations.length === 0) return
+
+    const nextState = createOptimisticTemplateState({
+      templates: authoritativeTemplatesRef.current,
+      lastRevision: lastRevisionRef.current,
+      pendingMutations: [...pendingMutationsRef.current, ...mutations],
+    })
+    commitRealtimeState(nextState)
+    sendPendingMutations()
+  }, [commitRealtimeState, sendPendingMutations])
+
+  const restoreTemplate = useCallback((template: TeamTemplate) => {
+    isHydratingTemplateRef.current = true
+    lastAppliedTemplateIdRef.current = template.id
+
+    const nextTeam = Array.from({ length: 5 }, (_, index) => {
+      const position = index + 1
+      const member = template.members.find((item) => item.position === position)
+      return {
+        position,
+        character: member?.characterId ? characterFromList(member.characterId) : undefined,
+        damageCoefficient: member?.damageCoefficient ?? 1.0,
+      }
+    })
+    const nextCoefficients: { [position: number]: AttributeCoefficients } = {}
+    template.members.forEach((member) => {
+      nextCoefficients[member.position] = normalizeCoefficients(member.coefficients as AttributeCoefficients)
+    })
+
+    setTeam(nextTeam)
+    setCoefficientsMap(nextCoefficients)
+  }, [characterFromList, normalizeCoefficients])
+
+  const buildCurrentSnapshot = useCallback((template: TeamTemplate, updatedAt?: number) => (
+    buildTemplateSnapshot({
+      id: template.id,
+      name: template.name,
+      createdAt: template.createdAt,
+      updatedAt,
+      team,
+      coefficientsMap,
+      normalizeCoefficients,
+    })
+  ), [coefficientsMap, normalizeCoefficients, team])
+
   const getNikkeAvatarUrl = useCallback((nikke?: Character): string => {
     const rid = nikke?.resource_id
     if (rid === undefined || rid === null || rid === '') return ''
@@ -289,41 +304,184 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return `https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/images/sprite/si_c${ridStr}_00_s.png`
   }, [])
 
-  // 当team或数据变化时：
-  // 1) 重新计算强度（内部用途）
-  // 2) 通知父组件当前选择与系数
+  const generateNextDefaultName = useCallback(() => {
+    const existingNames = persistentTemplatesRef.current.map((template) => template.name)
+    let nextIndex = 1
+    while (existingNames.includes(`模板${nextIndex}`)) nextIndex += 1
+    return `模板${nextIndex}`
+  }, [])
+
+  const findCharacterDataById = useCallback((characterId: string, jsonData: any) => {
+    if (!jsonData || !jsonData.elements) return null
+
+    for (const elementType of Object.keys(jsonData.elements)) {
+      const characters = jsonData.elements[elementType]
+      if (Array.isArray(characters)) {
+        const found = characters.find((character: any) => character.id?.toString() === characterId)
+        if (found) return found
+      }
+    }
+    return null
+  }, [])
+
+  useEffect(() => {
+    persistentTemplatesRef.current = persistentTemplates
+  }, [persistentTemplates])
+
+  useEffect(() => {
+    if (defaultTemplateInitRef.current) return
+
+    const existing = listTemplates()
+    if (!existing.some((template) => template.id === DEFAULT_TEMPLATE_ID)) {
+      const defaultTemplate = buildTemplateSnapshot({
+        id: DEFAULT_TEMPLATE_ID,
+        name: DEFAULT_TEMPLATE_NAME,
+        team,
+        coefficientsMap,
+        normalizeCoefficients,
+      })
+      existing.unshift(defaultTemplate)
+      saveTemplates(existing)
+    }
+
+    const nextTemplates = listTemplates()
+    defaultTemplateInitRef.current = true
+    persistentTemplatesRef.current = nextTemplates
+    authoritativeTemplatesRef.current = nextTemplates
+    optimisticTemplatesRef.current = nextTemplates
+    setPersistentTemplates(nextTemplates)
+  }, [coefficientsMap, normalizeCoefficients, team])
+
+  useEffect(() => {
+    if (selectedTemplateId && visibleTemplates.some((template) => template.id === selectedTemplateId)) {
+      return
+    }
+
+    const nextSelectedTemplateId =
+      persistentTemplates[0]?.id
+      || temporaryCopyTemplate?.id
+      || visibleTemplates[0]?.id
+      || ''
+
+    if (nextSelectedTemplateId) {
+      setSelectedTemplateId(nextSelectedTemplateId)
+    }
+  }, [persistentTemplates, selectedTemplateId, temporaryCopyTemplate, visibleTemplates])
+
+  useEffect(() => {
+    if (!externalTeam || externalTeam.length === 0) return
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false
+      return
+    }
+
+    const nextTeam = buildCharactersTeam(externalTeam)
+    const nextCoefficients = buildCoefficientsMapForTeam(nextTeam)
+    const snapshot = buildTemplateSnapshot({
+      id: TEMPORARY_COPY_TEMPLATE_ID,
+      name: TEMPORARY_COPY_TEMPLATE_NAME,
+      createdAt: temporaryCopyTemplate?.createdAt ?? Date.now(),
+      team: nextTeam,
+      coefficientsMap: nextCoefficients,
+      normalizeCoefficients,
+    })
+
+    persistTemporaryTemplate(snapshot)
+    isHydratingTemplateRef.current = true
+    lastAppliedTemplateIdRef.current = TEMPORARY_COPY_TEMPLATE_ID
+    setSelectedTemplateId(TEMPORARY_COPY_TEMPLATE_ID)
+    setTeam(nextTeam)
+    setCoefficientsMap(nextCoefficients)
+  }, [buildCoefficientsMapForTeam, externalTeam, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt])
+
+  useEffect(() => {
+    if (!selectedTemplateId) return
+    if (lastAppliedTemplateIdRef.current === selectedTemplateId) return
+
+    const selectedTemplate = getTemplateById(selectedTemplateId)
+    if (!selectedTemplate) return
+
+    restoreTemplate(selectedTemplate)
+  }, [getTemplateById, restoreTemplate, selectedTemplateId])
+
+  useEffect(() => {
+    if (!defaultTemplateInitRef.current || !selectedTemplateId) return
+    if (isHydratingTemplateRef.current) {
+      isHydratingTemplateRef.current = false
+      return
+    }
+
+    const currentTemplate = getTemplateById(selectedTemplateId)
+    if (!currentTemplate) return
+
+    const comparableSnapshot = buildCurrentSnapshot(currentTemplate, currentTemplate.updatedAt ?? currentTemplate.createdAt)
+    if (JSON.stringify(currentTemplate) === JSON.stringify(comparableSnapshot)) return
+
+    const snapshot = buildCurrentSnapshot(currentTemplate)
+
+    if (currentTemplate.id === TEMPORARY_COPY_TEMPLATE_ID) {
+      persistTemporaryTemplate(snapshot)
+      return
+    }
+
+    if (authToken) {
+      queueRealtimeMutations([
+        buildTemplateReplaceMembersPatch({
+          clientMutationId: Math.random().toString(36).slice(2),
+          sessionId: sessionIdRef.current,
+          baseRevision: lastRevisionRef.current,
+          templateId: currentTemplate.id,
+          members: snapshot.members,
+          totalDamageCoefficient: snapshot.totalDamageCoefficient,
+        }),
+      ])
+      return
+    }
+
+    const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, snapshot)
+    authoritativeTemplatesRef.current = nextTemplates
+    optimisticTemplatesRef.current = nextTemplates
+    persistPersistentTemplates(nextTemplates)
+  }, [
+    authToken,
+    buildCurrentSnapshot,
+    coefficientsMap,
+    getTemplateById,
+    persistPersistentTemplates,
+    persistTemporaryTemplate,
+    queueRealtimeMutations,
+    selectedTemplateId,
+    team,
+  ])
+
   useEffect(() => {
     const calculateAllStrengths = async () => {
-      const newStrengths: {[position: number]: {baseline: number, target: number}} = {}
-      const newRaw: {[position: number]: { baseline?: any, target?: any }} = {}
+      const newStrengths: { [position: number]: { baseline: number, target: number } } = {}
+      const newRaw: { [position: number]: { baseline?: any, target?: any } } = {}
       let totalBaselineStrength = 0
       let totalTargetStrength = 0
       let ratioWeightedSum = 0
       let weightSum = 0
-      
-      // 计算系数总和，用于归一化
-      const totalCoefficient = team.reduce((sum, teamChar) => {
-        return sum + (teamChar.damageCoefficient || 0)
-      }, 0)
-      
-      const results = await Promise.all(team.map(async (teamChar) => {
-        if (!teamChar.character) {
+      const totalCoefficient = team.reduce((sum, slot) => sum + (slot.damageCoefficient || 0), 0)
+
+      const results = await Promise.all(team.map(async (slot) => {
+        if (!slot.character) {
           return {
-            position: teamChar.position,
+            position: slot.position,
             strengths: { baseline: 0, target: 0 },
             raw: { baseline: undefined, target: undefined },
-            damageCoefficient: teamChar.damageCoefficient || 0
+            damageCoefficient: slot.damageCoefficient || 0,
           }
         }
 
-        const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
-        const characterId = teamChar.character.id?.toString()
+        const coeffs = coefficientsMap[slot.position] || getDefaultCoefficients()
+        const characterId = slot.character.id?.toString()
         const baselineCharData = findCharacterDataById(characterId, baselineData)
         const targetCharData = findCharacterDataById(characterId, targetData)
 
         const [baselineRaw, targetRaw] = await Promise.all([
-          baselineCharData ? computeRawAttributeScores(baselineCharData, teamChar.character, baselineData) : Promise.resolve(undefined),
-          targetCharData ? computeRawAttributeScores(targetCharData, teamChar.character, targetData) : Promise.resolve(undefined)
+          baselineCharData ? computeRawAttributeScores(baselineCharData, slot.character, baselineData) : Promise.resolve(undefined),
+          targetCharData ? computeRawAttributeScores(targetCharData, slot.character, targetData) : Promise.resolve(undefined),
         ])
 
         const baselineWeighted = baselineRaw ? computeWeightedStrength(baselineRaw, coeffs) : undefined
@@ -332,10 +490,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         const targetValue = targetWeighted ? (targetWeighted.finalAtk + targetWeighted.finalDef + targetWeighted.finalHP) : 0
 
         return {
-          position: teamChar.position,
+          position: slot.position,
           strengths: { baseline: baselineValue, target: targetValue },
           raw: { baseline: baselineRaw, target: targetRaw },
-          damageCoefficient: teamChar.damageCoefficient || 0
+          damageCoefficient: slot.damageCoefficient || 0,
         }
       }))
 
@@ -343,77 +501,243 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         newStrengths[result.position] = result.strengths
         newRaw[result.position] = result.raw
 
-        // 如果系数总和为0，则所有角色都不贡献输出
         if (totalCoefficient > 0) {
-          // 计算该角色在队伍中的输出占比（用于绝对值展示）
           const outputRatio = result.damageCoefficient / totalCoefficient
           totalBaselineStrength += result.strengths.baseline * outputRatio
           totalTargetStrength += result.strengths.target * outputRatio
         }
-        // 以比值的方式参与：按伤害系数做加权平均
+
         if (result.damageCoefficient > 0 && result.strengths.baseline > 0) {
           ratioWeightedSum += result.damageCoefficient * (result.strengths.target / result.strengths.baseline)
           weightSum += result.damageCoefficient
         }
       })
-      
+
       setCharacterStrengths(newStrengths)
       setRawMap(newRaw)
-          
-      // 回调：绝对值（用于信息展示）
       onTeamStrengthChange?.(totalBaselineStrength, totalTargetStrength)
-      // 回调：比值（用于伤害计算和展示），按角色比值加权平均
-      const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
-      const label = scale > 0 ? `${scale.toFixed(2)} : 1` : '—'
-      onTeamRatioChange?.(scale, label)
-    }
-    
-    calculateAllStrengths()
-    // 通知父级当前选择与系数
-    // 将每个位置的 damageCoefficient 作为 damageWeight 传出，便于 AccountsAnalyzer 做权重计算
-    const coeffsWithWeight: { [position: number]: AttributeCoefficients } = {}
-    for (const t of team) {
-      const base = coefficientsMap[t.position] || getDefaultCoefficients()
-      coeffsWithWeight[t.position] = { ...base, damageWeight: t.damageCoefficient || 0 }
-    }
-    isInternalUpdate.current = true
-    onTeamSelectionChange?.(team.map(t => t.character), coeffsWithWeight)
-  }, [team, baselineData, targetData, onTeamStrengthChange, coefficientsMap])
 
-    const handleAddCharacter = (position: number) => {
+      const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
+      onTeamRatioChange?.(scale, scale > 0 ? `${scale.toFixed(2)} : 1` : '-')
+    }
+
+    void calculateAllStrengths()
+
+    const coeffsWithWeight: { [position: number]: AttributeCoefficients } = {}
+    team.forEach((slot) => {
+      const base = coefficientsMap[slot.position] || getDefaultCoefficients()
+      coeffsWithWeight[slot.position] = { ...base, damageWeight: slot.damageCoefficient || 0 }
+    })
+    isInternalUpdateRef.current = true
+    onTeamSelectionChange?.(team.map((slot) => slot.character), coeffsWithWeight)
+  }, [baselineData, coefficientsMap, findCharacterDataById, onTeamRatioChange, onTeamSelectionChange, onTeamStrengthChange, targetData, team])
+
+  useEffect(() => {
+    if (!authToken) {
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      const socket = currentSocketRef.current
+      if (socket) {
+        socket.onopen = null
+        socket.onmessage = null
+        socket.onclose = null
+        socket.onerror = null
+        socket.close()
+      }
+      currentSocketRef.current = null
+      websocketRef.current = null
+      inflightMutationIdRef.current = null
+      reconnectAttemptRef.current = 0
+      lastRevisionRef.current = 0
+      pendingMutationsRef.current = []
+      authoritativeTemplatesRef.current = persistentTemplatesRef.current
+      optimisticTemplatesRef.current = persistentTemplatesRef.current
+      return
+    }
+
+    const socket = new WebSocket(`${REALTIME_API_BASE_URL}/team-template/realtime?token=${encodeURIComponent(authToken)}`)
+    currentSocketRef.current = socket
+    websocketRef.current = socket
+
+    socket.onopen = () => {
+      if (currentSocketRef.current !== socket) return
+      reconnectAttemptRef.current = 0
+      socket.send(JSON.stringify({
+        type: 'hello',
+        token: authToken,
+        documentId: 'team-template',
+        lastRevision: lastRevisionRef.current,
+        sessionId: sessionIdRef.current,
+      }))
+    }
+
+    socket.onmessage = (event) => {
+      if (currentSocketRef.current !== socket) return
+
+      let message: any
+      try {
+        message = JSON.parse(event.data)
+      } catch (error) {
+        console.error('Failed to parse team-template realtime message', error)
+        return
+      }
+
+      if (message.type === 'snapshot') {
+        const remoteTemplates = Array.isArray(message.templates) ? message.templates as TeamTemplate[] : []
+        const localTemplates = listTemplates()
+        const mergedTemplates = mergePersistentTemplates({
+          localTemplates,
+          remoteTemplates,
+          now: Date.now(),
+        })
+        const mergedState = createOptimisticTemplateState({
+          templates: mergedTemplates,
+          lastRevision: Number(message.revision || 0),
+          pendingMutations: pendingMutationsRef.current,
+        })
+        commitRealtimeState(mergedState)
+
+        const remoteIds = new Set(remoteTemplates.map((template) => template.id))
+        const templatesToSeed = mergedTemplates.filter((template) => !remoteIds.has(template.id))
+        if (templatesToSeed.length > 0) {
+          queueRealtimeMutations(buildTemplateSeedPatches({
+            templates: templatesToSeed,
+            sessionId: sessionIdRef.current,
+            baseRevision: Number(message.revision || 0),
+          }))
+        }
+        sendPendingMutations()
+        return
+      }
+
+      if (message.type === 'patch_replay') {
+        let nextState = createOptimisticTemplateState({
+          templates: authoritativeTemplatesRef.current,
+          lastRevision: lastRevisionRef.current,
+          pendingMutations: pendingMutationsRef.current,
+        })
+        const patches = Array.isArray(message.patches) ? message.patches : []
+        patches.forEach((patch: TeamTemplateRealtimePatch, index: number) => {
+          nextState = reconcileIncomingTemplatePatch(nextState, {
+            revision: lastRevisionRef.current + index + 1,
+            sessionId: patch.sessionId,
+            patch,
+          })
+        })
+        nextState.lastRevision = Number(message.revision || nextState.lastRevision)
+        commitRealtimeState(nextState)
+        sendPendingMutations()
+        return
+      }
+
+      if (message.type === 'ack') {
+        const nextState = reconcileTemplateAck(
+          createOptimisticTemplateState({
+            templates: authoritativeTemplatesRef.current,
+            lastRevision: lastRevisionRef.current,
+            pendingMutations: pendingMutationsRef.current,
+          }),
+          {
+            revision: Number(message.revision || 0),
+            clientMutationId: String(message.clientMutationId || ''),
+            appliedPatch: message.appliedPatch as TeamTemplateRealtimePatch,
+          },
+        )
+        if (inflightMutationIdRef.current === message.clientMutationId) {
+          inflightMutationIdRef.current = null
+        }
+        commitRealtimeState(nextState)
+        sendPendingMutations()
+        return
+      }
+
+      if (message.type === 'patch_broadcast') {
+        const nextState = reconcileIncomingTemplatePatch(
+          createOptimisticTemplateState({
+            templates: authoritativeTemplatesRef.current,
+            lastRevision: lastRevisionRef.current,
+            pendingMutations: pendingMutationsRef.current,
+          }),
+          {
+            revision: Number(message.revision || 0),
+            sessionId: String(message.sessionId || ''),
+            patch: message.patch as TeamTemplateRealtimePatch,
+          },
+        )
+        commitRealtimeState(nextState)
+        return
+      }
+
+      if (message.type === 'error') {
+        console.error('Team template realtime error:', message)
+      }
+    }
+
+    socket.onclose = () => {
+      if (currentSocketRef.current !== socket) return
+      websocketRef.current = null
+      inflightMutationIdRef.current = null
+      reconnectAttemptRef.current += 1
+      const delay = Math.min(5000, reconnectAttemptRef.current * 1000)
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null
+        setReconnectNonce((value) => value + 1)
+      }, delay)
+    }
+
+    socket.onerror = (error) => {
+      if (currentSocketRef.current !== socket) return
+      console.error('Team template websocket error', error)
+    }
+
+    return () => {
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      if (currentSocketRef.current === socket) {
+        currentSocketRef.current = null
+        websocketRef.current = null
+      }
+      socket.onopen = null
+      socket.onmessage = null
+      socket.onclose = null
+      socket.onerror = null
+      socket.close()
+    }
+  }, [authToken, commitRealtimeState, queueRealtimeMutations, reconnectNonce, sendPendingMutations])
+
+  const handleAddCharacter = (position: number) => {
     setSelectedPosition(position)
     setFilterDialogOpen(true)
   }
 
   const handleSelectCharacter = (character: Character) => {
-    setTeam(prev => 
-      prev.map(teamChar => 
-        teamChar.position === selectedPosition
-          ? { ...teamChar, character }
-          : teamChar
-      )
-    )
-    setCoefficientsMap(prev => ({
+    setTeam((prev) => prev.map((slot) => (
+      slot.position === selectedPosition
+        ? { ...slot, character }
+        : slot
+    )))
+    setCoefficientsMap((prev) => ({
       ...prev,
-      [selectedPosition]: normalizeCoefficients(prev[selectedPosition])
+      [selectedPosition]: normalizeCoefficients(prev[selectedPosition]),
     }))
     setFilterDialogOpen(false)
   }
 
   const handleConfirmSelectedCharacters = useCallback((characters: Character[]) => {
-    setTeam(prev => (
-      prev.map((teamChar, index) => ({
-        ...teamChar,
-        character: characters[index] || undefined
-      }))
-    ))
+    setTeam((prev) => prev.map((slot, index) => ({
+      ...slot,
+      character: characters[index] || undefined,
+    })))
 
-    setCoefficientsMap(prev => {
+    setCoefficientsMap((prev) => {
       const next = { ...prev }
-      characters.forEach((char, index) => {
-        if (char) {
-          const position = index + 1
-          next[position] = normalizeCoefficients(prev[position])
+      characters.forEach((character, index) => {
+        if (character) {
+          next[index + 1] = normalizeCoefficients(prev[index + 1])
         }
       })
       return next
@@ -421,419 +745,360 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }, [normalizeCoefficients])
 
   const handleRemoveCharacter = (position: number) => {
-    setTeam(prev => 
-      prev.map(teamChar => 
-        teamChar.position === position
-          ? { position: teamChar.position, damageCoefficient: 1.0 }
-          : teamChar
-      )
-    )
+    setTeam((prev) => prev.map((slot) => (
+      slot.position === position
+        ? { position: slot.position, damageCoefficient: 1.0 }
+        : slot
+    )))
   }
 
   const handleDamageCoefficientChange = (position: number, value: number) => {
-    setTeam(prev => 
-      prev.map(teamChar => 
-        teamChar.position === position
-          ? { ...teamChar, damageCoefficient: value }
-          : teamChar
-      )
-    )
+    setTeam((prev) => prev.map((slot) => (
+      slot.position === position
+        ? { ...slot, damageCoefficient: value }
+        : slot
+    )))
   }
 
   const handleCoefficientsChange = (position: number, next: AttributeCoefficients) => {
-    setCoefficientsMap(prev => ({ ...prev, [position]: next }))
+    setCoefficientsMap((prev) => ({ ...prev, [position]: next }))
   }
 
-  // 模板保存
-  // 新建模板
   const handleCreateTemplate = () => {
+    if (persistentTemplatesRef.current.length >= MAX_TEMPLATES) return
+
     const emptyTeam = createEmptyTeam()
-    const id = Math.random().toString(36).slice(2)
-    const tpl = buildTemplateSnapshot({
-      id,
+    const template = buildTemplateSnapshot({
+      id: Math.random().toString(36).slice(2),
       name: generateNextDefaultName(),
       team: emptyTeam,
       coefficientsMap: {},
       normalizeCoefficients,
     })
-    saveTemplate(tpl)
-    setTemplates((prev) => upsertTemplateInList(prev, tpl))
+
     isHydratingTemplateRef.current = true
-    lastAppliedTemplateIdRef.current = tpl.id
-    setSelectedTemplateId(tpl.id)
+    lastAppliedTemplateIdRef.current = template.id
+    setSelectedTemplateId(template.id)
     setTeam(emptyTeam)
     setCoefficientsMap({})
-  }
 
-  // 导出全部模板
-  const handleExportTemplates = () => {
-    try {
-      const all = listTemplates()
-      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      const ts = new Date()
-      const pad = (n: number) => String(n).padStart(2, '0')
-      const file = `templates-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`
-      a.href = url
-      a.download = file
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      console.error('导出模板失败', e)
-      window.alert(t('tpl.exportFailed'))
-    }
-  }
-
-  // 导入模板（合并到本地；如 id 冲突则生成新 id）
-  const handleImportTemplates = async (file: File) => {
-    try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-  const arr: any[] = Array.isArray(data) ? data : (data && Array.isArray(data.templates) ? data.templates : [])
-      if (!Array.isArray(arr)) throw new Error('格式不正确')
-      const existing = listTemplates()
-      const ids = new Set(existing.map(t => t.id))
-      const toSave: TeamTemplate[] = []
-      for (const item of arr) {
-        if (!item || typeof item !== 'object') continue
-        const tpl: TeamTemplate = {
-          id: String(item.id || Math.random().toString(36).slice(2)),
-          name: String(item.name || generateNextDefaultName()),
-          createdAt: Number(item.createdAt || Date.now()),
-          members: Array.isArray(item.members) ? item.members : [],
-          totalDamageCoefficient: Number(item.totalDamageCoefficient || 0),
-        }
-        // id 冲突则换一个新 id
-        if (ids.has(tpl.id)) tpl.id = Math.random().toString(36).slice(2)
-        ids.add(tpl.id)
-        toSave.push(tpl)
-      }
-      // 逐个保存（saveTemplate 会合并进 localStorage）
-      toSave.forEach(saveTemplate)
-      refreshTemplates()
-      window.alert(t('tpl.imported').replace('{count}', String(toSave.length)))
-    } catch (e) {
-      console.error('导入模板失败', e)
-      window.alert(t('tpl.importFailed'))
-    }
-  }
-
-  const applyTemplate = async (tpl: TeamTemplate) => {
-    isHydratingTemplateRef.current = true
-    lastAppliedTemplateIdRef.current = tpl.id
-    // 还原队伍
-    const nextTeam: TeamCharacter[] = team.map(slot => {
-      const m = tpl.members.find(mm => mm.position === slot.position)
-      let character: Character | undefined = undefined
-      if (m?.characterId && characterFromList) {
-        const ch = characterFromList(m.characterId)
-        if (ch) character = ch
-      }
-      return {
-        position: slot.position,
-        character,
-        damageCoefficient: m?.damageCoefficient ?? 1.0,
-      }
-    })
-    setTeam(nextTeam)
-    // 还原系数
-    const nextCoeffs: {[pos:number]: AttributeCoefficients} = {}
-    tpl.members.forEach(m => {
-      nextCoeffs[m.position] = normalizeCoefficients(m.coefficients as AttributeCoefficients)
-    })
-    setCoefficientsMap(nextCoeffs)
-  }
-
-  useEffect(() => {
-    if (!selectedTemplateId) return
-    if (lastAppliedTemplateIdRef.current === selectedTemplateId) return
-
-    const selectedTemplate = templates.find((tpl) => tpl.id === selectedTemplateId)
-    if (!selectedTemplate) return
-
-    void applyTemplate(selectedTemplate)
-  }, [selectedTemplateId, templates])
-
-  useEffect(() => {
-    if (!defaultTemplateInitRef.current || !selectedTemplateId) return
-
-    if (isHydratingTemplateRef.current) {
-      isHydratingTemplateRef.current = false
+    if (authToken) {
+      queueRealtimeMutations([
+        buildTemplateCreatePatch({
+          clientMutationId: Math.random().toString(36).slice(2),
+          sessionId: sessionIdRef.current,
+          baseRevision: lastRevisionRef.current,
+          templateId: template.id,
+          name: template.name,
+        }),
+        buildTemplateReplaceMembersPatch({
+          clientMutationId: Math.random().toString(36).slice(2),
+          sessionId: sessionIdRef.current,
+          baseRevision: lastRevisionRef.current,
+          templateId: template.id,
+          members: template.members,
+          totalDamageCoefficient: template.totalDamageCoefficient,
+        }),
+      ])
       return
     }
 
-    const currentTemplate = templates.find((tpl) => tpl.id === selectedTemplateId)
-    if (!currentTemplate) return
-
-    const snapshot = buildTemplateSnapshot({
-      id: currentTemplate.id,
-      name: currentTemplate.name,
-      createdAt: currentTemplate.createdAt,
-      team,
-      coefficientsMap,
-      normalizeCoefficients,
-    })
-
-    if (JSON.stringify(currentTemplate) === JSON.stringify(snapshot)) return
-
-    saveTemplate(snapshot)
-    setTemplates((prev) => upsertTemplateInList(prev, snapshot))
-  }, [coefficientsMap, selectedTemplateId, team, templates])
-
-  const handleLoadTemplate = () => {
-    const tpl = templates.find(t => t.id === selectedTemplateId)
-    if (tpl) applyTemplate(tpl)
+    const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, template)
+    authoritativeTemplatesRef.current = nextTemplates
+    optimisticTemplatesRef.current = nextTemplates
+    persistPersistentTemplates(nextTemplates)
   }
 
-  const handleDeleteTemplate = (id?: string) => {
-    const targetId = id || selectedTemplateId
-    if (!targetId) return
-    if (targetId === DEFAULT_TEMPLATE_ID) return
-    deleteTemplate(targetId)
-    refreshTemplates()
-    if (selectedTemplateId === targetId) setSelectedTemplateId('')
-  }
+  const startRenameTemplate = (templateId: string) => {
+    if (templateId === TEMPORARY_COPY_TEMPLATE_ID) return
+    const template = persistentTemplatesRef.current.find((item) => item.id === templateId)
+    if (!template) return
 
-  const startRenameTemplate = (id: string) => {
     setIsRenaming(true)
-    setRenameId(id)
-  // 预填原名称
-  const tpl = templates.find(t => t.id === id) || listTemplates().find(t => t.id === id)
-  setRenameValue((tpl?.name || '').toString())
-    // 等待选项渲染后聚焦并选中
-    setTimeout(() => {
-      if (renameInputRef.current) {
-        renameInputRef.current.focus()
-        renameInputRef.current.select()
-      }
+    setRenameId(templateId)
+    setRenameValue(template.name)
+    window.setTimeout(() => {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
     }, 0)
   }
 
   const confirmRename = () => {
-    const id = renameId
-    const name = renameValue.trim()
-    if (!id || !name) {
-      // 空名不提交，保持在编辑态
-      return
+    const templateId = renameId
+    const nextName = renameValue.trim()
+    if (!templateId || !nextName) return
+
+    if (authToken) {
+      queueRealtimeMutations([{
+        type: 'patch',
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        op: 'template.rename',
+        payload: { templateId, name: nextName },
+      }])
+    } else {
+      const nextTemplates = persistentTemplatesRef.current.map((template) => (
+        template.id === templateId
+          ? { ...template, name: nextName, updatedAt: Date.now() }
+          : template
+      ))
+      authoritativeTemplatesRef.current = nextTemplates
+      optimisticTemplatesRef.current = nextTemplates
+      persistPersistentTemplates(nextTemplates)
     }
-    const list = listTemplates()
-    const tpl = list.find(t => t.id === id)
-    if (!tpl) return
-    tpl.name = name
-    saveTemplate(tpl)
-    refreshTemplates()
-    setSelectedTemplateId(id)
+
+    setSelectedTemplateId(templateId)
     setIsRenaming(false)
     setRenameId('')
     setRenameValue('')
-    setLockOpen(false)
   }
 
-  const handleDuplicateTemplate = (id: string) => {
-    const list = listTemplates()
-    const tpl = list.find(t => t.id === id)
-    if (!tpl) return
+  const handleDeleteTemplate = (templateId?: string) => {
+    const targetId = templateId || selectedTemplateId
+    if (!targetId || targetId === DEFAULT_TEMPLATE_ID || targetId === TEMPORARY_COPY_TEMPLATE_ID) return
+
+    if (authToken) {
+      queueRealtimeMutations([{
+        type: 'patch',
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        op: 'template.delete',
+        payload: { templateId: targetId },
+      }])
+    } else {
+      const nextTemplates = persistentTemplatesRef.current.filter((template) => template.id !== targetId)
+      authoritativeTemplatesRef.current = nextTemplates
+      optimisticTemplatesRef.current = nextTemplates
+      persistPersistentTemplates(nextTemplates)
+    }
+
+    if (selectedTemplateId === targetId) {
+      lastAppliedTemplateIdRef.current = ''
+      setSelectedTemplateId('')
+    }
+  }
+
+  const handleDuplicateTemplate = (templateId: string) => {
+    const sourceTemplate = getTemplateById(templateId)
+    if (!sourceTemplate) return
+
     const copy: TeamTemplate = {
-      ...tpl,
+      ...sourceTemplate,
       id: Math.random().toString(36).slice(2),
       name: generateNextDefaultName(),
       createdAt: Date.now(),
-      members: Array.isArray(tpl.members) ? tpl.members.map(m => ({ ...m })) : []
+      updatedAt: Date.now(),
+      members: sourceTemplate.members.map((member) => ({
+        ...member,
+        coefficients: member.coefficients == null ? member.coefficients : { ...member.coefficients },
+      })),
     }
-    saveTemplate(copy)
-    setTemplates((prev) => upsertTemplateInList(prev, copy))
+
+    isHydratingTemplateRef.current = true
+    lastAppliedTemplateIdRef.current = copy.id
     setSelectedTemplateId(copy.id)
-    applyTemplate(copy)
-  }
+    restoreTemplate(copy)
 
-  // 根据角色ID查找对应的JSON数据中的角色
-  const findCharacterDataById = (characterId: string, jsonData: any) => {
-    if (!jsonData || !jsonData.elements) return null
-    
-    // 遍历所有元素类型
-    for (const elementType of Object.keys(jsonData.elements)) {
-      const characters = jsonData.elements[elementType]
-      if (Array.isArray(characters)) {
-        const found = characters.find((char: any) => char.id?.toString() === characterId)
-        if (found) return found
-      }
+    if (authToken) {
+      queueRealtimeMutations([
+        buildTemplateCreatePatch({
+          clientMutationId: Math.random().toString(36).slice(2),
+          sessionId: sessionIdRef.current,
+          baseRevision: lastRevisionRef.current,
+          templateId: copy.id,
+          name: copy.name,
+        }),
+        buildTemplateReplaceMembersPatch({
+          clientMutationId: Math.random().toString(36).slice(2),
+          sessionId: sessionIdRef.current,
+          baseRevision: lastRevisionRef.current,
+          templateId: copy.id,
+          members: copy.members,
+          totalDamageCoefficient: copy.totalDamageCoefficient,
+        }),
+      ])
+      return
     }
-    return null
-  }
 
-  // 获取角色的基线和目标强度
-  const getCharacterStrengths = async (character?: Character) => {
-    if (!character) return { baseline: 0, target: 0 }
-    
-    const characterId = character.id?.toString()
-    if (!characterId) return { baseline: 0, target: 0 }
-    
-    const baselineCharData = findCharacterDataById(characterId, baselineData)
-    const targetCharData = findCharacterDataById(characterId, targetData)
-    
-    return {
-      baseline: await calculateCharacterStrength(baselineCharData, character, baselineData, lang),
-      target: await calculateCharacterStrength(targetCharData, character, targetData, lang)
-    }
+    const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, copy)
+    authoritativeTemplatesRef.current = nextTemplates
+    optimisticTemplatesRef.current = nextTemplates
+    persistPersistentTemplates(nextTemplates)
   }
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* 模板管理（导入导出 + 选择 + 保存为模板）- 固定部分 */}
       <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-
-        </Stack>
         <Stack direction="row" spacing={1} alignItems="center">
           <Select
             size="small"
             value={selectedTemplateId || ''}
-            onChange={(e) => {
-              const id = String(e.target.value || '')
+            onChange={(event) => {
+              const nextTemplateId = String(event.target.value || '')
               lastAppliedTemplateIdRef.current = ''
-              setSelectedTemplateId(id)
-              const tpl = templates.find(t => t.id === id)
-              if (tpl) applyTemplate(tpl)
+              setSelectedTemplateId(nextTemplateId)
+              const template = getTemplateById(nextTemplateId)
+              if (template) {
+                restoreTemplate(template)
+              }
             }}
-            sx={{ minWidth: 200, width: 240, flex: 1 }}
-            renderValue={(val) => {
-              const id = String(val || '')
-              const item = templates.find(tp => tp.id === id)
-              const display = item?.name || ''
+            sx={{ minWidth: 220, width: 260, flex: 1 }}
+            renderValue={(value) => {
+              const template = getTemplateById(String(value || ''))
+              if (!template) return ''
+
+              const isTemporary = template.id === TEMPORARY_COPY_TEMPLATE_ID
               return (
-                <Typography noWrap title={display} sx={{ maxWidth: '100%' }}>{display}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  <Typography noWrap title={template.name} sx={{ maxWidth: '100%' }}>
+                    {template.name}
+                  </Typography>
+                  {isTemporary ? (
+                    <Box component="span" sx={{ px: 0.75, py: 0.15, borderRadius: 999, bgcolor: '#fef3c7', color: '#92400e', fontSize: 12, lineHeight: 1.6, flexShrink: 0 }}>
+                      仅本地
+                    </Box>
+                  ) : null}
+                </Box>
               )
             }}
-            MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+            MenuProps={{ PaperProps: { style: { maxHeight: 320 } } }}
           >
-            {templates.map((tpl) => (
-              <MenuItem key={tpl.id} value={tpl.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {isRenaming && renameId === tpl.id ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-                    <TextField
-                      size="small"
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.stopPropagation()
-                          confirmRename()
-                        }
-                        if (e.key === 'Escape') {
-                          e.stopPropagation()
-                          setIsRenaming(false)
-                          setRenameId('')
-                          setRenameValue('')
-                        }
-                      }}
-                      autoFocus
-                      inputRef={renameInputRef}
-                      sx={{ flex: 1, minWidth: 0 }}
-                    />
-                    <IconButton size="small" color="primary" aria-label={t('common.confirm') || '确认'} onClick={(e) => { e.stopPropagation(); confirmRename() }}>
-                      <CheckIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" aria-label={t('common.cancel') || '取消'} onClick={(e) => { e.stopPropagation(); setIsRenaming(false); setRenameId(''); setRenameValue('') }}>
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                ) : (
-                  <>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body2" noWrap title={tpl.name}>{tpl.name}</Typography>
+            {visibleTemplates.map((template) => {
+              const isTemporary = template.id === TEMPORARY_COPY_TEMPLATE_ID
+              return (
+                <MenuItem
+                  key={template.id}
+                  value={template.id}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: isTemporary ? '#fff8e1' : undefined, borderBottom: isTemporary ? '1px solid #f3e8b6' : undefined }}
+                >
+                  {isRenaming && renameId === template.id ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(event) => event.stopPropagation()}>
+                      <TextField
+                        size="small"
+                        value={renameValue}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.stopPropagation()
+                            confirmRename()
+                          }
+                          if (event.key === 'Escape') {
+                            event.stopPropagation()
+                            setIsRenaming(false)
+                            setRenameId('')
+                            setRenameValue('')
+                          }
+                        }}
+                        autoFocus
+                        inputRef={renameInputRef}
+                        sx={{ flex: 1, minWidth: 0 }}
+                      />
+                      <IconButton size="small" color="primary" onClick={(event) => { event.stopPropagation(); confirmRename() }}>
+                        <CheckIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={(event) => {
+                        event.stopPropagation()
+                        setIsRenaming(false)
+                        setRenameId('')
+                        setRenameValue('')
+                      }}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
                     </Box>
-                    <Tooltip title={t('tpl.rename') || '重命名'}>
-                      <IconButton size="small" aria-label={t('tpl.rename') || '重命名'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenameTemplate(tpl.id) }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('tpl.copy') || '复制'}>
-                      <IconButton size="small" aria-label={t('tpl.copy') || '复制'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDuplicateTemplate(tpl.id) }}>
-                        <ContentCopyIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('tpl.delete') || '删除'}>
-                      <span>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          aria-label={t('tpl.delete') || '删除'}
-                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteTemplate(tpl.id) }}
-                          disabled={tpl.id === DEFAULT_TEMPLATE_ID}
-                        >
-                          <DeleteIcon fontSize="small" />
+                  ) : (
+                    <>
+                      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" noWrap title={template.name}>
+                          {template.name}
+                        </Typography>
+                        {isTemporary ? (
+                          <Box component="span" sx={{ px: 0.75, py: 0.15, borderRadius: 999, bgcolor: '#f59e0b', color: '#fff', fontSize: 12, lineHeight: 1.6, flexShrink: 0 }}>
+                            仅本地
+                          </Box>
+                        ) : null}
+                      </Box>
+                      {!isTemporary ? (
+                        <Tooltip title={t('tpl.rename') || '重命名'}>
+                          <IconButton size="small" onClick={(event) => { event.stopPropagation(); event.preventDefault(); startRenameTemplate(template.id) }}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : (
+                        <Box sx={{ width: 32, flexShrink: 0 }} />
+                      )}
+                      <Tooltip title={t('tpl.copy') || '复制'}>
+                        <IconButton size="small" onClick={(event) => { event.stopPropagation(); event.preventDefault(); handleDuplicateTemplate(template.id) }}>
+                          <ContentCopyIcon fontSize="small" />
                         </IconButton>
-                      </span>
-                    </Tooltip>
-                  </>
-                )}
-              </MenuItem>
-            ))}
+                      </Tooltip>
+                      {!isTemporary ? (
+                        <Tooltip title={t('tpl.delete') || '删除'}>
+                          <span>
+                            <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); event.preventDefault(); handleDeleteTemplate(template.id) }}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Box sx={{ width: 32, flexShrink: 0 }} />
+                      )}
+                    </>
+                  )}
+                </MenuItem>
+              )
+            })}
           </Select>
 
-            <Tooltip title={t('tpl.save') || '保存为新模板'}>
-             <Button
-               variant="contained"
-               size="small"
-               startIcon={<AddIcon />}
-               onClick={handleCreateTemplate}
-               disabled={templates.length >= 200}
-             >
-               {t('tpl.create') || '新建'}
-             </Button>
-            </Tooltip>
-
-           
+          <Tooltip title={t('tpl.save') || '保存为新模板'}>
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreateTemplate} disabled={persistentTemplates.length >= MAX_TEMPLATES}>
+              {t('tpl.create') || '新建'}
+            </Button>
+          </Tooltip>
         </Stack>
       </Box>
-      
-      {/* 角色列表 - 可滚动部分 */}
+
       <Box sx={{ p: 1, flex: 1, overflow: 'auto', minWidth: 0 }}>
         <Stack spacing={1}>
-        {team.map((teamChar) => {
-          const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }
-      const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
-      const raw = rawMap[teamChar.position] || {}
-      return (
-            <CharacterCard
-              key={teamChar.position}
-              character={teamChar.character}
-              avatarUrl={getNikkeAvatarUrl(teamChar.character)}
-              onAddCharacter={() => handleAddCharacter(teamChar.position)}
-              onRemoveCharacter={
-                teamChar.character
-                  ? () => handleRemoveCharacter(teamChar.position)
-                  : undefined
-              }
-              damageCoefficient={teamChar.damageCoefficient}
-              onDamageCoefficientChange={(value) => handleDamageCoefficientChange(teamChar.position, value)}
-              baselineStrength={strengths.baseline}
-              targetStrength={strengths.target}
-        coefficients={coeffs}
-        onCoefficientsChange={(next) => handleCoefficientsChange(teamChar.position, next)}
-        baselineRaw={raw.baseline}
-        targetRaw={raw.target}
-              hideMetrics
-            />
-          )
-        })}
+          {team.map((teamChar) => {
+            const strengths = characterStrengths[teamChar.position] || { baseline: 0, target: 0 }
+            const coeffs = coefficientsMap[teamChar.position] || getDefaultCoefficients()
+            const raw = rawMap[teamChar.position] || {}
+
+            return (
+              <CharacterCard
+                key={teamChar.position}
+                character={teamChar.character}
+                avatarUrl={getNikkeAvatarUrl(teamChar.character)}
+                onAddCharacter={() => handleAddCharacter(teamChar.position)}
+                onRemoveCharacter={teamChar.character ? () => handleRemoveCharacter(teamChar.position) : undefined}
+                damageCoefficient={teamChar.damageCoefficient}
+                onDamageCoefficientChange={(value) => handleDamageCoefficientChange(teamChar.position, value)}
+                baselineStrength={strengths.baseline}
+                targetStrength={strengths.target}
+                coefficients={coeffs}
+                onCoefficientsChange={(next) => handleCoefficientsChange(teamChar.position, next)}
+                baselineRaw={raw.baseline}
+                targetRaw={raw.target}
+                hideMetrics
+              />
+            )
+          })}
         </Stack>
       </Box>
 
-    <CharacterFilterDialog
+      <CharacterFilterDialog
         open={filterDialogOpen}
         onClose={() => setFilterDialogOpen(false)}
         onSelectCharacter={handleSelectCharacter}
         multiSelect
         maxSelection={team.length}
-        initialSelectedCharacters={team.map((teamChar) => teamChar.character).filter((char): char is Character => Boolean(char))}
+        initialSelectedCharacters={team.map((slot) => slot.character).filter((character): character is Character => Boolean(character))}
         onConfirmSelection={handleConfirmSelectedCharacters}
         nikkeList={nikkeList}
       />
-  </Box>
+    </Box>
   )
 }
 

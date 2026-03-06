@@ -39,7 +39,7 @@ import {
 
 const AUTH_STORAGE_KEY = 'exia-analysis-auth'
 const LOCAL_LISTS_STORAGE_KEY = 'exia-analysis-local-lists'
-const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
+const API_BASE_URL = 'https://backend.nikke-exia.com'
 const SIDEBAR_WIDTH_MD = 400
 const SIDEBAR_TOGGLE_SIZE = 44
 const AUTH_BROADCAST_CHANNEL = 'exia-auth'

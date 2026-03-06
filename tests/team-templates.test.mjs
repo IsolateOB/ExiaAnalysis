@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { listTemplates } from '../src/utils/templates.ts'
+import {
+  getTemporaryCopyTemplate,
+  listTemplates,
+  mergePersistentTemplates,
+  saveTemporaryCopyTemplate,
+} from '../src/utils/templates.ts'
 import { buildTemplateSnapshot } from '../src/utils/teamTemplateState.ts'
 
 class LocalStorageMock {
@@ -97,4 +102,57 @@ test('buildTemplateSnapshot captures all five positions from the current team st
   assert.equal(snapshot.members[0].coefficients.axisHP, 2)
   assert.equal(snapshot.members[4].position, 5)
   assert.equal(snapshot.totalDamageCoefficient, 15)
+})
+
+test('temporary copy template persists in its own localStorage key', () => {
+  const temporaryTemplate = {
+    id: '__raid_copy__',
+    name: '临时复制模板',
+    createdAt: 10,
+    updatedAt: 20,
+    members: [{ position: 1, characterId: '1002', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 1,
+  }
+
+  saveTemporaryCopyTemplate(temporaryTemplate)
+
+  const stored = getTemporaryCopyTemplate()
+
+  assert.deepEqual(stored, temporaryTemplate)
+  assert.deepEqual(listTemplates(), [])
+})
+
+test('mergePersistentTemplates keeps the newer template and turns the older conflict into a copy', () => {
+  const localTemplate = {
+    id: 'shared-id',
+    name: '本地模板',
+    createdAt: 1,
+    updatedAt: 50,
+    members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 1,
+  }
+  const remoteTemplate = {
+    id: 'shared-id',
+    name: '云端模板',
+    createdAt: 2,
+    updatedAt: 80,
+    members: [{ position: 1, characterId: '2001', damageCoefficient: 2, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 2,
+  }
+
+  const merged = mergePersistentTemplates({
+    localTemplates: [localTemplate],
+    remoteTemplates: [remoteTemplate],
+    now: 100,
+  })
+
+  assert.equal(merged.length, 2)
+  assert.equal(merged[0].id, 'shared-id')
+  assert.equal(merged[0].name, '云端模板')
+  assert.equal(merged[0].updatedAt, 80)
+
+  assert.notEqual(merged[1].id, 'shared-id')
+  assert.match(merged[1].name, /冲突副本/)
+  assert.equal(merged[1].updatedAt, 100)
+  assert.equal(merged[1].members[0].characterId, '1001')
 })
