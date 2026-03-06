@@ -1,5 +1,33 @@
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 
+const PROXY_RETRY_DELAY_MS = 400
+const TOO_FREQUENT_PATTERN = /Requests are too frequent/i
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+type ProxyResponsePayload = {
+  data?: unknown
+  message?: string
+  error?: string
+}
+
+const getProxyErrorMessage = (payload: ProxyResponsePayload | null, fallback: string) => {
+  if (!payload) return fallback
+  if (typeof payload.error === 'string' && payload.error.trim()) return payload.error
+  if (typeof payload.message === 'string' && payload.message.trim()) return payload.message
+  return fallback
+}
+
+export const shouldRetryProxyResponse = (resOk: boolean, payload: ProxyResponsePayload | null) => {
+  if (!resOk) {
+    const message = getProxyErrorMessage(payload, '')
+    return TOO_FREQUENT_PATTERN.test(message)
+  }
+
+  if (!payload) return true
+  return payload.data == null
+}
+
 export const fetchProfile = async (token: string) => {
   const res = await fetch(`${API_BASE_URL}/me`, {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -9,19 +37,41 @@ export const fetchProfile = async (token: string) => {
 }
 
 export const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: any) => {
-  const res = await fetch(`/api/${scope}/${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Game-Cookie': cookie
-    },
-    body: JSON.stringify(body)
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `HTTP ${res.status}`)
+  const request = async () => {
+    const res = await fetch(`/api/${scope}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Game-Cookie': cookie
+      },
+      body: JSON.stringify(body)
+    })
+
+    let payload: ProxyResponsePayload | null = null
+    try {
+      payload = await res.json()
+    } catch {
+      payload = null
+    }
+
+    return { res, payload }
   }
-  return res.json()
+
+  let result = await request()
+  if (shouldRetryProxyResponse(result.res.ok, result.payload)) {
+    await delay(PROXY_RETRY_DELAY_MS)
+    result = await request()
+  }
+
+  if (!result.res.ok) {
+    throw new Error(getProxyErrorMessage(result.payload, `HTTP ${result.res.status}`))
+  }
+
+  if (!result.payload || result.payload.data == null) {
+    throw new Error('Proxy returned no data')
+  }
+
+  return result.payload
 }
 
 export const getRoleInfoByCookie = async (cookie: string) => {
