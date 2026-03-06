@@ -1,6 +1,7 @@
 import { createDefaultRaidPlan, normalizeRaidPlans } from './cloudSync.ts'
 import { createEmptyPlanSlot, ensurePlanArray, hydratePlanSlot } from './planning.ts'
 import type { RaidPlanSnapshot } from './cloudSync.ts'
+import type { PlanSlot } from './types.ts'
 
 export type RaidRealtimeField = 'step' | 'predictedDamage' | 'characterIds'
 
@@ -200,6 +201,116 @@ export const buildSlotUpdateFieldPatch = ({
     value,
   },
 })
+
+export const buildPlanCreatePatch = ({
+  clientMutationId,
+  sessionId,
+  baseRevision,
+  planId,
+  name,
+}: {
+  clientMutationId: string
+  sessionId: string
+  baseRevision: number
+  planId: string
+  name: string
+}): RaidRealtimePatch => ({
+  type: 'patch',
+  clientMutationId,
+  sessionId,
+  baseRevision,
+  op: 'plan.create',
+  payload: {
+    planId,
+    name,
+  },
+})
+
+export const deriveLocalFallbackPlans = ({
+  currentPlans,
+  planningState,
+  now,
+  defaultPlanName = '默认规划',
+}: {
+  currentPlans: RaidPlanSnapshot[]
+  planningState: Record<string, PlanSlot[]>
+  now: number
+  defaultPlanName?: string
+}): RaidPlanSnapshot[] => {
+  const normalizedCurrent = clonePlans(currentPlans)
+  if (normalizedCurrent.length > 0) return normalizedCurrent
+  return [createDefaultRaidPlan(defaultPlanName, planningState, now)]
+}
+
+export const buildPlanSeedPatches = ({
+  plans,
+  sessionId,
+  baseRevision,
+  createMutationId = () => Math.random().toString(36).slice(2),
+}: {
+  plans: RaidPlanSnapshot[]
+  sessionId: string
+  baseRevision: number
+  createMutationId?: () => string
+}): RaidRealtimePatch[] => {
+  const normalizedPlans = clonePlans(plans)
+  const patches: RaidRealtimePatch[] = []
+
+  normalizedPlans.forEach((plan) => {
+    patches.push(buildPlanCreatePatch({
+      clientMutationId: createMutationId(),
+      sessionId,
+      baseRevision,
+      planId: plan.id,
+      name: plan.name,
+    }))
+
+    Object.entries(plan.data).forEach(([accountKey, slots]) => {
+      ensurePlanArray(slots).forEach((slot, slotIndex) => {
+        if (slot.step !== null) {
+          patches.push(buildSlotUpdateFieldPatch({
+            clientMutationId: createMutationId(),
+            sessionId,
+            baseRevision,
+            planId: plan.id,
+            accountKey,
+            slotIndex,
+            field: 'step',
+            value: slot.step,
+          }))
+        }
+
+        if (slot.predictedDamage !== null) {
+          patches.push(buildSlotUpdateFieldPatch({
+            clientMutationId: createMutationId(),
+            sessionId,
+            baseRevision,
+            planId: plan.id,
+            accountKey,
+            slotIndex,
+            field: 'predictedDamage',
+            value: slot.predictedDamage,
+          }))
+        }
+
+        if (slot.characterIds.length > 0) {
+          patches.push(buildSlotUpdateFieldPatch({
+            clientMutationId: createMutationId(),
+            sessionId,
+            baseRevision,
+            planId: plan.id,
+            accountKey,
+            slotIndex,
+            field: 'characterIds',
+            value: slot.characterIds,
+          }))
+        }
+      })
+    })
+  })
+
+  return patches
+}
 
 export const applyIncomingPatch = (plans: RaidPlanSnapshot[], patch: RaidRealtimePatch) => {
   switch (patch.op) {

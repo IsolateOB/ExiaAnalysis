@@ -40,8 +40,10 @@ import {
 } from './UnionRaid/cloudSync.ts'
 import {
   applyIncomingPatch,
+  buildPlanSeedPatches,
   buildSlotUpdateFieldPatch,
   createOptimisticState,
+  deriveLocalFallbackPlans,
   reconcileIncomingPatch,
   reconcileMutationAck
 } from './UnionRaid/cloudRealtime.ts'
@@ -127,6 +129,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const authoritativePlansRef = useRef<RaidPlan[]>([])
   const optimisticPlansRef = useRef<RaidPlan[]>([])
   const pendingMutationsRef = useRef<any[]>([])
+  const plansRef = useRef<RaidPlan[]>([])
+  const currentPlanIdRef = useRef<string>('')
+  const planningStateRef = useRef<Record<string, PlanSlot[]>>({})
   const sessionIdRef = useRef(
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -135,11 +140,25 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
   const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
 
+  useEffect(() => {
+    plansRef.current = plans
+  }, [plans])
+
+  useEffect(() => {
+    currentPlanIdRef.current = currentPlanId
+  }, [currentPlanId])
+
+  useEffect(() => {
+    planningStateRef.current = planningState
+  }, [planningState])
+
   const applyPlanSelection = useCallback((nextPlans: RaidPlan[], requestedPlanId?: string) => {
     const normalized = normalizeRaidPlans(nextPlans)
+    plansRef.current = normalized
     setPlans(normalized)
 
     if (normalized.length === 0) {
+      currentPlanIdRef.current = ''
       setCurrentPlanId('')
       suppressPlanningSyncRef.current = true
       replaceAllPlanning({})
@@ -147,6 +166,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     }
 
     const selectedPlan = normalized.find((plan) => plan.id === requestedPlanId) ?? normalized[0]
+    currentPlanIdRef.current = selectedPlan.id
     setCurrentPlanId(selectedPlan.id)
     suppressPlanningSyncRef.current = true
     replaceAllPlanning(selectedPlan.data)
@@ -164,9 +184,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     lastRevisionRef.current = nextState.lastRevision
     applyPlanSelection(
       optimisticPlansRef.current,
-      requestedPlanId ?? currentPlanId ?? optimisticPlansRef.current[0]?.id,
+      requestedPlanId ?? currentPlanIdRef.current ?? optimisticPlansRef.current[0]?.id,
     )
-  }, [applyPlanSelection, currentPlanId])
+  }, [applyPlanSelection])
 
   const sendPendingMutations = useCallback(() => {
     const socket = websocketRef.current
@@ -176,20 +196,36 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     })
   }, [])
 
-  const queueRealtimePatch = useCallback((patch: any, requestedPlanId?: string) => {
-    const nextPending = [...pendingMutationsRef.current, patch]
-    const nextOptimistic = applyIncomingPatch(optimisticPlansRef.current, patch)
+  const queueRealtimePatches = useCallback((patches: any[], requestedPlanId?: string) => {
+    if (!Array.isArray(patches) || patches.length === 0) return
+
+    const nextPending = [...pendingMutationsRef.current]
+    let nextOptimistic = normalizeRaidPlans(
+      optimisticPlansRef.current.length > 0 ? optimisticPlansRef.current : plansRef.current,
+    )
+
+    patches.forEach((patch) => {
+      nextPending.push(patch)
+      nextOptimistic = applyIncomingPatch(nextOptimistic, patch)
+    })
+
     pendingMutationsRef.current = nextPending
     optimisticPlansRef.current = nextOptimistic
-    applyPlanSelection(nextOptimistic, requestedPlanId ?? currentPlanId)
+    applyPlanSelection(nextOptimistic, requestedPlanId ?? currentPlanIdRef.current)
 
     const socket = websocketRef.current
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(patch))
+      patches.forEach((patch) => {
+        socket.send(JSON.stringify(patch))
+      })
     } else {
       setCloudLoading(true)
     }
-  }, [applyPlanSelection, currentPlanId])
+  }, [applyPlanSelection])
+
+  const queueRealtimePatch = useCallback((patch: any, requestedPlanId?: string) => {
+    queueRealtimePatches([patch], requestedPlanId)
+  }, [queueRealtimePatches])
 
   const buildRealtimeUrl = useCallback((token: string) => {
     const url = new URL(API_BASE_URL)
@@ -238,12 +274,56 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
           if (message?.type === 'snapshot') {
             const snapshotPlans = normalizeRaidPlans(message?.plans)
+            const snapshotRevision = Number(message?.revision) || 0
+
+            if (snapshotPlans.length === 0) {
+              if (pendingMutationsRef.current.length > 0) {
+                const nextState = createOptimisticState({
+                  plans: snapshotPlans,
+                  lastRevision: snapshotRevision,
+                  pendingMutations: pendingMutationsRef.current,
+                })
+                commitRealtimeState(nextState, currentPlanIdRef.current || nextState.optimisticPlans[0]?.id)
+                setCloudLoading(pendingMutationsRef.current.length > 0)
+                sendPendingMutations()
+                return
+              }
+
+              const fallbackPlans = deriveLocalFallbackPlans({
+                currentPlans: plansRef.current,
+                planningState: planningStateRef.current,
+                now: Date.now(),
+              })
+              const seedPatches = buildPlanSeedPatches({
+                plans: fallbackPlans,
+                sessionId: sessionIdRef.current,
+                baseRevision: snapshotRevision,
+                createMutationId: () => Math.random().toString(36).slice(2),
+              })
+              const nextState = createOptimisticState({
+                plans: snapshotPlans,
+                lastRevision: snapshotRevision,
+                pendingMutations: seedPatches,
+              })
+              commitRealtimeState(nextState, fallbackPlans[0]?.id)
+              pendingMutationsRef.current = [...seedPatches]
+              setCloudLoading(seedPatches.length > 0)
+
+              const socket = websocketRef.current
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                seedPatches.forEach((patch) => {
+                  socket.send(JSON.stringify(patch))
+                })
+              }
+              return
+            }
+
             const nextState = createOptimisticState({
               plans: snapshotPlans,
-              lastRevision: Number(message?.revision) || 0,
+              lastRevision: snapshotRevision,
               pendingMutations: pendingMutationsRef.current,
             })
-            commitRealtimeState(nextState, currentPlanId || snapshotPlans[0]?.id)
+            commitRealtimeState(nextState, currentPlanIdRef.current || snapshotPlans[0]?.id)
             setCloudLoading(false)
             sendPendingMutations()
             return
@@ -260,7 +340,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               lastRevision: Number(message?.revision) || lastRevisionRef.current,
               pendingMutations: pendingMutationsRef.current,
             })
-            commitRealtimeState(nextState, currentPlanId || replayedPlans[0]?.id)
+            commitRealtimeState(nextState, currentPlanIdRef.current || replayedPlans[0]?.id)
             setCloudLoading(false)
             sendPendingMutations()
             return
@@ -277,7 +357,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               clientMutationId: String(message?.clientMutationId || ''),
               appliedPatch: message?.appliedPatch,
             })
-            commitRealtimeState(nextState, currentPlanId)
+            commitRealtimeState(nextState, currentPlanIdRef.current)
             setCloudLoading(false)
             return
           }
@@ -294,7 +374,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               sessionId: String(message?.sessionId || ''),
               patch: message?.patch,
             })
-            commitRealtimeState(nextState, currentPlanId)
+            commitRealtimeState(nextState, currentPlanIdRef.current)
             return
           }
 
@@ -333,7 +413,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         websocketRef.current = null
       }
     }
-  }, [authToken, buildRealtimeUrl, commitRealtimeState, currentPlanId, onNotify, sendPendingMutations])
+  }, [authToken, buildRealtimeUrl, commitRealtimeState, onNotify, sendPendingMutations])
 
   useEffect(() => {
     if (!currentPlanId) return
