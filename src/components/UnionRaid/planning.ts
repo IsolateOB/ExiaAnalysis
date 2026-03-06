@@ -1,5 +1,5 @@
-import { STEP_OPTIONS } from './constants'
-import type { ActualStrike, PlanSlot, StrikeView } from './types'
+import { STEP_OPTIONS } from './constants.ts'
+import type { ActualStrike, PlanSlot, StrikeView } from './types.ts'
 
 export const createEmptyPlanSlot = (): PlanSlot => ({
   step: null,

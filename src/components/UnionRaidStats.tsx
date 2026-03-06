@@ -35,6 +35,12 @@ import { useI18n } from '../i18n'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { UnionRaidTable } from './UnionRaid/UnionRaidTable'
 import { useUnionRaidPlanning } from './UnionRaid/useUnionRaidPlanning'
+import {
+  createDefaultRaidPlan,
+  normalizeRaidPlans,
+  prepareRaidPlansForUpload,
+  raidPlansEqual
+} from './UnionRaid/cloudSync.ts'
 import { mapIdsToCharacters } from '../utils/characters'
 import {
   formatActualDamage,
@@ -55,12 +61,7 @@ import {
 import { getAccountKey, getCharacterName, getGameUid, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
 
-interface RaidPlan {
-  id: string
-  name: string
-  data: Record<string, PlanSlot[]>
-  updatedAt: number
-}
+type RaidPlan = ReturnType<typeof normalizeRaidPlans>[number]
 
 interface UnionRaidStatsProps {
   accounts: any[]
@@ -117,8 +118,51 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const [isRenamingPlan, setIsRenamingPlan] = useState(false)
   const [renamePlanName, setRenamePlanName] = useState('')
   const isInitialLoadRef = useRef(true)
+  const suppressPlanningSyncRef = useRef(false)
+  const hasPendingCloudChangesRef = useRef(false)
+  const lastSyncedPlansRef = useRef<RaidPlan[]>([])
+  const latestPlansRef = useRef<RaidPlan[]>([])
 
   const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
+
+  useEffect(() => {
+    latestPlansRef.current = plans
+  }, [plans])
+
+  const applyPlanSelection = useCallback((nextPlans: RaidPlan[], requestedPlanId?: string) => {
+    const normalized = normalizeRaidPlans(nextPlans)
+    setPlans(normalized)
+
+    if (normalized.length === 0) {
+      setCurrentPlanId('')
+      suppressPlanningSyncRef.current = true
+      replaceAllPlanning({})
+      return
+    }
+
+    const selectedPlan = normalized.find((plan) => plan.id === requestedPlanId) ?? normalized[0]
+    setCurrentPlanId(selectedPlan.id)
+    suppressPlanningSyncRef.current = true
+    replaceAllPlanning(selectedPlan.data)
+  }, [replaceAllPlanning])
+
+  const markLocalPlansDirty = useCallback(() => {
+    hasPendingCloudChangesRef.current = true
+  }, [])
+
+  const fetchRemoteRaidPlans = useCallback(async (token: string) => {
+    const res = await fetch(`${API_BASE_URL}/raid-plan`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+
+    if (res.status === 404) return []
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const json = await res.json()
+    return normalizeRaidPlans(json?.plan_data)
+  }, [])
 
 
 
@@ -126,130 +170,129 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   useEffect(() => {
     if (!authToken) return
     const loadPlans = async () => {
-        setCloudLoading(true)
-        try {
-            const res = await fetch(`${API_BASE_URL}/raid-plan`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            })
-            if (res.ok) {
-                const json = await res.json()
-                if (json && json.plan_data && Array.isArray(json.plan_data)) {
-                    const serverPlans = json.plan_data as RaidPlan[]
-                    setPlans(serverPlans)
-                    if (serverPlans.length > 0) {
-                        // Default select first, and load data
-                        setCurrentPlanId(serverPlans[0].id)
-                        replaceAllPlanning(serverPlans[0].data)
-                    } else {
-                        // Initialize default
-                        const newPlan = { 
-                            id: Math.random().toString(36).slice(2), 
-                            name: '默认规划', 
-                            data: planningState, 
-                            updatedAt: Date.now() 
-                        }
-                        setPlans([newPlan])
-                        setCurrentPlanId(newPlan.id)
-                    }
-                } else if (res.status === 404 || !json.plan_data) {
-                    // No data, init default
-                    const newPlan = { 
-                        id: Math.random().toString(36).slice(2), 
-                        name: '默认规划', 
-                        data: planningState, 
-                        updatedAt: Date.now() 
-                    }
-                    setPlans([newPlan])
-                    setCurrentPlanId(newPlan.id)
-                }
-            } else if (res.status === 404) {
-                 const newPlan = { id: Math.random().toString(36).slice(2), name: '默认规划', data: planningState, updatedAt: Date.now() }
-                 setPlans([newPlan])
-                 setCurrentPlanId(newPlan.id)
-            }
-        } catch (e) {
-            console.error(e)
-            onNotify?.(t('unionRaid.cloudDownloadFailed') || '加载云端数据失败', 'error')
-        } finally {
-            setCloudLoading(false)
-            isInitialLoadRef.current = false
+      setCloudLoading(true)
+      try {
+        const serverPlans = await fetchRemoteRaidPlans(authToken)
+        if (serverPlans.length > 0) {
+          applyPlanSelection(serverPlans, currentPlanId)
+          lastSyncedPlansRef.current = serverPlans
+          hasPendingCloudChangesRef.current = false
+        } else {
+          const newPlan = createDefaultRaidPlan('默认规划', planningState, Date.now())
+          applyPlanSelection([newPlan], newPlan.id)
+          lastSyncedPlansRef.current = []
+          hasPendingCloudChangesRef.current = false
         }
+      } catch (e) {
+        console.error(e)
+        onNotify?.(t('unionRaid.cloudDownloadFailed') || '加载云端数据失败', 'error')
+      } finally {
+        setCloudLoading(false)
+        isInitialLoadRef.current = false
+      }
     }
     loadPlans()
-  }, [authToken])
+  }, [authToken, applyPlanSelection, currentPlanId, fetchRemoteRaidPlans, onNotify, planningState, t])
 
-    // Modify "Sync planningState -> current plan" effect to update the Ref
   useEffect(() => {
     if (!currentPlanId) return
-    
-    // Capture current time for this edit
+    if (suppressPlanningSyncRef.current) {
+      suppressPlanningSyncRef.current = false
+      return
+    }
+
     const now = Date.now()
-    
+
     setPlans(prev => prev.map(p => {
-        if (p.id === currentPlanId) {
-             // Only update if data really changed
-             if (JSON.stringify(p.data) === JSON.stringify(planningState)) return p;
-             
-             // Valid local edit
-             return { ...p, data: planningState, updatedAt: now }
-        }
-        return p
+      if (p.id !== currentPlanId) return p
+      if (JSON.stringify(p.data) === JSON.stringify(planningState)) return p
+      markLocalPlansDirty()
+      return { ...p, data: planningState, updatedAt: now }
     }))
-  }, [planningState, currentPlanId])
+  }, [planningState, currentPlanId, markLocalPlansDirty])
 
   // Cloud Sync: Auto Save (Debounced)
   useEffect(() => {
-      if (!authToken || plans.length === 0) return
-      // 跳过初始加载触发的保存
-      if (isInitialLoadRef.current) return
-      const timer = setTimeout(async () => {
-          setCloudLoading(true)
-          try {
-              await fetch(`${API_BASE_URL}/raid-plan`, {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${authToken}`
-                  },
-                  body: JSON.stringify({ plan_data: plans })
-              })
-          } catch(e) { console.error(e) } finally {
-              setCloudLoading(false)
+    if (!authToken || plans.length === 0) return
+    if (isInitialLoadRef.current) return
+    if (!hasPendingCloudChangesRef.current) return
+
+    const timer = setTimeout(async () => {
+      setCloudLoading(true)
+      try {
+        const localPlans = normalizeRaidPlans(latestPlansRef.current)
+        const remotePlans = await fetchRemoteRaidPlans(authToken)
+        const uploadDecision = prepareRaidPlansForUpload({
+          basePlans: lastSyncedPlansRef.current,
+          localPlans,
+          remotePlans
+        })
+
+        if (uploadDecision.action === 'skip') {
+          lastSyncedPlansRef.current = uploadDecision.plans
+          hasPendingCloudChangesRef.current = false
+          if (!raidPlansEqual(uploadDecision.plans, localPlans)) {
+            applyPlanSelection(uploadDecision.plans, currentPlanId)
           }
-      }, 2000)
-      return () => clearTimeout(timer)
-  }, [plans, authToken])
+          if (uploadDecision.reason === 'suspicious-local-shrink') {
+            onNotify?.('检测到本地规划数据不完整，已保留云端版本，未上传缺失内容', 'warning')
+          }
+          return
+        }
+
+        const res = await fetch(API_BASE_URL + '/raid-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ plan_data: uploadDecision.plans })
+        })
+
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status)
+        }
+
+        lastSyncedPlansRef.current = uploadDecision.plans
+        hasPendingCloudChangesRef.current = false
+
+        if (!raidPlansEqual(uploadDecision.plans, localPlans)) {
+          applyPlanSelection(uploadDecision.plans, currentPlanId)
+          onNotify?.('已先合并其他人的云端修改，再完成上传', 'info')
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setCloudLoading(false)
+      }
+    }, 2000)
+
+    return () => clearTimeout(timer)
+  }, [plans, authToken, applyPlanSelection, currentPlanId, fetchRemoteRaidPlans, onNotify])
 
   const handleCreatePlan = () => {
-      const newPlan = {
-          id: Math.random().toString(36).slice(2),
-          name: `规划 ${plans.length + 1}`,
-          data: {}, 
-          updatedAt: Date.now()
-      }
-      setPlans(prev => [...prev, newPlan])
-      setCurrentPlanId(newPlan.id)
-      replaceAllPlanning({}) // Clear UI
+    const newPlan = createDefaultRaidPlan('规划 ' + (plans.length + 1), {}, Date.now())
+    markLocalPlansDirty()
+    applyPlanSelection([...plans, newPlan], newPlan.id)
   }
 
   const handleDeletePlan = () => {
-      if (plans.length <= 1) {
-          onNotify?.(t('common.error') || '至少保留一个规划', 'warning')
-          return
-      }
-      const rest = plans.filter(p => p.id !== currentPlanId)
-      setPlans(rest)
-      setCurrentPlanId(rest[0].id)
-      replaceAllPlanning(rest[0].data)
+    if (plans.length <= 1) {
+      onNotify?.(t('common.error') || '至少保留一个规划', 'warning')
+      return
+    }
+    const rest = plans.filter(p => p.id !== currentPlanId)
+    markLocalPlansDirty()
+    applyPlanSelection(rest, rest[0]?.id)
   }
 
   const handleRenamePlan = () => {
-      if (!currentPlanId) return
-      const p = plans.find(p => p.id === currentPlanId)
-      if (p) {
-          setRenamePlanName(p.name)
-          setIsRenamingPlan(true)
-      }
+    if (!currentPlanId) return
+    const p = plans.find(p => p.id === currentPlanId)
+    if (p) {
+      setRenamePlanName(p.name)
+      setIsRenamingPlan(true)
+    }
   }
 
   const startRenamePlanById = (id: string) => {
@@ -272,15 +315,15 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       return
     }
     const rest = plans.filter(p => p.id !== id)
-    setPlans(rest)
-    setCurrentPlanId(rest[0].id)
-    replaceAllPlanning(rest[0].data)
+    markLocalPlansDirty()
+    applyPlanSelection(rest, rest[0]?.id)
   }
 
   const confirmRenamePlan = () => {
-      if (!renamePlanName.trim()) return
-      setPlans(prev => prev.map(p => p.id === currentPlanId ? { ...p, name: renamePlanName } : p))
-      setIsRenamingPlan(false)
+    if (!renamePlanName.trim()) return
+    markLocalPlansDirty()
+    setPlans(prev => prev.map(p => p.id === currentPlanId ? { ...p, name: renamePlanName } : p))
+    setIsRenamingPlan(false)
   }
 
   const handleDuplicatePlanById = (id: string) => {
@@ -290,13 +333,12 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     const newPlan = {
       ...p,
       id: Math.random().toString(36).slice(2),
-      name: `${p.name} ${copyLabel}`,
-      data: JSON.parse(JSON.stringify(p.data || {})),
+      name: p.name + ' ' + copyLabel,
+      data: normalizeRaidPlans([p])[0].data,
       updatedAt: Date.now()
     }
-    setPlans(prev => [...prev, newPlan])
-    setCurrentPlanId(newPlan.id)
-    replaceAllPlanning(newPlan.data)
+    markLocalPlansDirty()
+    applyPlanSelection([...plans, newPlan], newPlan.id)
   }
 
   // 直接从父组件传入的 nikkeList 构建 nikkeMap
@@ -797,8 +839,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                         const newId = e.target.value
                         const p = plans.find(pl => pl.id === newId)
                         if (p) {
-                            setCurrentPlanId(newId)
-                            replaceAllPlanning(p.data)
+                            applyPlanSelection(plans, newId)
                         }
                     }}
                     sx={{ width: 160 }}
