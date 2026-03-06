@@ -9,7 +9,9 @@ import {
 import type { PlanSlot } from './types'
 import { getAccountKey, getGameUid } from './helpers'
 
-const planArraysEqual = (a: PlanSlot[], b: PlanSlot[]) => {
+const planArraysEqual = (a: PlanSlot[] | null | undefined, b: PlanSlot[] | null | undefined) => {
+  if (!a && !b) return true
+  if (!a || !b) return false
   if (a.length !== b.length) return false
   return a.every((plan, idx) => arePlansEqual(plan, b[idx]))
 }

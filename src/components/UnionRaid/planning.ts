@@ -80,12 +80,16 @@ export const planArrayHasData = (plans?: PlanSlot[]): boolean => {
   return ensurePlanArray(plans as unknown as (Partial<PlanSlot> | null)[] | undefined).some(planHasData)
 }
 
-export const arraysEqual = (a: number[], b: number[]) => {
+export const arraysEqual = (a: number[] | null | undefined, b: number[] | null | undefined) => {
+  if (!a && !b) return true
+  if (!a || !b) return false
   if (a.length !== b.length) return false
   return a.every((val, idx) => val === b[idx])
 }
 
-export const arePlansEqual = (a: PlanSlot, b: PlanSlot) => {
+export const arePlansEqual = (a: PlanSlot | null | undefined, b: PlanSlot | null | undefined) => {
+  if (!a && !b) return true
+  if (!a || !b) return false
   return (
     a.step === b.step &&
     arraysEqual(a.characterIds, b.characterIds) &&
