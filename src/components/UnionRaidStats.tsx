@@ -129,7 +129,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         setCloudLoading(true)
         try {
             const res = await fetch(`${API_BASE_URL}/raid-plan`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
+                headers: { 'Authorization': `Bearer ${authToken}` },
+                cache: 'no-store'
             })
             if (res.ok) {
                 const json = await res.json()
@@ -202,7 +203,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       if (!authToken || plans.length === 0) return
       // 跳过初始加载触发的保存
       if (isInitialLoadRef.current) return
-      const timer = setTimeout(async () => {
+
+      const saveToCloud = async (isKeepalive = false) => {
           setCloudLoading(true)
           try {
               await fetch(`${API_BASE_URL}/raid-plan`, {
@@ -211,13 +213,25 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                       'Content-Type': 'application/json',
                       'Authorization': `Bearer ${authToken}`
                   },
-                  body: JSON.stringify({ plan_data: plans })
+                  body: JSON.stringify({ plan_data: plans }),
+                  keepalive: isKeepalive
               })
           } catch(e) { console.error(e) } finally {
               setCloudLoading(false)
           }
-      }, 2000)
-      return () => clearTimeout(timer)
+      }
+
+      const timer = setTimeout(() => saveToCloud(false), 2000)
+
+      const handleUnload = () => {
+          saveToCloud(true)
+      }
+      window.addEventListener('beforeunload', handleUnload)
+
+      return () => {
+          clearTimeout(timer)
+          window.removeEventListener('beforeunload', handleUnload)
+      }
   }, [plans, authToken])
 
   const handleCreatePlan = () => {

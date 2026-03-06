@@ -51,44 +51,30 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
 
   useEffect(() => {
     if (!accounts || accounts.length === 0) {
-      if (hasLoadedAccountsOnceRef.current) {
-        setPlanningState({})
-      }
       return
     }
 
     hasLoadedAccountsOnceRef.current = true
 
     setPlanningState(prev => {
-      const next: Record<string, PlanSlot[]> = {}
+      const next: Record<string, PlanSlot[]> = { ...prev }
       let changed = false
 
       accounts.forEach(acc => {
         const key = getAccountKey(acc)
         if (!key) return
         const prevHasKey = Object.prototype.hasOwnProperty.call(prev, key)
-        if (prevHasKey) {
-          next[key] = ensurePlanArray(prev[key])
-        } else {
+        if (!prevHasKey) {
           next[key] = ensurePlanArray()
           changed = true
-        }
-      })
-
-      if (Object.keys(prev).length !== Object.keys(next).length) {
-        changed = true
-      } else if (!changed) {
-        const keys = Object.keys(next)
-        for (let i = 0; i < keys.length; i += 1) {
-          const key = keys[i]
-          const prevPlans = ensurePlanArray(prev[key])
-          const nextPlans = next[key]
-          if (!planArraysEqual(prevPlans, nextPlans)) {
+        } else {
+          const validated = ensurePlanArray(prev[key])
+          if (!planArraysEqual(prev[key], validated)) {
+            next[key] = validated
             changed = true
-            break
           }
         }
-      }
+      })
 
       return changed ? next : prev
     })
