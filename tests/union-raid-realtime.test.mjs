@@ -7,6 +7,7 @@ import {
   buildSlotUpdateFieldPatch,
   createOptimisticState,
   deriveLocalFallbackPlans,
+  getNextDispatchableMutation,
   reconcileIncomingPatch,
   reconcileMutationAck,
   selectPatchBasePlans,
@@ -250,6 +251,100 @@ test('buildPlanSeedPatches creates a create patch and field patches for fallback
   assert.equal(patches[2].payload.field, 'predictedDamage')
   assert.equal(patches[3].payload.field, 'characterIds')
   assert.deepEqual(patches[3].payload.value, [301, 302])
+})
+
+test('getNextDispatchableMutation only dispatches one pending mutation at a time', () => {
+  const [plan] = deriveLocalFallbackPlans({
+    currentPlans: [],
+    planningState: {
+      alpha: [filledSlot(3, 3300, [301, 302])],
+    },
+    now: 450,
+    defaultPlanName: '默认规划',
+  })
+
+  let mutationIndex = 0
+  const patches = buildPlanSeedPatches({
+    plans: [plan],
+    sessionId: 'seed-session',
+    baseRevision: 0,
+    createMutationId: () => `seed-${++mutationIndex}`,
+  })
+
+  const next = getNextDispatchableMutation({
+    pendingMutations: patches,
+    inflightMutationId: null,
+  })
+
+  assert.equal(next?.clientMutationId, 'seed-1')
+  assert.equal(next?.op, 'plan.create')
+})
+
+test('getNextDispatchableMutation resends the inflight mutation before later queued changes', () => {
+  const first = buildSlotUpdateFieldPatch({
+    clientMutationId: 'local-1',
+    sessionId: 'local-session',
+    baseRevision: 5,
+    planId: 'main',
+    accountKey: 'alpha',
+    slotIndex: 0,
+    field: 'step',
+    value: 2,
+  })
+  const second = buildSlotUpdateFieldPatch({
+    clientMutationId: 'local-2',
+    sessionId: 'local-session',
+    baseRevision: 5,
+    planId: 'main',
+    accountKey: 'alpha',
+    slotIndex: 0,
+    field: 'predictedDamage',
+    value: 2500,
+  })
+
+  const next = getNextDispatchableMutation({
+    pendingMutations: [first, second],
+    inflightMutationId: 'local-1',
+  })
+
+  assert.equal(next?.clientMutationId, 'local-1')
+  assert.equal(next?.payload.field, 'step')
+})
+
+test('reconcileMutationAck keeps optimistic follow-up slot changes after plan.create is acknowledged', () => {
+  const [plan] = deriveLocalFallbackPlans({
+    currentPlans: [],
+    planningState: {
+      alpha: [filledSlot(3, 3300, [301, 302])],
+    },
+    now: 500,
+    defaultPlanName: '默认规划',
+  })
+
+  let mutationIndex = 0
+  const patches = buildPlanSeedPatches({
+    plans: [plan],
+    sessionId: 'seed-session',
+    baseRevision: 0,
+    createMutationId: () => `seed-${++mutationIndex}`,
+  })
+
+  const initial = createOptimisticState({
+    plans: [],
+    lastRevision: 0,
+    pendingMutations: patches,
+  })
+
+  const acknowledged = reconcileMutationAck(initial, {
+    revision: 1,
+    clientMutationId: 'seed-1',
+    appliedPatch: patches[0],
+  })
+
+  assert.equal(acknowledged.authoritativePlans.length, 1)
+  assert.equal(acknowledged.authoritativePlans[0].data.alpha, undefined)
+  assert.deepEqual(acknowledged.optimisticPlans[0].data.alpha[0], filledSlot(3, 3300, [301, 302]))
+  assert.equal(acknowledged.pendingMutations.length, 3)
 })
 
 test('selectPatchBasePlans prefers the currently visible plans over stale optimistic refs', () => {

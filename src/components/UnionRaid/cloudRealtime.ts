@@ -320,6 +320,20 @@ export const buildPlanSeedPatches = ({
   return patches
 }
 
+export const getNextDispatchableMutation = ({
+  pendingMutations,
+  inflightMutationId,
+}: {
+  pendingMutations: RaidRealtimePatch[]
+  inflightMutationId: string | null
+}) => {
+  if (!Array.isArray(pendingMutations) || pendingMutations.length === 0) return null
+  if (inflightMutationId) {
+    return pendingMutations.find((mutation) => mutation.clientMutationId === inflightMutationId) ?? pendingMutations[0]
+  }
+  return pendingMutations[0]
+}
+
 export const applyIncomingPatch = (plans: RaidPlanSnapshot[], patch: RaidRealtimePatch) => {
   switch (patch.op) {
     case 'slot.updateField':

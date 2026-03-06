@@ -44,6 +44,7 @@ import {
   buildSlotUpdateFieldPatch,
   createOptimisticState,
   deriveLocalFallbackPlans,
+  getNextDispatchableMutation,
   reconcileIncomingPatch,
   reconcileMutationAck,
   selectPatchBasePlans
@@ -130,10 +131,12 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const authoritativePlansRef = useRef<RaidPlan[]>([])
   const optimisticPlansRef = useRef<RaidPlan[]>([])
   const pendingMutationsRef = useRef<any[]>([])
+  const inflightMutationIdRef = useRef<string | null>(null)
   const plansRef = useRef<RaidPlan[]>([])
   const currentPlanIdRef = useRef<string>('')
   const planningStateRef = useRef<Record<string, PlanSlot[]>>({})
   const onNotifyRef = useRef(onNotify)
+  const realtimeConnectionIdRef = useRef(0)
   const sessionIdRef = useRef(
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -194,12 +197,31 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     )
   }, [applyPlanSelection])
 
-  const sendPendingMutations = useCallback(() => {
+  const sendPendingMutations = useCallback((options?: { forceResend?: boolean }) => {
     const socket = websocketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) return
-    pendingMutationsRef.current.forEach((mutation) => {
-      socket.send(JSON.stringify(mutation))
+
+    if (inflightMutationIdRef.current && !options?.forceResend) {
+      return
+    }
+
+    const nextMutation = getNextDispatchableMutation({
+      pendingMutations: pendingMutationsRef.current,
+      inflightMutationId: options?.forceResend ? inflightMutationIdRef.current : null,
     })
+    if (!nextMutation) return
+
+    const outboundMutation = {
+      ...nextMutation,
+      baseRevision: lastRevisionRef.current,
+    }
+    inflightMutationIdRef.current = outboundMutation.clientMutationId
+    pendingMutationsRef.current = pendingMutationsRef.current.map((mutation) => (
+      mutation.clientMutationId === outboundMutation.clientMutationId
+        ? outboundMutation
+        : mutation
+    ))
+    socket.send(JSON.stringify(outboundMutation))
   }, [])
 
   const queueRealtimePatches = useCallback((patches: any[], requestedPlanId?: string) => {
@@ -219,16 +241,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     pendingMutationsRef.current = nextPending
     optimisticPlansRef.current = nextOptimistic
     applyPlanSelection(nextOptimistic, requestedPlanId ?? currentPlanIdRef.current)
+    setCloudLoading(true)
 
-    const socket = websocketRef.current
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      patches.forEach((patch) => {
-        socket.send(JSON.stringify(patch))
-      })
-    } else {
-      setCloudLoading(true)
-    }
-  }, [applyPlanSelection])
+    sendPendingMutations()
+  }, [applyPlanSelection, sendPendingMutations])
 
   const queueRealtimePatch = useCallback((patch: any, requestedPlanId?: string) => {
     queueRealtimePatches([patch], requestedPlanId)
@@ -245,6 +261,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
   useEffect(() => {
     if (!authToken) {
+      realtimeConnectionIdRef.current += 1
       if (websocketRef.current) {
         websocketRef.current.close()
         websocketRef.current = null
@@ -260,12 +277,32 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
     const connect = () => {
       if (disposed) return
+      const currentSocket = websocketRef.current
+      if (currentSocket && (currentSocket.readyState === WebSocket.OPEN || currentSocket.readyState === WebSocket.CONNECTING)) {
+        return
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+
       setCloudLoading(true)
 
       const socket = new WebSocket(buildRealtimeUrl(authToken))
+      const connectionId = realtimeConnectionIdRef.current + 1
+      realtimeConnectionIdRef.current = connectionId
       websocketRef.current = socket
+      const isCurrentSocket = () => (
+        !disposed &&
+        websocketRef.current === socket &&
+        realtimeConnectionIdRef.current === connectionId
+      )
 
       socket.onopen = () => {
+        if (!isCurrentSocket()) {
+          socket.close()
+          return
+        }
         socket.send(JSON.stringify({
           type: 'hello',
           token: authToken,
@@ -276,6 +313,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       }
 
       socket.onmessage = (event) => {
+        if (!isCurrentSocket()) return
         try {
           const message = JSON.parse(String(event.data || 'null'))
 
@@ -292,7 +330,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                 })
                 commitRealtimeState(nextState, currentPlanIdRef.current || nextState.optimisticPlans[0]?.id)
                 setCloudLoading(pendingMutationsRef.current.length > 0)
-                sendPendingMutations()
+                sendPendingMutations({ forceResend: true })
                 return
               }
 
@@ -315,13 +353,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               commitRealtimeState(nextState, fallbackPlans[0]?.id)
               pendingMutationsRef.current = [...seedPatches]
               setCloudLoading(seedPatches.length > 0)
-
-              const socket = websocketRef.current
-              if (socket && socket.readyState === WebSocket.OPEN) {
-                seedPatches.forEach((patch) => {
-                  socket.send(JSON.stringify(patch))
-                })
-              }
+              inflightMutationIdRef.current = null
+              sendPendingMutations()
               return
             }
 
@@ -331,8 +364,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               pendingMutations: pendingMutationsRef.current,
             })
             commitRealtimeState(nextState, currentPlanIdRef.current || snapshotPlans[0]?.id)
-            setCloudLoading(false)
-            sendPendingMutations()
+            setCloudLoading(pendingMutationsRef.current.length > 0)
+            sendPendingMutations({ forceResend: true })
             return
           }
 
@@ -348,12 +381,16 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               pendingMutations: pendingMutationsRef.current,
             })
             commitRealtimeState(nextState, currentPlanIdRef.current || replayedPlans[0]?.id)
-            setCloudLoading(false)
-            sendPendingMutations()
+            setCloudLoading(pendingMutationsRef.current.length > 0)
+            sendPendingMutations({ forceResend: true })
             return
           }
 
           if (message?.type === 'ack') {
+            const acknowledgedMutationId = String(message?.clientMutationId || '')
+            if (acknowledgedMutationId && inflightMutationIdRef.current === acknowledgedMutationId) {
+              inflightMutationIdRef.current = null
+            }
             const nextState = reconcileMutationAck({
               authoritativePlans: authoritativePlansRef.current,
               optimisticPlans: optimisticPlansRef.current,
@@ -361,11 +398,12 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
               lastRevision: lastRevisionRef.current,
             }, {
               revision: Number(message?.revision) || lastRevisionRef.current,
-              clientMutationId: String(message?.clientMutationId || ''),
+              clientMutationId: acknowledgedMutationId,
               appliedPatch: message?.appliedPatch,
             })
             commitRealtimeState(nextState, currentPlanIdRef.current)
-            setCloudLoading(false)
+            setCloudLoading(nextState.pendingMutations.length > 0)
+            sendPendingMutations()
             return
           }
 
@@ -395,14 +433,17 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       }
 
       socket.onclose = () => {
-        if (disposed) return
+        if (!isCurrentSocket()) return
+        websocketRef.current = null
         setCloudLoading(true)
         reconnectTimeoutRef.current = setTimeout(() => {
+          if (disposed || realtimeConnectionIdRef.current !== connectionId) return
           connect()
         }, 1500)
       }
 
       socket.onerror = () => {
+        if (!isCurrentSocket()) return
         socket.close()
       }
     }
@@ -411,6 +452,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
     return () => {
       disposed = true
+      realtimeConnectionIdRef.current += 1
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
         reconnectTimeoutRef.current = null
