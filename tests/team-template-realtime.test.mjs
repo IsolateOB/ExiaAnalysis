@@ -7,6 +7,7 @@ import {
   buildTemplateSeedPatches,
   createOptimisticTemplateState,
   getNextDispatchableTemplateMutation,
+  prepareNextOutboundTemplateMutation,
   reconcileTemplateAck,
 } from '../src/components/TeamBuilder/cloudRealtime.ts'
 
@@ -154,6 +155,44 @@ test('getNextDispatchableTemplateMutation sends only one patch at a time', () =>
 
   assert.equal(firstDispatch?.clientMutationId, 'm-1')
   assert.equal(retryDispatch?.clientMutationId, 'm-1')
+})
+
+test('prepareNextOutboundTemplateMutation does not resend while a patch is already in flight', () => {
+  const first = buildTemplateCreatePatch({
+    clientMutationId: 'm-1',
+    sessionId: 's-1',
+    baseRevision: 0,
+    templateId: 'tpl-1',
+    name: '模板1',
+  })
+
+  const outbound = prepareNextOutboundTemplateMutation({
+    pendingMutations: [first],
+    inflightMutationId: 'm-1',
+    lastRevision: 3,
+  })
+
+  assert.equal(outbound, null)
+})
+
+test('prepareNextOutboundTemplateMutation refreshes the sent patch baseRevision', () => {
+  const first = buildTemplateCreatePatch({
+    clientMutationId: 'm-1',
+    sessionId: 's-1',
+    baseRevision: 0,
+    templateId: 'tpl-1',
+    name: '模板1',
+  })
+
+  const outbound = prepareNextOutboundTemplateMutation({
+    pendingMutations: [first],
+    inflightMutationId: null,
+    lastRevision: 5,
+  })
+
+  assert.equal(outbound?.outboundMutation.baseRevision, 5)
+  assert.equal(outbound?.pendingMutations[0].baseRevision, 5)
+  assert.equal(outbound?.outboundMutation.clientMutationId, 'm-1')
 })
 
 test('applyIncomingPatch replaces members for the targeted template only', () => {

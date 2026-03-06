@@ -269,6 +269,38 @@ export const getNextDispatchableTemplateMutation = ({
   return pendingMutations[0]
 }
 
+export const prepareNextOutboundTemplateMutation = ({
+  pendingMutations,
+  inflightMutationId,
+  lastRevision,
+}: {
+  pendingMutations: TeamTemplateRealtimePatch[]
+  inflightMutationId: string | null
+  lastRevision: number
+}) => {
+  if (inflightMutationId) return null
+
+  const nextMutation = getNextDispatchableTemplateMutation({
+    pendingMutations,
+    inflightMutationId: null,
+  })
+  if (!nextMutation) return null
+
+  const outboundMutation: TeamTemplateRealtimePatch = {
+    ...nextMutation,
+    baseRevision: lastRevision,
+  }
+
+  return {
+    outboundMutation,
+    pendingMutations: pendingMutations.map((mutation) => (
+      mutation.clientMutationId === outboundMutation.clientMutationId
+        ? outboundMutation
+        : mutation
+    )),
+  }
+}
+
 export const applyIncomingPatch = (
   templates: TeamTemplate[],
   patch: TeamTemplateRealtimePatch,

@@ -31,7 +31,7 @@ import {
   buildTemplateReplaceMembersPatch,
   buildTemplateSeedPatches,
   createOptimisticTemplateState,
-  getNextDispatchableTemplateMutation,
+  prepareNextOutboundTemplateMutation,
   reconcileIncomingTemplatePatch,
   reconcileTemplateAck,
   type TeamTemplateRealtimePatch,
@@ -241,14 +241,16 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const socket = websocketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) return
 
-    const nextMutation = getNextDispatchableTemplateMutation({
+    const nextDispatch = prepareNextOutboundTemplateMutation({
       pendingMutations: pendingMutationsRef.current,
       inflightMutationId: inflightMutationIdRef.current,
+      lastRevision: lastRevisionRef.current,
     })
-    if (!nextMutation) return
+    if (!nextDispatch) return
 
-    inflightMutationIdRef.current = nextMutation.clientMutationId
-    socket.send(JSON.stringify(nextMutation))
+    inflightMutationIdRef.current = nextDispatch.outboundMutation.clientMutationId
+    pendingMutationsRef.current = nextDispatch.pendingMutations
+    socket.send(JSON.stringify(nextDispatch.outboundMutation))
   }, [])
 
   const queueRealtimeMutations = useCallback((mutations: TeamTemplateRealtimePatch[]) => {
