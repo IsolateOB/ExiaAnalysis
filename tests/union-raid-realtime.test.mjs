@@ -9,6 +9,7 @@ import {
   deriveLocalFallbackPlans,
   reconcileIncomingPatch,
   reconcileMutationAck,
+  selectPatchBasePlans,
 } from '../src/components/UnionRaid/cloudRealtime.ts'
 
 const filledSlot = (step, damage = null, characterIds = []) => ({
@@ -249,4 +250,36 @@ test('buildPlanSeedPatches creates a create patch and field patches for fallback
   assert.equal(patches[2].payload.field, 'predictedDamage')
   assert.equal(patches[3].payload.field, 'characterIds')
   assert.deepEqual(patches[3].payload.value, [301, 302])
+})
+
+test('selectPatchBasePlans prefers the currently visible plans over stale optimistic refs', () => {
+  const visiblePlans = [
+    makePlan({
+      id: 'main',
+      updatedAt: 500,
+      data: {
+        alpha: [filledSlot(1, 5000, [401, 402])],
+      },
+    }),
+  ]
+  const optimisticPlans = [
+    makePlan({
+      id: 'main',
+      updatedAt: 100,
+      data: {
+        alpha: [filledSlot(null, null, [])],
+      },
+    }),
+  ]
+
+  const selected = selectPatchBasePlans({
+    visiblePlans,
+    optimisticPlans,
+  })
+
+  assert.deepEqual(selected, deriveLocalFallbackPlans({
+    currentPlans: visiblePlans,
+    planningState: {},
+    now: 999,
+  }))
 })

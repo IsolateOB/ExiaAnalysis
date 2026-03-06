@@ -45,7 +45,8 @@ import {
   createOptimisticState,
   deriveLocalFallbackPlans,
   reconcileIncomingPatch,
-  reconcileMutationAck
+  reconcileMutationAck,
+  selectPatchBasePlans
 } from './UnionRaid/cloudRealtime.ts'
 import { mapIdsToCharacters } from '../utils/characters'
 import {
@@ -132,6 +133,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const plansRef = useRef<RaidPlan[]>([])
   const currentPlanIdRef = useRef<string>('')
   const planningStateRef = useRef<Record<string, PlanSlot[]>>({})
+  const onNotifyRef = useRef(onNotify)
   const sessionIdRef = useRef(
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -151,6 +153,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   useEffect(() => {
     planningStateRef.current = planningState
   }, [planningState])
+
+  useEffect(() => {
+    onNotifyRef.current = onNotify
+  }, [onNotify])
 
   const applyPlanSelection = useCallback((nextPlans: RaidPlan[], requestedPlanId?: string) => {
     const normalized = normalizeRaidPlans(nextPlans)
@@ -200,9 +206,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     if (!Array.isArray(patches) || patches.length === 0) return
 
     const nextPending = [...pendingMutationsRef.current]
-    let nextOptimistic = normalizeRaidPlans(
-      optimisticPlansRef.current.length > 0 ? optimisticPlansRef.current : plansRef.current,
-    )
+    let nextOptimistic = selectPatchBasePlans({
+      visiblePlans: plansRef.current,
+      optimisticPlans: optimisticPlansRef.current,
+    })
 
     patches.forEach((patch) => {
       nextPending.push(patch)
@@ -380,7 +387,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
           if (message?.type === 'error') {
             setCloudLoading(false)
-            onNotify?.(String(message?.message || '实时同步失败'), 'error')
+            onNotifyRef.current?.(String(message?.message || '实时同步失败'), 'error')
           }
         } catch (error) {
           console.error('Failed to process realtime message:', error)
@@ -413,7 +420,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         websocketRef.current = null
       }
     }
-  }, [authToken, buildRealtimeUrl, commitRealtimeState, onNotify, sendPendingMutations])
+  }, [authToken, buildRealtimeUrl, commitRealtimeState, sendPendingMutations])
 
   useEffect(() => {
     if (!currentPlanId) return

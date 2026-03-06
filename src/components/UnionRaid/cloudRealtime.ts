@@ -242,6 +242,14 @@ export const deriveLocalFallbackPlans = ({
   return [createDefaultRaidPlan(defaultPlanName, planningState, now)]
 }
 
+export const selectPatchBasePlans = ({
+  visiblePlans,
+  optimisticPlans,
+}: {
+  visiblePlans: RaidPlanSnapshot[]
+  optimisticPlans: RaidPlanSnapshot[]
+}) => clonePlans(visiblePlans.length > 0 ? visiblePlans : optimisticPlans)
+
 export const buildPlanSeedPatches = ({
   plans,
   sessionId,
