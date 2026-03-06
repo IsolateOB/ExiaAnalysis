@@ -1,3 +1,5 @@
+import { mergeGuildMemberSyncLevel } from '../utils/guildSync'
+
 const API_BASE_URL = 'https://exia-backend.tigertan1998.workers.dev'
 
 const PROXY_RETRY_DELAY_MS = 400
@@ -102,11 +104,7 @@ export const fetchGuildSyncLevels = async (accounts: any[]) => {
 
     const levelMap = new Map<string, number>()
     items.forEach((item: any) => {
-      const mid = String(item.member_id)
-      const slv = Number(item.synchro_level)
-      if (mid && Number.isFinite(slv)) {
-        levelMap.set(mid, slv)
-      }
+      mergeGuildMemberSyncLevel(levelMap, item)
     })
     return levelMap
   } catch (e) {

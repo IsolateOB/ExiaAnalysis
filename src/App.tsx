@@ -27,6 +27,7 @@ import {
   computeAELScore,
   normalizeAccountLists
 } from './utils/accountUtils'
+import { resolveGuildSyncLevel } from './utils/guildSync'
 import {
   fetchProfile,
   postProxy,
@@ -314,9 +315,9 @@ const App: React.FC = () => {
       
       const gameOpenId = raw?.game_openid || raw?.gameOpenId || parseGameOpenIdFromCookie(raw?.cookie) || ''
       // 如果映射表里有，优先用映射表的；否则用 raw 里缓存的；再否则 0
-      const synchroLevel = guildSyncLevels.has(gameOpenId) 
-        ? guildSyncLevels.get(gameOpenId)!
-        : (Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)))
+      const guildSyncLevel = resolveGuildSyncLevel(raw, guildSyncLevels)
+      const synchroLevel = guildSyncLevel
+        ?? (Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)))
 
       return {
         ...rest,
@@ -348,9 +349,7 @@ const App: React.FC = () => {
         }
 
         // 不再请求 GetUserProfileOutpostInfo，直接查表
-        const synchroLevel = guildSyncLevels.has(gameOpenId) 
-          ? guildSyncLevels.get(gameOpenId)! 
-          : 0
+        const synchroLevel = resolveGuildSyncLevel({ ...raw, game_openid: gameOpenId, cookie }, guildSyncLevels) ?? 0
         
         // outpostLevel 默认为 raw 中的值或 0 (因为不再请求 outpost info)
         const outpostLevel = Number.isFinite(raw?.outpostLevel) ? raw.outpostLevel : (Number.isFinite(raw?.outpost_level) ? raw.outpost_level : 0)

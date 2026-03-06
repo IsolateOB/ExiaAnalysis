@@ -6,7 +6,7 @@ export const parseCookieValue = (cookieStr: string, name: string) => {
 
 export const parseGameOpenIdFromCookie = (cookieStr: string) => {
   if (!cookieStr) return ''
-  const match = cookieStr.match(/(?:^|;\\s*)game_openid=([^;]*)/)
+  const match = cookieStr.match(/(?:^|;\s*)game_openid=([^;]*)/)
   return match ? match[1] : ''
 }
 
