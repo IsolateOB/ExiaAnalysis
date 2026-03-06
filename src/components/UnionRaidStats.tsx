@@ -36,11 +36,15 @@ import CharacterFilterDialog from './CharacterFilterDialog'
 import { UnionRaidTable } from './UnionRaid/UnionRaidTable'
 import { useUnionRaidPlanning } from './UnionRaid/useUnionRaidPlanning'
 import {
-  createDefaultRaidPlan,
-  normalizeRaidPlans,
-  prepareRaidPlansForUpload,
-  raidPlansEqual
+  normalizeRaidPlans
 } from './UnionRaid/cloudSync.ts'
+import {
+  applyIncomingPatch,
+  buildSlotUpdateFieldPatch,
+  createOptimisticState,
+  reconcileIncomingPatch,
+  reconcileMutationAck
+} from './UnionRaid/cloudRealtime.ts'
 import { mapIdsToCharacters } from '../utils/characters'
 import {
   formatActualDamage,
@@ -48,7 +52,6 @@ import {
   buildStrikeViews,
   createEmptyPlanSlot,
   tidToBaseId,
-  serializePlanSlots,
   planMatchesCurrentFilter
 } from './UnionRaid/planning'
 import {
@@ -117,11 +120,19 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const [currentPlanId, setCurrentPlanId] = useState<string>('')
   const [isRenamingPlan, setIsRenamingPlan] = useState(false)
   const [renamePlanName, setRenamePlanName] = useState('')
-  const isInitialLoadRef = useRef(true)
   const suppressPlanningSyncRef = useRef(false)
-  const hasPendingCloudChangesRef = useRef(false)
-  const lastSyncedPlansRef = useRef<RaidPlan[]>([])
   const latestPlansRef = useRef<RaidPlan[]>([])
+  const websocketRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastRevisionRef = useRef<number>(0)
+  const authoritativePlansRef = useRef<RaidPlan[]>([])
+  const optimisticPlansRef = useRef<RaidPlan[]>([])
+  const pendingMutationsRef = useRef<any[]>([])
+  const sessionIdRef = useRef(
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2),
+  )
 
   const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
 
@@ -146,53 +157,188 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     replaceAllPlanning(selectedPlan.data)
   }, [replaceAllPlanning])
 
-  const markLocalPlansDirty = useCallback(() => {
-    hasPendingCloudChangesRef.current = true
+  const commitRealtimeState = useCallback((nextState: {
+    authoritativePlans: RaidPlan[]
+    optimisticPlans: RaidPlan[]
+    pendingMutations: any[]
+    lastRevision: number
+  }, requestedPlanId?: string) => {
+    authoritativePlansRef.current = normalizeRaidPlans(nextState.authoritativePlans)
+    optimisticPlansRef.current = normalizeRaidPlans(nextState.optimisticPlans)
+    pendingMutationsRef.current = [...nextState.pendingMutations]
+    lastRevisionRef.current = nextState.lastRevision
+    applyPlanSelection(
+      optimisticPlansRef.current,
+      requestedPlanId ?? currentPlanId ?? optimisticPlansRef.current[0]?.id,
+    )
+  }, [applyPlanSelection, currentPlanId])
+
+  const sendPendingMutations = useCallback(() => {
+    const socket = websocketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    pendingMutationsRef.current.forEach((mutation) => {
+      socket.send(JSON.stringify(mutation))
+    })
   }, [])
 
-  const fetchRemoteRaidPlans = useCallback(async (token: string) => {
-    const res = await fetch(`${API_BASE_URL}/raid-plan`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+  const queueRealtimePatch = useCallback((patch: any, requestedPlanId?: string) => {
+    const nextPending = [...pendingMutationsRef.current, patch]
+    const nextOptimistic = applyIncomingPatch(optimisticPlansRef.current, patch)
+    pendingMutationsRef.current = nextPending
+    optimisticPlansRef.current = nextOptimistic
+    applyPlanSelection(nextOptimistic, requestedPlanId ?? currentPlanId)
 
-    if (res.status === 404) return []
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`)
+    const socket = websocketRef.current
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(patch))
+    } else {
+      setCloudLoading(true)
+    }
+  }, [applyPlanSelection, currentPlanId])
+
+  const buildRealtimeUrl = useCallback((token: string) => {
+    const url = new URL(API_BASE_URL)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    url.pathname = '/raid-plan/realtime'
+    url.search = ''
+    url.searchParams.set('token', token)
+    return url.toString()
+  }, [])
+
+  useEffect(() => {
+    if (!authToken) {
+      if (websocketRef.current) {
+        websocketRef.current.close()
+        websocketRef.current = null
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      return
     }
 
-    const json = await res.json()
-    return normalizeRaidPlans(json?.plan_data)
-  }, [])
+    let disposed = false
 
-
-
-  // Cloud Sync: Load on Mount/Auth
-  useEffect(() => {
-    if (!authToken) return
-    const loadPlans = async () => {
+    const connect = () => {
+      if (disposed) return
       setCloudLoading(true)
-      try {
-        const serverPlans = await fetchRemoteRaidPlans(authToken)
-        if (serverPlans.length > 0) {
-          applyPlanSelection(serverPlans, currentPlanId)
-          lastSyncedPlansRef.current = serverPlans
-          hasPendingCloudChangesRef.current = false
-        } else {
-          const newPlan = createDefaultRaidPlan('默认规划', planningState, Date.now())
-          applyPlanSelection([newPlan], newPlan.id)
-          lastSyncedPlansRef.current = []
-          hasPendingCloudChangesRef.current = false
+
+      const socket = new WebSocket(buildRealtimeUrl(authToken))
+      websocketRef.current = socket
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          type: 'hello',
+          token: authToken,
+          documentId: 'raid-plan',
+          lastRevision: lastRevisionRef.current,
+          sessionId: sessionIdRef.current,
+        }))
+      }
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data || 'null'))
+
+          if (message?.type === 'snapshot') {
+            const snapshotPlans = normalizeRaidPlans(message?.plans)
+            const nextState = createOptimisticState({
+              plans: snapshotPlans,
+              lastRevision: Number(message?.revision) || 0,
+              pendingMutations: pendingMutationsRef.current,
+            })
+            commitRealtimeState(nextState, currentPlanId || snapshotPlans[0]?.id)
+            setCloudLoading(false)
+            sendPendingMutations()
+            return
+          }
+
+          if (message?.type === 'patch_replay') {
+            let replayedPlans = normalizeRaidPlans(authoritativePlansRef.current)
+            const patches = Array.isArray(message?.patches) ? message.patches : []
+            patches.forEach((patch) => {
+              replayedPlans = applyIncomingPatch(replayedPlans, patch)
+            })
+            const nextState = createOptimisticState({
+              plans: replayedPlans,
+              lastRevision: Number(message?.revision) || lastRevisionRef.current,
+              pendingMutations: pendingMutationsRef.current,
+            })
+            commitRealtimeState(nextState, currentPlanId || replayedPlans[0]?.id)
+            setCloudLoading(false)
+            sendPendingMutations()
+            return
+          }
+
+          if (message?.type === 'ack') {
+            const nextState = reconcileMutationAck({
+              authoritativePlans: authoritativePlansRef.current,
+              optimisticPlans: optimisticPlansRef.current,
+              pendingMutations: pendingMutationsRef.current,
+              lastRevision: lastRevisionRef.current,
+            }, {
+              revision: Number(message?.revision) || lastRevisionRef.current,
+              clientMutationId: String(message?.clientMutationId || ''),
+              appliedPatch: message?.appliedPatch,
+            })
+            commitRealtimeState(nextState, currentPlanId)
+            setCloudLoading(false)
+            return
+          }
+
+          if (message?.type === 'patch_broadcast') {
+            if (message?.sessionId === sessionIdRef.current) return
+            const nextState = reconcileIncomingPatch({
+              authoritativePlans: authoritativePlansRef.current,
+              optimisticPlans: optimisticPlansRef.current,
+              pendingMutations: pendingMutationsRef.current,
+              lastRevision: lastRevisionRef.current,
+            }, {
+              revision: Number(message?.revision) || lastRevisionRef.current,
+              sessionId: String(message?.sessionId || ''),
+              patch: message?.patch,
+            })
+            commitRealtimeState(nextState, currentPlanId)
+            return
+          }
+
+          if (message?.type === 'error') {
+            setCloudLoading(false)
+            onNotify?.(String(message?.message || '实时同步失败'), 'error')
+          }
+        } catch (error) {
+          console.error('Failed to process realtime message:', error)
         }
-      } catch (e) {
-        console.error(e)
-        onNotify?.(t('unionRaid.cloudDownloadFailed') || '加载云端数据失败', 'error')
-      } finally {
-        setCloudLoading(false)
-        isInitialLoadRef.current = false
+      }
+
+      socket.onclose = () => {
+        if (disposed) return
+        setCloudLoading(true)
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect()
+        }, 1500)
+      }
+
+      socket.onerror = () => {
+        socket.close()
       }
     }
-    loadPlans()
-  }, [authToken, applyPlanSelection, currentPlanId, fetchRemoteRaidPlans, onNotify, planningState, t])
+
+    connect()
+
+    return () => {
+      disposed = true
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      if (websocketRef.current) {
+        websocketRef.current.close()
+        websocketRef.current = null
+      }
+    }
+  }, [authToken, buildRealtimeUrl, commitRealtimeState, currentPlanId, onNotify, sendPendingMutations])
 
   useEffect(() => {
     if (!currentPlanId) return
@@ -206,74 +352,24 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     setPlans(prev => prev.map(p => {
       if (p.id !== currentPlanId) return p
       if (JSON.stringify(p.data) === JSON.stringify(planningState)) return p
-      markLocalPlansDirty()
       return { ...p, data: planningState, updatedAt: now }
     }))
-  }, [planningState, currentPlanId, markLocalPlansDirty])
-
-  // Cloud Sync: Auto Save (Debounced)
-  useEffect(() => {
-    if (!authToken || plans.length === 0) return
-    if (isInitialLoadRef.current) return
-    if (!hasPendingCloudChangesRef.current) return
-
-    const timer = setTimeout(async () => {
-      setCloudLoading(true)
-      try {
-        const localPlans = normalizeRaidPlans(latestPlansRef.current)
-        const remotePlans = await fetchRemoteRaidPlans(authToken)
-        const uploadDecision = prepareRaidPlansForUpload({
-          basePlans: lastSyncedPlansRef.current,
-          localPlans,
-          remotePlans
-        })
-
-        if (uploadDecision.action === 'skip') {
-          lastSyncedPlansRef.current = uploadDecision.plans
-          hasPendingCloudChangesRef.current = false
-          if (!raidPlansEqual(uploadDecision.plans, localPlans)) {
-            applyPlanSelection(uploadDecision.plans, currentPlanId)
-          }
-          if (uploadDecision.reason === 'suspicious-local-shrink') {
-            onNotify?.('检测到本地规划数据不完整，已保留云端版本，未上传缺失内容', 'warning')
-          }
-          return
-        }
-
-        const res = await fetch(API_BASE_URL + '/raid-plan', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + authToken
-          },
-          body: JSON.stringify({ plan_data: uploadDecision.plans })
-        })
-
-        if (!res.ok) {
-          throw new Error('HTTP ' + res.status)
-        }
-
-        lastSyncedPlansRef.current = uploadDecision.plans
-        hasPendingCloudChangesRef.current = false
-
-        if (!raidPlansEqual(uploadDecision.plans, localPlans)) {
-          applyPlanSelection(uploadDecision.plans, currentPlanId)
-          onNotify?.('已先合并其他人的云端修改，再完成上传', 'info')
-        }
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setCloudLoading(false)
-      }
-    }, 2000)
-
-    return () => clearTimeout(timer)
-  }, [plans, authToken, applyPlanSelection, currentPlanId, fetchRemoteRaidPlans, onNotify])
+  }, [planningState, currentPlanId])
 
   const handleCreatePlan = () => {
-    const newPlan = createDefaultRaidPlan('规划 ' + (plans.length + 1), {}, Date.now())
-    markLocalPlansDirty()
-    applyPlanSelection([...plans, newPlan], newPlan.id)
+    const newPlanId = Math.random().toString(36).slice(2)
+    const patch = {
+      type: 'patch',
+      clientMutationId: Math.random().toString(36).slice(2),
+      sessionId: sessionIdRef.current,
+      baseRevision: lastRevisionRef.current,
+      op: 'plan.create',
+      payload: {
+        planId: newPlanId,
+        name: '规划 ' + (plans.length + 1),
+      },
+    }
+    queueRealtimePatch(patch, newPlanId)
   }
 
   const handleDeletePlan = () => {
@@ -282,8 +378,15 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       return
     }
     const rest = plans.filter(p => p.id !== currentPlanId)
-    markLocalPlansDirty()
-    applyPlanSelection(rest, rest[0]?.id)
+    const patch = {
+      type: 'patch',
+      clientMutationId: Math.random().toString(36).slice(2),
+      sessionId: sessionIdRef.current,
+      baseRevision: lastRevisionRef.current,
+      op: 'plan.delete',
+      payload: { planId: currentPlanId },
+    }
+    queueRealtimePatch(patch, rest[0]?.id)
   }
 
   const handleRenamePlan = () => {
@@ -315,14 +418,31 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       return
     }
     const rest = plans.filter(p => p.id !== id)
-    markLocalPlansDirty()
-    applyPlanSelection(rest, rest[0]?.id)
+    const patch = {
+      type: 'patch',
+      clientMutationId: Math.random().toString(36).slice(2),
+      sessionId: sessionIdRef.current,
+      baseRevision: lastRevisionRef.current,
+      op: 'plan.delete',
+      payload: { planId: id },
+    }
+    queueRealtimePatch(patch, rest[0]?.id)
   }
 
   const confirmRenamePlan = () => {
     if (!renamePlanName.trim()) return
-    markLocalPlansDirty()
-    setPlans(prev => prev.map(p => p.id === currentPlanId ? { ...p, name: renamePlanName } : p))
+    const patch = {
+      type: 'patch',
+      clientMutationId: Math.random().toString(36).slice(2),
+      sessionId: sessionIdRef.current,
+      baseRevision: lastRevisionRef.current,
+      op: 'plan.rename',
+      payload: {
+        planId: currentPlanId,
+        name: renamePlanName.trim(),
+      },
+    }
+    queueRealtimePatch(patch, currentPlanId)
     setIsRenamingPlan(false)
   }
 
@@ -330,15 +450,20 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     const p = plans.find(plan => plan.id === id)
     if (!p) return
     const copyLabel = t('common.copy') || '复制'
-    const newPlan = {
-      ...p,
-      id: Math.random().toString(36).slice(2),
-      name: p.name + ' ' + copyLabel,
-      data: normalizeRaidPlans([p])[0].data,
-      updatedAt: Date.now()
+    const newPlanId = Math.random().toString(36).slice(2)
+    const patch = {
+      type: 'patch',
+      clientMutationId: Math.random().toString(36).slice(2),
+      sessionId: sessionIdRef.current,
+      baseRevision: lastRevisionRef.current,
+      op: 'plan.duplicate',
+      payload: {
+        sourcePlanId: id,
+        newPlanId,
+        name: p.name + ' ' + copyLabel,
+      },
     }
-    markLocalPlansDirty()
-    applyPlanSelection([...plans, newPlan], newPlan.id)
+    queueRealtimePatch(patch, newPlanId)
   }
 
   // 直接从父组件传入的 nikkeList 构建 nikkeMap
@@ -667,6 +792,20 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   }, [mutatePlanSlot])
 
   const handlePlanStepChange = useCallback((accountKey: string, planIndex: number, value: string) => {
+    if (authToken && currentPlanId) {
+      const patch = buildSlotUpdateFieldPatch({
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        planId: currentPlanId,
+        accountKey,
+        slotIndex: planIndex,
+        field: 'step',
+        value: value === 'none' || !value ? null : Number(value),
+      })
+      queueRealtimePatch(patch, currentPlanId)
+      return
+    }
     if (value === 'none') {
       mutatePlanSlot(accountKey, planIndex, () => createEmptyPlanSlot())
       return
@@ -680,21 +819,50 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       const valid = Number.isFinite(parsed) && STEP_OPTIONS.includes(parsed as (typeof STEP_OPTIONS)[number])
       plan.step = valid ? parsed : null
     })
-  }, [mutatePlan, mutatePlanSlot])
+  }, [authToken, currentPlanId, mutatePlan, mutatePlanSlot, queueRealtimePatch])
 
   const handlePredictedDamageChange = useCallback((accountKey: string, planIndex: number, value: string) => {
     // 只允许数字输入
     const numericValue = value.replace(/[^0-9]/g, '')
+    if (authToken && currentPlanId) {
+      const patch = buildSlotUpdateFieldPatch({
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        planId: currentPlanId,
+        accountKey,
+        slotIndex: planIndex,
+        field: 'predictedDamage',
+        value: numericValue ? Number(numericValue) : null,
+      })
+      queueRealtimePatch(patch, currentPlanId)
+      return
+    }
     mutatePlan(accountKey, planIndex, (plan) => {
       plan.predictedDamage = numericValue ? Number(numericValue) : null
     })
-  }, [mutatePlan])
+  }, [authToken, currentPlanId, mutatePlan, queueRealtimePatch])
 
   const handleRemovePlanCharacter = useCallback((accountKey: string, planIndex: number, characterId: number) => {
+    if (authToken && currentPlanId) {
+      const currentCharacters = ensurePlanArray(planningState[accountKey])[planIndex]?.characterIds || []
+      const patch = buildSlotUpdateFieldPatch({
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        planId: currentPlanId,
+        accountKey,
+        slotIndex: planIndex,
+        field: 'characterIds',
+        value: currentCharacters.filter((id) => id !== characterId),
+      })
+      queueRealtimePatch(patch, currentPlanId)
+      return
+    }
     mutatePlan(accountKey, planIndex, (plan) => {
       plan.characterIds = plan.characterIds.filter((id) => id !== characterId)
     })
-  }, [mutatePlan])
+  }, [authToken, currentPlanId, mutatePlan, planningState, queueRealtimePatch])
 
   const handleCharacterDialogClose = useCallback(() => {
     setCharacterDialogOpen(false)
@@ -710,24 +878,58 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handleCharacterSelected = useCallback((character: Character) => {
     if (!activePlanContext) return
     const { accountKey, planIndex } = activePlanContext
+    if (authToken && currentPlanId) {
+      const currentCharacters = ensurePlanArray(planningState[accountKey])[planIndex]?.characterIds || []
+      if (currentCharacters.includes(character.id)) return
+      const patch = buildSlotUpdateFieldPatch({
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        planId: currentPlanId,
+        accountKey,
+        slotIndex: planIndex,
+        field: 'characterIds',
+        value: [...currentCharacters, character.id],
+      })
+      queueRealtimePatch(patch, currentPlanId)
+      setCharacterDialogOpen(false)
+      setActivePlanContext(null)
+      return
+    }
     mutatePlan(accountKey, planIndex, (plan) => {
       if (plan.characterIds.includes(character.id)) return
       plan.characterIds = [...plan.characterIds, character.id]
     })
     setCharacterDialogOpen(false)
     setActivePlanContext(null)
-  }, [activePlanContext, mutatePlan])
+  }, [activePlanContext, authToken, currentPlanId, mutatePlan, planningState, queueRealtimePatch])
 
   const handleCharactersSelected = useCallback((characters: Character[]) => {
     if (!activePlanContext) return
     const { accountKey, planIndex } = activePlanContext
     const nextIds = characters.map((char) => char.id).slice(0, MAX_PLAN_CHARACTERS)
+    if (authToken && currentPlanId) {
+      const patch = buildSlotUpdateFieldPatch({
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        planId: currentPlanId,
+        accountKey,
+        slotIndex: planIndex,
+        field: 'characterIds',
+        value: nextIds,
+      })
+      queueRealtimePatch(patch, currentPlanId)
+      setCharacterDialogOpen(false)
+      setActivePlanContext(null)
+      return
+    }
     mutatePlan(accountKey, planIndex, (plan) => {
       plan.characterIds = nextIds
     })
     setCharacterDialogOpen(false)
     setActivePlanContext(null)
-  }, [activePlanContext, mutatePlan])
+  }, [activePlanContext, authToken, currentPlanId, mutatePlan, queueRealtimePatch])
 
   const activePlanCharacters = useMemo(() => {
     if (!activePlanContext) return []
@@ -776,13 +978,29 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     }
 
     const uniqueIds = Array.from(new Set(available.map((char) => char.id))).slice(0, MAX_PLAN_CHARACTERS)
+    if (authToken && currentPlanId) {
+      const patch = buildSlotUpdateFieldPatch({
+        clientMutationId: Math.random().toString(36).slice(2),
+        sessionId: sessionIdRef.current,
+        baseRevision: lastRevisionRef.current,
+        planId: currentPlanId,
+        accountKey,
+        slotIndex: planIndex,
+        field: 'characterIds',
+        value: uniqueIds,
+      })
+      queueRealtimePatch(patch, currentPlanId)
+      const successMessage = t('unionRaid.pastePlanTeamSuccess') || '已从构建器粘贴到规划'
+      onNotify?.(successMessage, 'success')
+      return
+    }
     mutatePlan(accountKey, planIndex, (plan) => {
       plan.characterIds = uniqueIds
     })
 
     const successMessage = t('unionRaid.pastePlanTeamSuccess') || '已从构建器粘贴到规划'
     onNotify?.(successMessage, 'success')
-  }, [teamBuilderTeam, mutatePlan, onNotify, t])
+  }, [authToken, currentPlanId, teamBuilderTeam, mutatePlan, onNotify, queueRealtimePatch, t])
 
 
 
