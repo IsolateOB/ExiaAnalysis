@@ -17,13 +17,30 @@ export interface TeamTemplate {
 }
 
 const STORAGE_KEY = 'nikke_team_templates'
+const LEGACY_STORAGE_KEYS = ['exia_team_templates']
+
+function readTemplatesFromStorage(key: string): TeamTemplate[] {
+  const raw = localStorage.getItem(key)
+  if (!raw) return []
+
+  const arr = JSON.parse(raw)
+  return Array.isArray(arr) ? arr : []
+}
 
 export function listTemplates(): TeamTemplate[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? arr : []
+    const current = readTemplatesFromStorage(STORAGE_KEY)
+    if (current.length > 0) return current
+
+    for (const legacyKey of LEGACY_STORAGE_KEYS) {
+      const legacy = readTemplatesFromStorage(legacyKey)
+      if (legacy.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy))
+        return legacy
+      }
+    }
+
+    return []
   } catch {
     return []
   }

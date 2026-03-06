@@ -8,8 +8,8 @@ import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
 import { listTemplates, saveTemplate, deleteTemplate, TeamTemplate } from '../utils/templates'
+import { buildTemplateSnapshot, createEmptyTeam, upsertTemplateInList } from '../utils/teamTemplateState'
 import EditIcon from '@mui/icons-material/Edit'
-import SaveIcon from '@mui/icons-material/Save'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import CheckIcon from '@mui/icons-material/Check'
@@ -129,6 +129,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const defaultTemplateInitRef = useRef(false)
   const refreshTemplates = () => setTemplates(listTemplates())
+  const isHydratingTemplateRef = useRef(false)
+  const lastAppliedTemplateIdRef = useRef('')
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
   const [menuTplId, setMenuTplId] = useState<string>('')
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null)
@@ -149,7 +151,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                 const json = await res.json()
                 if (json && json.template_data && Array.isArray(json.template_data)) {
                     const serverTpls = json.template_data as TeamTemplate[]
-                    localStorage.setItem('exia_team_templates', JSON.stringify(serverTpls))
+                    localStorage.setItem('nikke_team_templates', JSON.stringify(serverTpls))
                     setTemplates(serverTpls)
                 }
             }
@@ -221,36 +223,18 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return `模板${n}`
   }
 
-  const buildTemplateFromTeam = (id: string, name: string, sourceTeam: TeamCharacter[] = team): TeamTemplate => {
-    const members = sourceTeam.map(t => ({
-      position: t.position,
-      characterId: t.character ? String(t.character.id) : undefined,
-      damageCoefficient: t.damageCoefficient || 0,
-      coefficients: normalizeCoefficients(coefficientsMap[t.position]),
-    }))
-    const totalDamageCoefficient = sourceTeam.reduce((s, t) => s + (t.damageCoefficient || 0), 0)
-    return {
-      id,
-      name,
-      createdAt: Date.now(),
-      members,
-      totalDamageCoefficient,
-    }
-  }
-
-  const createEmptyTeam = () => (
-    Array.from({ length: 5 }, (_, index) => ({
-      position: index + 1,
-      damageCoefficient: 1.0,
-    }))
-  )
-
   useEffect(() => {
     if (defaultTemplateInitRef.current) return
     const existing = listTemplates()
     const hasDefault = existing.some(t => t.id === DEFAULT_TEMPLATE_ID)
     if (!hasDefault) {
-      const tpl = buildTemplateFromTeam(DEFAULT_TEMPLATE_ID, DEFAULT_TEMPLATE_NAME)
+      const tpl = buildTemplateSnapshot({
+        id: DEFAULT_TEMPLATE_ID,
+        name: DEFAULT_TEMPLATE_NAME,
+        team,
+        coefficientsMap,
+        normalizeCoefficients,
+      })
       saveTemplate(tpl)
     }
     defaultTemplateInitRef.current = true
@@ -464,24 +448,18 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   // 新建模板
   const handleCreateTemplate = () => {
     const emptyTeam = createEmptyTeam()
-    const members = emptyTeam.map(t => ({
-      position: t.position,
-      characterId: undefined,
-      damageCoefficient: t.damageCoefficient || 0,
-      coefficients: normalizeCoefficients(getDefaultCoefficients()),
-    }))
-    const totalDamageCoefficient = 0
-    // 新建
     const id = Math.random().toString(36).slice(2)
-    const tpl: TeamTemplate = {
+    const tpl = buildTemplateSnapshot({
       id,
       name: generateNextDefaultName(),
-      createdAt: Date.now(),
-      members,
-      totalDamageCoefficient,
-    }
+      team: emptyTeam,
+      coefficientsMap: {},
+      normalizeCoefficients,
+    })
     saveTemplate(tpl)
-    refreshTemplates()
+    setTemplates((prev) => upsertTemplateInList(prev, tpl))
+    isHydratingTemplateRef.current = true
+    lastAppliedTemplateIdRef.current = tpl.id
     setSelectedTemplateId(tpl.id)
     setTeam(emptyTeam)
     setCoefficientsMap({})
@@ -544,6 +522,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }
 
   const applyTemplate = async (tpl: TeamTemplate) => {
+    isHydratingTemplateRef.current = true
+    lastAppliedTemplateIdRef.current = tpl.id
     // 还原队伍
     const nextTeam: TeamCharacter[] = team.map(slot => {
       const m = tpl.members.find(mm => mm.position === slot.position)
@@ -566,6 +546,42 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     })
     setCoefficientsMap(nextCoeffs)
   }
+
+  useEffect(() => {
+    if (!selectedTemplateId) return
+    if (lastAppliedTemplateIdRef.current === selectedTemplateId) return
+
+    const selectedTemplate = templates.find((tpl) => tpl.id === selectedTemplateId)
+    if (!selectedTemplate) return
+
+    void applyTemplate(selectedTemplate)
+  }, [selectedTemplateId, templates])
+
+  useEffect(() => {
+    if (!defaultTemplateInitRef.current || !selectedTemplateId) return
+
+    if (isHydratingTemplateRef.current) {
+      isHydratingTemplateRef.current = false
+      return
+    }
+
+    const currentTemplate = templates.find((tpl) => tpl.id === selectedTemplateId)
+    if (!currentTemplate) return
+
+    const snapshot = buildTemplateSnapshot({
+      id: currentTemplate.id,
+      name: currentTemplate.name,
+      createdAt: currentTemplate.createdAt,
+      team,
+      coefficientsMap,
+      normalizeCoefficients,
+    })
+
+    if (JSON.stringify(currentTemplate) === JSON.stringify(snapshot)) return
+
+    saveTemplate(snapshot)
+    setTemplates((prev) => upsertTemplateInList(prev, snapshot))
+  }, [coefficientsMap, selectedTemplateId, team, templates])
 
   const handleLoadTemplate = () => {
     const tpl = templates.find(t => t.id === selectedTemplateId)
@@ -628,7 +644,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       members: Array.isArray(tpl.members) ? tpl.members.map(m => ({ ...m })) : []
     }
     saveTemplate(copy)
-    refreshTemplates()
+    setTemplates((prev) => upsertTemplateInList(prev, copy))
     setSelectedTemplateId(copy.id)
     applyTemplate(copy)
   }
@@ -677,6 +693,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             value={selectedTemplateId || ''}
             onChange={(e) => {
               const id = String(e.target.value || '')
+              lastAppliedTemplateIdRef.current = ''
               setSelectedTemplateId(id)
               const tpl = templates.find(t => t.id === id)
               if (tpl) applyTemplate(tpl)
