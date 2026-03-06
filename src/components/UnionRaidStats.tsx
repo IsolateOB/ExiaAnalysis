@@ -121,7 +121,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const [isRenamingPlan, setIsRenamingPlan] = useState(false)
   const [renamePlanName, setRenamePlanName] = useState('')
   const suppressPlanningSyncRef = useRef(false)
-  const latestPlansRef = useRef<RaidPlan[]>([])
   const websocketRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastRevisionRef = useRef<number>(0)
@@ -135,10 +134,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   )
 
   const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
-
-  useEffect(() => {
-    latestPlansRef.current = plans
-  }, [plans])
 
   const applyPlanSelection = useCallback((nextPlans: RaidPlan[], requestedPlanId?: string) => {
     const normalized = normalizeRaidPlans(nextPlans)
