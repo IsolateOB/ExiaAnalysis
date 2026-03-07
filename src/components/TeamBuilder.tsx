@@ -1,7 +1,7 @@
 ﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
 import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -134,6 +134,18 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const reactId = useId()
   const stableIdBase = useMemo(() => reactId.replace(/:/g, ''), [reactId])
   const nikkeList = useMemo(() => propNikkeList ?? [], [propNikkeList])
+  const emitTeamStrengthChange = useEffectEvent((baselineStrength: number, targetStrength: number) => {
+    onTeamStrengthChange?.(baselineStrength, targetStrength)
+  })
+  const emitTeamRatioChange = useEffectEvent((scale: number, ratioLabel: string) => {
+    onTeamRatioChange?.(scale, ratioLabel)
+  })
+  const emitTeamSelectionChange = useEffectEvent((
+    chars: (Character | undefined)[],
+    coeffs: { [position: number]: AttributeCoefficients },
+  ) => {
+    onTeamSelectionChange?.(chars, coeffs)
+  })
 
   const normalizeCoefficients = normalizeTemplateCoefficients
 
@@ -537,10 +549,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
       setCharacterStrengths(newStrengths)
       setRawMap(newRaw)
-      onTeamStrengthChange?.(totalBaselineStrength, totalTargetStrength)
+      emitTeamStrengthChange(totalBaselineStrength, totalTargetStrength)
 
       const scale = weightSum > 0 ? (ratioWeightedSum / weightSum) : 1
-      onTeamRatioChange?.(scale, scale > 0 ? `${scale.toFixed(2)} : 1` : '-')
+      emitTeamRatioChange(scale, scale > 0 ? `${scale.toFixed(2)} : 1` : '-')
     }
 
     void calculateAllStrengths()
@@ -551,8 +563,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       coeffsWithWeight[slot.position] = { ...base, damageWeight: slot.damageCoefficient || 0 }
     })
     isInternalUpdateRef.current = true
-    onTeamSelectionChange?.(team.map((slot) => slot.character), coeffsWithWeight)
-  }, [baselineData, coefficientsMap, findCharacterDataById, onTeamRatioChange, onTeamSelectionChange, onTeamStrengthChange, targetData, team])
+    emitTeamSelectionChange(team.map((slot) => slot.character), coeffsWithWeight)
+  }, [baselineData, coefficientsMap, findCharacterDataById, targetData, team])
 
   useEffect(() => {
     if (!authToken) {
