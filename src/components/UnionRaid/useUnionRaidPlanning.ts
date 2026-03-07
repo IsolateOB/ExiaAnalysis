@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PLAN_STORAGE_KEY } from './constants'
 import {
   arePlansEqual,
@@ -9,16 +9,39 @@ import {
 import type { PlanSlot } from './types'
 import { getAccountKey, getGameUid } from './helpers'
 
-const planArraysEqual = (a: PlanSlot[] | null | undefined, b: PlanSlot[] | null | undefined) => {
-  if (!a && !b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((plan, idx) => arePlansEqual(plan, b[idx]))
+type PlanningAccount = {
+  cookie?: string
+  name?: string
+  game_uid?: string | number
+  gameUid?: string | number
+  gameUID?: string | number
 }
 
-export const useUnionRaidPlanning = (accounts: any[]) => {
-  const [planningState, setPlanningState] = useState<Record<string, PlanSlot[]>>({})
-  const hasLoadedAccountsOnceRef = useRef<boolean>(false)
+const readInitialPlanningState = (): Record<string, PlanSlot[]> => {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(PLAN_STORAGE_KEY)
+    if (!raw) return {}
+
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return {}
+
+    const hydrated: Record<string, PlanSlot[]> = {}
+    Object.entries(parsed as Record<string, unknown>).forEach(([key, plans]) => {
+      if (Array.isArray(plans)) {
+        hydrated[key] = ensurePlanArray(plans as (Partial<PlanSlot> | null)[])
+      }
+    })
+    return hydrated
+  } catch (error) {
+    console.error('Failed to load union raid planning state:', error)
+    return {}
+  }
+}
+
+export const useUnionRaidPlanning = (accounts: PlanningAccount[]) => {
+  const [rawPlanningState, setRawPlanningState] = useState<Record<string, PlanSlot[]>>(() => readInitialPlanningState())
 
   const gameUidToAccountKey = useMemo(() => {
     const map: Record<string, string> = {}
@@ -32,55 +55,20 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
     return map
   }, [accounts])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const raw = window.localStorage.getItem(PLAN_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (!parsed || typeof parsed !== 'object') return
-      const hydrated: Record<string, PlanSlot[]> = {}
-      Object.entries(parsed as Record<string, any>).forEach(([key, plans]) => {
-        if (Array.isArray(plans)) {
-          hydrated[key] = ensurePlanArray(plans as (Partial<PlanSlot> | null)[])
-        }
-      })
-      setPlanningState(hydrated)
-    } catch (error) {
-      console.error('Failed to load union raid planning state:', error)
-    }
-  }, [])
-
-  useEffect(() => {
+  const planningState = useMemo(() => {
     if (!accounts || accounts.length === 0) {
-      return
+      return rawPlanningState
     }
 
-    hasLoadedAccountsOnceRef.current = true
-
-    setPlanningState(prev => {
-      const next: Record<string, PlanSlot[]> = { ...prev }
-      let changed = false
-
-      accounts.forEach(acc => {
-        const key = getAccountKey(acc)
-        if (!key) return
-        const prevHasKey = Object.prototype.hasOwnProperty.call(prev, key)
-        if (!prevHasKey) {
-          next[key] = ensurePlanArray()
-          changed = true
-        } else {
-          const validated = ensurePlanArray(prev[key])
-          if (!planArraysEqual(prev[key], validated)) {
-            next[key] = validated
-            changed = true
-          }
-        }
-      })
-
-      return changed ? next : prev
+    const next: Record<string, PlanSlot[]> = { ...rawPlanningState }
+    accounts.forEach((acc) => {
+      const key = getAccountKey(acc)
+      if (!key) return
+      const currentPlans = next[key]
+      next[key] = currentPlans ? ensurePlanArray(currentPlans) : ensurePlanArray()
     })
-  }, [accounts])
+    return next
+  }, [accounts, rawPlanningState])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -102,7 +90,7 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
 
   const mutatePlanSlot = useCallback((accountKey: string, planIndex: number, mutator: (plan: PlanSlot) => PlanSlot | void) => {
     if (!accountKey) return
-    setPlanningState(prev => {
+    setRawPlanningState(prev => {
       const prevPlans = ensurePlanArray(prev[accountKey])
       const index = Math.min(Math.max(planIndex, 0), prevPlans.length - 1)
       const current = hydratePlanSlot(prevPlans[index])
@@ -117,7 +105,7 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
   }, [])
 
   const resetPlanning = useCallback((accountKey: string) => {
-    setPlanningState(prev => {
+    setRawPlanningState(prev => {
       if (!prev[accountKey]) return prev
       const next = { ...prev }
       next[accountKey] = [createEmptyPlanSlot(), createEmptyPlanSlot(), createEmptyPlanSlot()]
@@ -159,7 +147,7 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
       return { matched, unmatched }
     }
 
-    setPlanningState(prev => {
+    setRawPlanningState(prev => {
       const next = { ...prev }
       Object.entries(updates).forEach(([accountKey, plans]) => {
         next[accountKey] = plans
@@ -171,7 +159,7 @@ export const useUnionRaidPlanning = (accounts: any[]) => {
   }, [gameUidToAccountKey])
 
   const replaceAllPlanning = useCallback((newState: Record<string, PlanSlot[]>) => {
-    setPlanningState(newState)
+    setRawPlanningState(newState)
   }, [])
 
   return {

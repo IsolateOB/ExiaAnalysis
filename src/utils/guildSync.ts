@@ -1,5 +1,20 @@
 import { parseGameOpenIdFromCookie } from './accountUtils'
 
+type AccountSyncLike = {
+  game_openid?: string | number
+  gameOpenId?: string | number
+  cookie?: string
+}
+
+type GuildMemberLike = AccountSyncLike & {
+  synchro_level?: string | number
+  member_id?: string | number
+  open_id?: string | number
+  openId?: string | number
+  intl_open_id?: string | number
+  intlOpenId?: string | number
+}
+
 const getStringId = (value: unknown) => {
   if (value === undefined || value === null) return ''
   return String(value).trim()
@@ -11,7 +26,7 @@ const pushUniqueId = (target: string[], value: unknown) => {
   target.push(text)
 }
 
-export const getAccountSyncLookupKeys = (account: any) => {
+export const getAccountSyncLookupKeys = (account: AccountSyncLike) => {
   const keys: string[] = []
   pushUniqueId(keys, account?.game_openid)
   pushUniqueId(keys, account?.gameOpenId)
@@ -19,7 +34,7 @@ export const getAccountSyncLookupKeys = (account: any) => {
   return keys
 }
 
-export const resolveGuildSyncLevel = (account: any, levelMap: Map<string, number>) => {
+export const resolveGuildSyncLevel = (account: AccountSyncLike, levelMap: Map<string, number>) => {
   for (const key of getAccountSyncLookupKeys(account)) {
     const level = levelMap.get(key)
     if (Number.isFinite(level)) return level
@@ -27,7 +42,7 @@ export const resolveGuildSyncLevel = (account: any, levelMap: Map<string, number
   return undefined
 }
 
-export const mergeGuildMemberSyncLevel = (levelMap: Map<string, number>, member: any) => {
+export const mergeGuildMemberSyncLevel = (levelMap: Map<string, number>, member: GuildMemberLike) => {
   const syncLevel = Number(member?.synchro_level)
   if (!Number.isFinite(syncLevel)) return
 

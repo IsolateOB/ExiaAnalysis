@@ -13,6 +13,11 @@ type ProxyResponsePayload = {
   error?: string
 }
 
+type ProxyRequestBody = Record<string, unknown>
+type CookieAccountLike = {
+  cookie?: string
+}
+
 const getProxyErrorMessage = (payload: ProxyResponsePayload | null, fallback: string) => {
   if (!payload) return fallback
   if (typeof payload.error === 'string' && payload.error.trim()) return payload.error
@@ -38,7 +43,7 @@ export const fetchProfile = async (token: string) => {
   return res.json()
 }
 
-export const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: any) => {
+export const postProxy = async (scope: 'game' | 'ugc', path: string, cookie: string, body: ProxyRequestBody) => {
   const request = async () => {
     const res = await fetch(`/api/${scope}/${path}`, {
       method: 'POST',
@@ -86,7 +91,7 @@ export const getRoleInfoByCookie = async (cookie: string) => {
   return { role_name: roleName, area_id: areaId }
 }
 
-export const fetchGuildSyncLevels = async (accounts: any[]) => {
+export const fetchGuildSyncLevels = async (accounts: CookieAccountLike[]) => {
   const validAcc = accounts.find(acc => acc.cookie)
   if (!validAcc) return new Map<string, number>()
 
@@ -103,7 +108,7 @@ export const fetchGuildSyncLevels = async (accounts: any[]) => {
     if (!Array.isArray(items)) return new Map<string, number>()
 
     const levelMap = new Map<string, number>()
-    items.forEach((item: any) => {
+    items.forEach((item) => {
       mergeGuildMemberSyncLevel(levelMap, item)
     })
     return levelMap

@@ -13,7 +13,7 @@ export type ActualStrike = {
   level: number
   step: number
   damage: number
-  squadData: any[]
+  squadData: Array<{ tid: number }>
   characterIds: number[]
   characterNames: string[]
   matchesFilters: boolean

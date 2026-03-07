@@ -1,11 +1,19 @@
 import type { NikkeMap } from './types'
 
-export const getAccountKey = (acc: any) => {
+type AccountLike = {
+  cookie?: string
+  name?: string
+  game_uid?: string | number
+  gameUid?: string | number
+  gameUID?: string | number
+}
+
+export const getAccountKey = (acc: AccountLike) => {
   const match = acc?.cookie?.match(/game_openid=(\d+)/)
   return match ? match[1] : acc?.name
 }
 
-export const getGameUid = (acc: any): string | null => {
+export const getGameUid = (acc: AccountLike): string | null => {
   const uid = acc?.game_uid ?? acc?.gameUid ?? acc?.gameUID
   if (uid === undefined || uid === null) return null
   const str = String(uid).trim()

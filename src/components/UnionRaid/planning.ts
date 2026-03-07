@@ -1,4 +1,3 @@
-import { STEP_OPTIONS } from './constants.ts'
 import type { ActualStrike, PlanSlot, StrikeView } from './types.ts'
 
 export const createEmptyPlanSlot = (): PlanSlot => ({
@@ -24,7 +23,7 @@ export const formatPredictedDamage = (value: number | null): string => {
   if (value === null || value === undefined) return ''
   try {
     return value.toLocaleString()
-  } catch (err) {
+  } catch {
     return String(value)
   }
 }
@@ -33,7 +32,7 @@ export const formatActualDamage = (value: number | null | undefined) => {
   if (!value) return '-'
   try {
     return Number(value).toLocaleString()
-  } catch (err) {
+  } catch {
     return String(value)
   }
 }

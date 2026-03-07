@@ -1,19 +1,19 @@
-/*
+﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ThemeProvider, createTheme, CssBaseline, Box, Snackbar, Alert, Container, Typography, ToggleButtonGroup, ToggleButton, Button, Slide, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, FormControl, InputLabel, Select, MenuItem } from '@mui/material'
+import { ThemeProvider, CssBaseline, Box, Snackbar, Alert, Container, ToggleButtonGroup, ToggleButton, Button, Slide, FormControl, InputLabel, Select, MenuItem } from '@mui/material'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import TeamBuilder from './components/TeamBuilder'
 import AccountsAnalyzer from './components/AccountsAnalyzer'
 import UnionRaidStats from './components/UnionRaidStats'
-import type { Character, AttributeCoefficients } from './types'
+import type { AccountCharacterDetail, AccountListRecord, AccountRecord, AttributeCoefficients, Character } from './types'
 import { fetchNikkeList } from './services/nikkeList'
 import Header from './components/Header'
 import SettingsPage from './components/SettingsPage'
-import { useI18n } from './i18n'
+import { useI18n } from './hooks/useI18n'
 import * as XLSX from 'xlsx'
 import { AuthDialog } from './components/AuthDialog'
 
@@ -44,10 +44,49 @@ const SIDEBAR_WIDTH_MD = 400
 const SIDEBAR_TOGGLE_SIZE = 44
 const AUTH_BROADCAST_CHANNEL = 'exia-auth'
 
+type SpreadsheetCell = string | number | boolean | null | undefined
+type SpreadsheetRow = SpreadsheetCell[]
+
+type StoredAuthPayload = {
+  token?: string
+  username?: string
+  avatar_url?: string | null
+  restricted?: boolean
+}
+
+type AuthBroadcastPayload = {
+  type?: 'auth:clear' | 'auth:update' | 'auth:status'
+  token?: string | null
+  username?: string | null
+  avatar_url?: string | null
+  loggedIn?: boolean
+}
+
+type BroadcastChannelWindow = typeof window & {
+  BroadcastChannel?: typeof BroadcastChannel
+}
+
+type StateEffectRecord = {
+  id?: string | number
+  function_details?: Array<{
+    function_type: string
+    function_value: number
+    level?: number
+  }>
+  [key: string]: unknown
+}
+
+type CharacterDetailsResponse = {
+  data?: {
+    character_details?: AccountCharacterDetail[]
+    state_effects?: StateEffectRecord[]
+  }
+}
+
 const App: React.FC = () => {
-  const { t, lang, toggleLang } = useI18n()
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [accountLists, setAccountLists] = useState<Array<{ id: string; name: string; data: any[] }>>([])
+  const { t } = useI18n()
+  const [accounts, setAccounts] = useState<AccountRecord[]>([])
+  const [accountLists, setAccountLists] = useState<AccountListRecord[]>([])
   const [selectedAccountListId, setSelectedAccountListId] = useState<string>('')
   const [uploadedFileName, setUploadedFileName] = useState<string | undefined>(undefined)
   const [accountsLoaded, setAccountsLoaded] = useState(false)
@@ -93,7 +132,6 @@ const App: React.FC = () => {
   const authSyncCheckedRef = useRef(false)
   const authInitRef = useRef(false)
   const prevAuthTokenRef = useRef<string | null>(null)
-  const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null)
   const [notification, setNotification] = useState<{
     open: boolean
     message: string
@@ -103,7 +141,7 @@ const App: React.FC = () => {
     message: '',
     severity: 'info'
   })
-  const builtAccountsCacheRef = useRef<Record<string, any[]>>({})
+  const builtAccountsCacheRef = useRef<Record<string, AccountRecord[]>>({})
 
   const handleStatusChange = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setNotification({
@@ -123,16 +161,18 @@ const App: React.FC = () => {
     try {
       const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
       if (savedLocalListsJson) {
-        const savedLocalLists = JSON.parse(savedLocalListsJson)
+        const savedLocalLists = JSON.parse(savedLocalListsJson) as AccountListRecord[]
         if (Array.isArray(savedLocalLists) && savedLocalLists.length > 0) {
           setAccountLists(prev => {
-            const localIds = new Set(savedLocalLists.map(l => l.id))
+            const localIds = new Set(savedLocalLists.map((list) => list.id))
             const nonLocalPrev = prev.filter(p => !localIds.has(p.id))
             return [...savedLocalLists, ...nonLocalPrev]
           })
         }
       }
-    } catch(e) { /* ignore */ }
+    } catch (error) {
+      console.error('Failed to load local account lists:', error)
+    }
   }, [])
 
   const handleUploadAccountList = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,10 +185,10 @@ const App: React.FC = () => {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: 'array' })
         const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1 })
+        const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(worksheet, { header: 1 })
         
         if (rows.length < 2) {
-          handleStatusChange('表格数据为空', 'error')
+          handleStatusChange('琛ㄦ牸鏁版嵁涓虹┖', 'error')
           return
         }
 
@@ -159,13 +199,13 @@ const App: React.FC = () => {
           if (!header) return
           const val = String(header).toLowerCase()
           if (val.includes('game') && val.includes('uid')) gameUidCol = index
-          else if (val.includes('账号') || val.includes('username') || val.includes('name')) usernameCol = index
-          else if (val.includes('cookie') && !val.includes('更新') && !val.includes('updated') && !val.includes('date') && cookieCol === -1) cookieCol = index
+          else if (val.includes('璐﹀彿') || val.includes('username') || val.includes('name')) usernameCol = index
+          else if (val.includes('cookie') && !val.includes('鏇存柊') && !val.includes('updated') && !val.includes('date') && cookieCol === -1) cookieCol = index
         })
 
-        const localAccounts: any[] = []
+        const localAccounts: AccountRecord[] = []
         for (let i = 1; i < rows.length; i++) {
-          const row = rows[i] as any[]
+          const row = rows[i]
           if (!row || row.length === 0) continue
           const game_uid = gameUidCol >= 0 ? String(row[gameUidCol] || '').trim() : ''
           const username = usernameCol >= 0 ? String(row[usernameCol] || '').trim() : ''
@@ -174,8 +214,8 @@ const App: React.FC = () => {
           if (game_uid || username || cookie) {
             localAccounts.push({
               game_uid,
-              name: username || `本地账号${i}`,
-              role_name: username || `本地账号${i}`,
+              name: username || `鏈湴璐﹀彿${i}`,
+              role_name: username || `鏈湴璐﹀彿${i}`,
               cookie,
               synchroLevel: 0,
               outpostLevel: 0
@@ -184,7 +224,7 @@ const App: React.FC = () => {
         }
 
         if (localAccounts.length === 0) {
-          handleStatusChange('未解析到账号数据', 'error')
+          handleStatusChange('鏈В鏋愬埌璐﹀彿鏁版嵁', 'error')
           return
         }
 
@@ -196,17 +236,17 @@ const App: React.FC = () => {
         }
 
         const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
-        const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) : []
+        const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) as AccountListRecord[] : []
         savedLocalLists.push(newLocalList)
         window.localStorage.setItem(LOCAL_LISTS_STORAGE_KEY, JSON.stringify(savedLocalLists))
 
         setAccountLists(prev => [newLocalList, ...prev.filter(list => list.id !== localListId)])
         setSelectedAccountListId(localListId)
-        handleStatusChange(`成功导入 ${localAccounts.length} 个本地账号`, 'success')
+        handleStatusChange(`Imported ${localAccounts.length} local accounts successfully.`, 'success')
 
       } catch (error) {
         console.error(error)
-        handleStatusChange('解析 Excel 失败', 'error')
+        handleStatusChange('瑙ｆ瀽 Excel 澶辫触', 'error')
       }
     }
     reader.readAsArrayBuffer(file)
@@ -216,7 +256,7 @@ const App: React.FC = () => {
 
   const accountDetailCacheRef = useRef<Record<string, Set<number>>>({})
 
-  const getAccountCacheKey = (acc: any, index: number) => {
+  const getAccountCacheKey = (acc: AccountRecord, index: number) => {
     return String(acc?.game_uid || acc?.gameUid || acc?.cookie || acc?.name || index)
   }
 
@@ -243,26 +283,26 @@ const App: React.FC = () => {
       console.debug('[AEL] account', idx, 'missing codes:', missingCodes.length)
 
       const intlOpenId = parseCookieValue(cookie, 'game_openid')
-      const payloadBase: any = { nikke_area_id: parseInt(areaId) }
+      const payloadBase: { nikke_area_id: number; intl_open_id?: string } = { nikke_area_id: parseInt(areaId, 10) }
       if (intlOpenId) payloadBase.intl_open_id = intlOpenId
 
       try {
         const detailsResp = await postProxy('game', 'proxy/Game/GetUserCharacterDetails', cookie, {
           ...payloadBase,
           name_codes: missingCodes
-        })
+        }) as CharacterDetailsResponse
         const detailList = Array.isArray(detailsResp?.data?.character_details) ? detailsResp.data.character_details : []
         const stateEffects = Array.isArray(detailsResp?.data?.state_effects) ? detailsResp.data.state_effects : []
         console.debug('[AEL] detail response size:', detailList.length, 'effects:', stateEffects.length)
-        const effectsMap: Record<string, any> = {}
-        stateEffects.forEach((effect: any) => {
+        const effectsMap: Record<string, StateEffectRecord> = {}
+        stateEffects.forEach((effect) => {
           effectsMap[String(effect.id)] = effect
         })
-        const normalizedDetails: Record<string, any> = {}
-        detailList.forEach((detail: any) => {
+        const normalizedDetails: Record<string, AccountCharacterDetail> = {}
+        detailList.forEach((detail) => {
           const nameCode = detail?.name_code
           if (nameCode == null) return
-          const equipments = buildEquipments(detail, effectsMap)
+          const equipments = buildEquipments(detail as Record<string, number | string | undefined>, effectsMap)
           const limitBreak = {
             grade: typeof detail?.grade === 'number' ? detail.grade : 0,
             core: typeof detail?.core === 'number' ? detail.core : 0
@@ -303,18 +343,19 @@ const App: React.FC = () => {
     }))
   }, [accounts])
 
-  const buildAccountsFromCookies = async (rawAccounts: any[]) => {
+  const buildAccountsFromCookies = useCallback(async (rawAccounts: AccountRecord[]) => {
     if (!rawAccounts || rawAccounts.length === 0) return []
 
-    // 预取工会同步等级
+    // 棰勫彇宸ヤ細鍚屾绛夌骇
     const guildSyncLevels = await fetchGuildSyncLevels(rawAccounts)
 
-    const normalizeBuiltAccount = (raw: any, fallbackName: string) => {
+    const normalizeBuiltAccount = (raw: AccountRecord, fallbackName: string): AccountRecord => {
       const name = raw?.name || raw?.role_name || fallbackName
-      const { elements: _elements, ...rest } = raw || {}
+      const rest: AccountRecord = { ...raw }
+      delete rest.elements
       
       const gameOpenId = raw?.game_openid || raw?.gameOpenId || parseGameOpenIdFromCookie(raw?.cookie) || ''
-      // 如果映射表里有，优先用映射表的；否则用 raw 里缓存的；再否则 0
+      // 濡傛灉鏄犲皠琛ㄩ噷鏈夛紝浼樺厛鐢ㄦ槧灏勮〃鐨勶紱鍚﹀垯鐢?raw 閲岀紦瀛樼殑锛涘啀鍚﹀垯 0
       const guildSyncLevel = resolveGuildSyncLevel(raw, guildSyncLevels)
       const synchroLevel = guildSyncLevel
         ?? (Number.isFinite(raw?.synchroLevel) ? raw.synchroLevel : (Number.isFinite(raw?.SynchroLevel) ? raw.SynchroLevel : (Number.isFinite(raw?.synchro_level) ? raw.synchro_level : 0)))
@@ -331,8 +372,8 @@ const App: React.FC = () => {
       }
     }
 
-    const accounts = await Promise.all(rawAccounts.map(async (raw, idx) => {
-      const fallbackName = raw?.name || raw?.role_name || raw?.game_uid || raw?.gameUid || `账号${idx + 1}`
+    const builtAccounts = await Promise.all(rawAccounts.map(async (raw, idx) => {
+      const fallbackName = raw?.name || raw?.role_name || raw?.game_uid || raw?.gameUid || `璐﹀彿${idx + 1}`
       const cookie = raw?.cookie || ''
       if (!cookie) {
         return normalizeBuiltAccount(raw, fallbackName)
@@ -348,10 +389,10 @@ const App: React.FC = () => {
           return normalizeBuiltAccount({ ...raw, name: roleName }, fallbackName)
         }
 
-        // 不再请求 GetUserProfileOutpostInfo，直接查表
+        // 涓嶅啀璇锋眰 GetUserProfileOutpostInfo锛岀洿鎺ユ煡琛?
         const synchroLevel = resolveGuildSyncLevel({ ...raw, game_openid: gameOpenId, cookie }, guildSyncLevels) ?? 0
         
-        // outpostLevel 默认为 raw 中的值或 0 (因为不再请求 outpost info)
+        // outpostLevel 榛樿涓?raw 涓殑鍊兼垨 0 (鍥犱负涓嶅啀璇锋眰 outpost info)
         const outpostLevel = Number.isFinite(raw?.outpostLevel) ? raw.outpostLevel : (Number.isFinite(raw?.outpost_level) ? raw.outpost_level : 0)
 
         return {
@@ -371,11 +412,11 @@ const App: React.FC = () => {
       }
     }))
 
-    return accounts.filter(Boolean)
-  }
+    return builtAccounts.filter(Boolean)
+  }, [])
 
 
-  const buildAccountsForList = useCallback(async (list: { id: string; name: string; data: any[] }) => {
+  const buildAccountsForList = useCallback(async (list: AccountListRecord) => {
     if (!list?.id) return []
     const cached = builtAccountsCacheRef.current[list.id]
     if (cached) return cached
@@ -384,7 +425,7 @@ const App: React.FC = () => {
     return built
   }, [buildAccountsFromCookies])
 
-  const applyAccountListSelection = useCallback(async (listId: string, lists: Array<{ id: string; name: string; data: any[] }>) => {
+  const applyAccountListSelection = useCallback(async (listId: string, lists: AccountListRecord[]) => {
     const target = lists.find((item) => item.id === listId) || lists[0]
     if (!target) {
       setAccounts([])
@@ -394,23 +435,23 @@ const App: React.FC = () => {
       return
     }
     setSelectedAccountListId(target.id)
-    setUploadedFileName(target.name || '云端数据')
+    setUploadedFileName(target.name || '浜戠鏁版嵁')
     setTeamChars([])
     setCoeffsMap({})
     const built = await buildAccountsForList(target)
     setAccounts(built)
   }, [buildAccountsForList])
 
-  const loadAccountsFromBackend = async (token: string, gameAccounts?: any[]) => {
+  const loadAccountsFromBackend = useCallback(async (token: string, gameAccounts?: AccountListRecord[]) => {
     try {
       const source = Array.isArray(gameAccounts) && gameAccounts.length
         ? gameAccounts
         : (await fetchCloudAccountLists(token)) || []
 
-      const normalized = normalizeAccountLists(source, t('accountList.default') || '默认账号列表')
+      const normalized = normalizeAccountLists(source, t('accountList.default') || '榛樿璐﹀彿鍒楄〃')
 
       const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
-      const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) : []
+      const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) as AccountListRecord[] : []
       const combinedLists = [...savedLocalLists, ...normalized]
 
       if (!Array.isArray(combinedLists) || combinedLists.length === 0) {
@@ -432,10 +473,10 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Failed to load accounts from backend:', error)
     }
-  }
+  }, [selectedAccountListId, t])
 
 
-  // 首次加载 nikkeList（全局只请求一次）
+  // 棣栨鍔犺浇 nikkeList锛堝叏灞€鍙姹備竴娆★級
   useEffect(() => {
     let cancelled = false
     const loadNikkeList = async () => {
@@ -455,7 +496,7 @@ const App: React.FC = () => {
     try {
       const authRaw = window.localStorage.getItem(AUTH_STORAGE_KEY)
       if (authRaw) {
-        const parsedAuth = JSON.parse(authRaw)
+        const parsedAuth = JSON.parse(authRaw) as StoredAuthPayload
         if (parsedAuth?.token && parsedAuth?.username) {
           setAuthToken(parsedAuth.token)
           setAuthUsername(parsedAuth.username)
@@ -489,9 +530,9 @@ const App: React.FC = () => {
     }
   }, [authToken, authUsername, authAvatarUrl, authRestricted])
 
-  const broadcastAuth = useCallback((payload: any) => {
+  const broadcastAuth = useCallback((payload: AuthBroadcastPayload) => {
     if (typeof window === 'undefined') return
-    if (!(window as any).BroadcastChannel) return
+    if (!(window as BroadcastChannelWindow).BroadcastChannel) return
     try {
       const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
       channel.postMessage(payload)
@@ -503,15 +544,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (!(window as any).BroadcastChannel) return
+    if (!(window as BroadcastChannelWindow).BroadcastChannel) return
     const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
     channel.onmessage = (event) => {
-      const payload = event?.data || {}
+      const payload = (event?.data || {}) as AuthBroadcastPayload
       if (payload.type === 'auth:clear') {
         setAuthToken(null)
         setAuthUsername(null)
         setAuthAvatarUrl(null)
-        handleStatusChange(t('auth.logoutSuccess') || '已退出', 'info')
+        handleStatusChange(t('auth.logoutSuccess') || 'Logged out.', 'info')
         return
       }
       if (payload.type === 'auth:update' && payload.token) {
@@ -588,25 +629,19 @@ const App: React.FC = () => {
     if (authSyncCheckedRef.current) return
     authSyncCheckedRef.current = true
     loadAccountsFromBackend(authToken)
-  }, [authToken, accountsLoaded])
+  }, [authToken, accountsLoaded, loadAccountsFromBackend])
 
   const collapseSidebar = () => setSidebarCollapsed(true)
   const expandSidebar = () => setSidebarCollapsed(false)
-  const collapseLabel = t('layout.collapseSidebar') || '收起侧栏'
-  const expandLabel = t('layout.expandSidebar') || '展开侧栏'
+  const collapseLabel = t('layout.collapseSidebar') || '鏀惰捣渚ф爮'
+  const expandLabel = t('layout.expandSidebar') || '灞曞紑渚ф爮'
 
   const authTitle = useMemo(() => {
-    return authMode === 'login' ? (t('auth.titleLogin') || '登录') : (t('auth.titleRegister') || '注册')
+    return authMode === 'login' ? (t('auth.titleLogin') || '鐧诲綍') : (t('auth.titleRegister') || '娉ㄥ唽')
   }, [authMode, t])
 
   const openLoginDialog = () => {
     setAuthMode('login')
-    setAuthForm({ username: '', password: '' })
-    setAuthDialogOpen(true)
-  }
-
-  const openRegisterDialog = () => {
-    setAuthMode('register')
     setAuthForm({ username: '', password: '' })
     setAuthDialogOpen(true)
   }
@@ -618,11 +653,11 @@ const App: React.FC = () => {
 
   const handleAuthSubmit = async () => {
     if (!authForm.username.trim()) {
-      handleStatusChange(t('auth.usernameRequired') || '请填写用户名', 'warning')
+      handleStatusChange(t('auth.usernameRequired') || '璇峰～鍐欑敤鎴峰悕', 'warning')
       return
     }
     if (!authForm.password.trim()) {
-      handleStatusChange(t('auth.passwordRequired') || '请填写密码', 'warning')
+      handleStatusChange(t('auth.passwordRequired') || 'Please enter a password.', 'warning')
       return
     }
     setAuthSubmitting(true)
@@ -640,13 +675,13 @@ const App: React.FC = () => {
       })
 
       if (!res.ok) {
-        const msg = authMode === 'login' ? (t('auth.failedLogin') || '登录失败') : (t('auth.failedRegister') || '注册失败')
+        const msg = authMode === 'login' ? (t('auth.failedLogin') || '鐧诲綍澶辫触') : (t('auth.failedRegister') || '娉ㄥ唽澶辫触')
         handleStatusChange(msg, 'error')
         return
       }
 
       if (authMode === 'register') {
-        handleStatusChange(t('auth.successRegister') || '注册成功，请登录', 'success')
+        handleStatusChange(t('auth.successRegister') || '娉ㄥ唽鎴愬姛锛岃鐧诲綍', 'success')
         setAuthMode('login')
         setAuthForm(prev => ({ ...prev, password: '' }))
         return
@@ -664,12 +699,12 @@ const App: React.FC = () => {
         setAuthDialogOpen(false)
         authSyncCheckedRef.current = false
         await loadAccountsFromBackend(data.token, data?.game_accounts || [])
-        handleStatusChange(t('auth.successLogin') || '登录成功', 'success')
+        handleStatusChange(t('auth.successLogin') || '鐧诲綍鎴愬姛', 'success')
       } else {
-        handleStatusChange(t('auth.failedLogin') || '登录失败', 'error')
+        handleStatusChange(t('auth.failedLogin') || '鐧诲綍澶辫触', 'error')
       }
-    } catch (error) {
-      const msg = authMode === 'login' ? (t('auth.failedLogin') || '登录失败') : (t('auth.failedRegister') || '注册失败')
+    } catch {
+      const msg = authMode === 'login' ? (t('auth.failedLogin') || '鐧诲綍澶辫触') : (t('auth.failedRegister') || '娉ㄥ唽澶辫触')
       handleStatusChange(msg, 'error')
     } finally {
       setAuthSubmitting(false)
@@ -684,7 +719,7 @@ const App: React.FC = () => {
     
     // Clear cloud account lists, keep local lists
     const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
-    const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) : []
+    const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) as AccountListRecord[] : []
     setAccountLists(savedLocalLists)
     
     if (savedLocalLists.length === 0) {
@@ -699,7 +734,7 @@ const App: React.FC = () => {
 
     builtAccountsCacheRef.current = {}
     authSyncCheckedRef.current = false
-    handleStatusChange(t('auth.logoutSuccess') || '已退出', 'success')
+    handleStatusChange(t('auth.logoutSuccess') || 'Logged out.', 'success')
   }
 
   const handleUpdateUser = (newToken: string, newUsername: string) => {
@@ -792,11 +827,11 @@ const App: React.FC = () => {
                     <Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
                         <FormControl fullWidth size="small">
-                          <InputLabel id="account-list-select-label">{t('accountList.label') || '账号列表'}</InputLabel>
+                          <InputLabel id="account-list-select-label">{t('accountList.label') || '璐﹀彿鍒楄〃'}</InputLabel>
                           <Select
                             labelId="account-list-select-label"
                             value={selectedAccountListId}
-                            label={t('accountList.label') || '账号列表'}
+                            label={t('accountList.label') || '璐﹀彿鍒楄〃'}
                             onChange={async (event) => {
                               const nextId = String(event.target.value || '')
                               if (!nextId || nextId === selectedAccountListId) return
@@ -806,13 +841,13 @@ const App: React.FC = () => {
                           >
                             {accountLists.map((list) => (
                               <MenuItem key={list.id} value={list.id}>
-                                {list.id.startsWith('local_') ? `[本地] ` : ''}{list.name || t('accountList.unnamed') || '未命名账号列表'}
+                                {list.id.startsWith('local_') ? '[Local] ' : ''}{list.name || t('accountList.unnamed') || 'Unnamed account list'}
                               </MenuItem>
                             ))}
                           </Select>
                         </FormControl>
-                        <Button component="label" variant="outlined" sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} title="上传ExiaInvasion导出的账号Excel">
-                          上传
+                        <Button component="label" variant="outlined" sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} title="Upload an Excel exported from ExiaInvasion">
+                          Upload
                           <input type="file" hidden accept=".xlsx,.xls" onChange={handleUploadAccountList} />
                         </Button>
                         {selectedAccountListId?.startsWith('local_') && (
@@ -820,24 +855,26 @@ const App: React.FC = () => {
                             variant="outlined" 
                             color="error" 
                             sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} 
-                            title="删除本地列表"
+                            title="Delete local list"
                             onClick={async () => {
                               const newList = accountLists.filter(l => l.id !== selectedAccountListId)
                               setAccountLists(newList)
                               const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
                               if (savedLocalListsJson) {
                                 try {
-                                  const saved = JSON.parse(savedLocalListsJson)
-                                  const newSaved = saved.filter((l: any) => l.id !== selectedAccountListId)
+                                  const saved = JSON.parse(savedLocalListsJson) as AccountListRecord[]
+                                  const newSaved = saved.filter((list) => list.id !== selectedAccountListId)
                                   window.localStorage.setItem(LOCAL_LISTS_STORAGE_KEY, JSON.stringify(newSaved))
-                                } catch (e) {}
+                                } catch (error) {
+                                  console.error('Failed to update local account lists:', error)
+                                }
                               }
                               const nextId = newList[0]?.id || ''
                               setSelectedAccountListId(nextId)
                               await applyAccountListSelection(nextId, newList)
                             }}
                           >
-                            删除
+                            Delete
                           </Button>
                         )}
                       </Box>
@@ -964,7 +1001,7 @@ const App: React.FC = () => {
                           if (idx < 5) teamArray[idx] = char
                         })
                         setTeamChars(teamArray)
-                        handleStatusChange(t('unionRaid.teamCopied') || '队伍已复制到构建器', 'success')
+                        handleStatusChange(t('unionRaid.teamCopied') || 'Team copied to builder.', 'success')
                       }}
                       onNotify={handleStatusChange}
                     />
@@ -975,7 +1012,7 @@ const App: React.FC = () => {
           </Box>
         </Container>
         
-        {/* 全局通知 */}
+        {/* 鍏ㄥ眬閫氱煡 */}
         <Snackbar
           open={notification.open}
           autoHideDuration={6000}
@@ -1009,3 +1046,5 @@ const App: React.FC = () => {
 }
 
 export default App
+
+

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useEffect, useState } from 'react'
@@ -8,7 +8,6 @@ import {
   Paper,
   TextField,
   Button,
-  Divider,
   Alert,
   Dialog,
   DialogTitle,
@@ -20,7 +19,7 @@ import {
   ToggleButtonGroup,
   Avatar
 } from '@mui/material'
-import { useI18n } from '../i18n'
+import { useI18n } from '../hooks/useI18n'
 import { AVATAR_URLS } from '../data/avatarUrls'
 
 const API_BASE_URL = 'https://backend.nikke-exia.com'
@@ -39,7 +38,7 @@ interface SettingsPageProps {
 const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatarUrl, restricted = false, onLogout, onUpdateUser, onUpdateAvatar, onNotify }) => {
   const { t, lang, toggleLang } = useI18n()
 
-  // 修改用户名状态
+  // 淇敼鐢ㄦ埛鍚嶇姸鎬?
   const [newUsername, setNewUsername] = useState(username || '')
   const [usernameLoading, setUsernameLoading] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(avatarUrl || '')
@@ -49,22 +48,22 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
     setSelectedAvatar(avatarUrl || '')
   }, [avatarUrl])
 
-  // 修改密码状态
+  // 淇敼瀵嗙爜鐘舵€?
   const [pwdForm, setPwdForm] = useState({ current: '', new: '', confirm: '' })
   const [pwdLoading, setPwdLoading] = useState(false)
 
-  // 删除账号对话框状态
+  // 鍒犻櫎璐﹀彿瀵硅瘽妗嗙姸鎬?
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  // 受限模式密码设置状态
+  // 鍙楅檺妯″紡瀵嗙爜璁剧疆鐘舵€?
   const [restrictedPwdForm, setRestrictedPwdForm] = useState({ restricted: '', confirm: '' })
   const [restrictedPwdLoading, setRestrictedPwdLoading] = useState(false)
 
   const handleUpdateUsername = async () => {
     if (!authToken) return
     if (!newUsername || newUsername.length < 3) {
-        onNotify(t('settings.usernameTooShort') || '用户名至少需要3个字符', 'warning')
+        onNotify(t('settings.usernameTooShort') || 'Username must be at least 3 characters.', 'warning')
         return
     }
     setUsernameLoading(true)
@@ -79,13 +78,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
         })
         const data = await res.json()
         if (!res.ok) {
-            onNotify(data.error || (t('settings.changeUsernameFailed') || '修改用户名失败'), 'error')
+            onNotify(data.error || (t('settings.changeUsernameFailed') || 'Failed to change username.'), 'error')
         } else {
-            onNotify(t('settings.changeUsernameSuccess') || '用户名修改成功', 'success')
+            onNotify(t('settings.changeUsernameSuccess') || 'Username updated.', 'success')
             onUpdateUser(data.token, data.username)
         }
-    } catch (error) {
-        onNotify(t('settings.changeUsernameFailed') || '修改用户名失败', 'error')
+    } catch {
+        onNotify(t('settings.changeUsernameFailed') || 'Failed to change username.', 'error')
     } finally {
         setUsernameLoading(false)
     }
@@ -97,19 +96,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
 
   const submitChangePassword = async () => {
     if (!authToken) {
-      onNotify(t('auth.required') || '请先登录', 'error')
+      onNotify(t('auth.required') || '璇峰厛鐧诲綍', 'error')
       return
     }
     if (!pwdForm.current || !pwdForm.new) {
-      onNotify(t('settings.pwdRequired') || '请填写当前密码和新密码', 'warning')
+      onNotify(t('settings.pwdRequired') || 'Please enter the current and new password.', 'warning')
       return
     }
     if (pwdForm.new !== pwdForm.confirm) {
-      onNotify(t('settings.pwdMismatch') || '两次新密码输入不一致', 'error')
+      onNotify(t('settings.pwdMismatch') || 'The new passwords do not match.', 'error')
       return
     }
     if (pwdForm.new.length < 6) {
-      onNotify(t('settings.pwdTooShort') || '新密码长度不能少于6位', 'warning')
+      onNotify(t('settings.pwdTooShort') || 'The new password must be at least 6 characters.', 'warning')
       return
     }
 
@@ -129,13 +128,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
 
       const data = await res.json()
       if (!res.ok) {
-        onNotify(data.error || (t('settings.changePwdFailed') || '修改密码失败'), 'error')
+        onNotify(data.error || (t('settings.changePwdFailed') || '淇敼瀵嗙爜澶辫触'), 'error')
       } else {
-        onNotify(t('settings.changePwdSuccess') || '密码修改成功', 'success')
+        onNotify(t('settings.changePwdSuccess') || '瀵嗙爜淇敼鎴愬姛', 'success')
         setPwdForm({ current: '', new: '', confirm: '' })
       }
-    } catch (error) {
-      onNotify(t('settings.changePwdFailed') || '修改密码失败', 'error')
+    } catch {
+      onNotify(t('settings.changePwdFailed') || '淇敼瀵嗙爜澶辫触', 'error')
     } finally {
       setPwdLoading(false)
     }
@@ -153,14 +152,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
         })
         const data = await res.json()
         if (!res.ok) {
-            onNotify(data.error || (t('settings.deleteAccountFailed') || '注销账号失败'), 'error')
+            onNotify(data.error || (t('settings.deleteAccountFailed') || '娉ㄩ攢璐﹀彿澶辫触'), 'error')
         } else {
-            onNotify(t('settings.deleteAccountSuccess') || '账号已注销', 'success')
+            onNotify(t('settings.deleteAccountSuccess') || '璐﹀彿宸叉敞閿€', 'success')
             setDeleteDialogOpen(false)
             onLogout()
         }
-    } catch (error) {
-        onNotify(t('settings.deleteAccountFailed') || '注销账号失败', 'error')
+    } catch {
+        onNotify(t('settings.deleteAccountFailed') || '娉ㄩ攢璐﹀彿澶辫触', 'error')
     } finally {
         setDeleteLoading(false)
     }
@@ -171,15 +170,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
     const isDisabling = !restrictedPwdForm.restricted && !restrictedPwdForm.confirm
     if (!isDisabling) {
       if (!restrictedPwdForm.restricted) {
-        onNotify(t('settings.restrictedPwdRequired') || '请填写受限密码', 'warning')
+        onNotify(t('settings.restrictedPwdRequired') || 'Please enter a restricted password.', 'warning')
         return
       }
       if (restrictedPwdForm.restricted !== restrictedPwdForm.confirm) {
-        onNotify(t('settings.pwdMismatch') || '两次密码输入不一致', 'error')
+        onNotify(t('settings.pwdMismatch') || 'The passwords do not match.', 'error')
         return
       }
       if (restrictedPwdForm.restricted.length < 6) {
-        onNotify(t('settings.pwdTooShort') || '密码不能少于6位', 'warning')
+        onNotify(t('settings.pwdTooShort') || 'The password must be at least 6 characters.', 'warning')
         return
       }
     }
@@ -197,16 +196,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
       })
       const data = await res.json()
       if (!res.ok) {
-        onNotify(data.error || (t('settings.setRestrictedPwdFailed') || '设置受限密码失败'), 'error')
+        onNotify(data.error || (t('settings.setRestrictedPwdFailed') || '璁剧疆鍙楅檺瀵嗙爜澶辫触'), 'error')
       } else {
         const msg = isDisabling
-          ? (t('settings.restrictedPwdDisabled') || '受限模式已关闭')
-          : (t('settings.restrictedPwdSet') || '受限密码设置成功')
+          ? (t('settings.restrictedPwdDisabled') || 'Restricted mode disabled.')
+          : (t('settings.restrictedPwdSet') || '鍙楅檺瀵嗙爜璁剧疆鎴愬姛')
         onNotify(msg, 'success')
         setRestrictedPwdForm({ restricted: '', confirm: '' })
       }
     } catch {
-      onNotify(t('settings.setRestrictedPwdFailed') || '设置受限密码失败', 'error')
+      onNotify(t('settings.setRestrictedPwdFailed') || '璁剧疆鍙楅檺瀵嗙爜澶辫触', 'error')
     } finally {
       setRestrictedPwdLoading(false)
     }
@@ -215,7 +214,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
   const handleUpdateAvatar = async () => {
     if (!authToken) return
     if (!selectedAvatar) {
-      onNotify(t('settings.avatarRequired') || '请选择头像', 'warning')
+      onNotify(t('settings.avatarRequired') || '璇烽€夋嫨澶村儚', 'warning')
       return
     }
     setAvatarLoading(true)
@@ -230,13 +229,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
       })
       const data = await res.json()
       if (!res.ok) {
-        onNotify(data.error || (t('settings.changeAvatarFailed') || '头像修改失败'), 'error')
+        onNotify(data.error || (t('settings.changeAvatarFailed') || '澶村儚淇敼澶辫触'), 'error')
       } else {
-        onNotify(t('settings.changeAvatarSuccess') || '头像修改成功', 'success')
+        onNotify(t('settings.changeAvatarSuccess') || '澶村儚淇敼鎴愬姛', 'success')
         onUpdateAvatar(selectedAvatar)
       }
-    } catch (error) {
-      onNotify(t('settings.changeAvatarFailed') || '头像修改失败', 'error')
+    } catch {
+      onNotify(t('settings.changeAvatarFailed') || '澶村儚淇敼澶辫触', 'error')
     } finally {
       setAvatarLoading(false)
     }
@@ -244,11 +243,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>{t('settings.title') || '设置'}</Typography>
+      <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>{t('settings.title') || '璁剧疆'}</Typography>
 
-      {/* 语言设置 */}
+      {/* 璇█璁剧疆 */}
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>{t('settings.language') || '语言'}</Typography>
+        <Typography variant="h6" gutterBottom>{t('settings.language') || '璇█'}</Typography>
         <ToggleButtonGroup
             value={lang}
             exclusive
@@ -259,7 +258,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
             size="medium"
         >
             <ToggleButton value="zh" sx={{ px: 3 }}>
-                中文
+                涓枃
             </ToggleButton>
             <ToggleButton value="en" sx={{ px: 3 }}>
                 English
@@ -267,20 +266,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
         </ToggleButtonGroup>
       </Paper>
 
-      {/* 账号安全区域，仅非受限模式登录后可见 */}
+      {/* 璐﹀彿瀹夊叏鍖哄煙锛屼粎闈炲彈闄愭ā寮忕櫥褰曞悗鍙 */}
       {authToken && !restricted ? (
         <>
-            {/* 个人资料 (用户名) */}
+            {/* 涓汉璧勬枡 (鐢ㄦ埛鍚? */}
             <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>{t('settings.profile') || '个人资料'}</Typography>
+                <Typography variant="h6" gutterBottom>{t('settings.profile') || '涓汉璧勬枡'}</Typography>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexDirection: 'column', maxWidth: 400 }}>
                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', width: '100%' }}>
                         <TextField
-                            label={t('settings.username') || '用户名'}
+                            label={t('settings.username') || 'Username'}
                             value={newUsername}
                             onChange={(e) => setNewUsername(e.target.value)}
                             fullWidth
-                            helperText={t('settings.usernameHelp') || '修改用户名会导致重新登录（或刷新 Token）'}
+                            helperText={t('settings.usernameHelp') || 'Changing your username may require signing in again.'}
                         />
                         <Button
                             variant="contained"
@@ -288,17 +287,17 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
                             disabled={usernameLoading || newUsername === (username || '')}
                             sx={{ mt: -2.5 }} // align with input
                         >
-                            {usernameLoading ? <CircularProgress size={24} /> : (t('common.save') || '保存')}
+                            {usernameLoading ? <CircularProgress size={24} /> : (t('common.save') || '淇濆瓨')}
                         </Button>
                     </Box>
                 </Box>
             </Paper>
 
-            {/* 头像设置 */}
+            {/* 澶村儚璁剧疆 */}
             <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>{t('settings.avatar') || '头像'}</Typography>
+              <Typography variant="h6" gutterBottom>{t('settings.avatar') || '澶村儚'}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                {t('settings.avatarHelp') || '选择一个头像并保存'}
+                {t('settings.avatarHelp') || '閫夋嫨涓€涓ご鍍忓苟淇濆瓨'}
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
                 <Avatar src={selectedAvatar || avatarUrl || ''} sx={{ width: 56, height: 56 }} />
@@ -307,7 +306,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
                   onClick={handleUpdateAvatar}
                   disabled={avatarLoading || !selectedAvatar || selectedAvatar === (avatarUrl || '')}
                 >
-                  {avatarLoading ? <CircularProgress size={24} /> : (t('common.save') || '保存')}
+                  {avatarLoading ? <CircularProgress size={24} /> : (t('common.save') || '淇濆瓨')}
                 </Button>
               </Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 1 }}>
@@ -329,26 +328,26 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
               </Box>
             </Paper>
 
-            {/* 修改密码 */}
+            {/* 淇敼瀵嗙爜 */}
             <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>{t('settings.security') || '账号安全'}</Typography>
+            <Typography variant="h6" gutterBottom>{t('settings.security') || '璐﹀彿瀹夊叏'}</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 400 }}>
                 <TextField
-                label={t('settings.currentPwd') || '当前密码'}
+                label={t('settings.currentPwd') || '褰撳墠瀵嗙爜'}
                 type="password"
                 value={pwdForm.current}
                 onChange={(e) => handlePwdChange('current', e.target.value)}
                 disabled={pwdLoading}
                 />
                 <TextField
-                label={t('settings.newPwd') || '新密码'}
+                label={t('settings.newPwd') || 'New password'}
                 type="password"
                 value={pwdForm.new}
                 onChange={(e) => handlePwdChange('new', e.target.value)}
                 disabled={pwdLoading}
                 />
                 <TextField
-                label={t('settings.confirmPwd') || '确认新密码'}
+                label={t('settings.confirmPwd') || 'Confirm new password'}
                 type="password"
                 value={pwdForm.confirm}
                 onChange={(e) => handlePwdChange('confirm', e.target.value)}
@@ -360,32 +359,32 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
                     disabled={pwdLoading}
                     sx={{ alignSelf: 'flex-start' }}
                 >
-                {pwdLoading ? <CircularProgress size={24} /> : (t('settings.updatePwd') || '修改密码')}
+                {pwdLoading ? <CircularProgress size={24} /> : (t('settings.updatePwd') || '淇敼瀵嗙爜')}
                 </Button>
             </Box>
             </Paper>
 
-            {/* 受限模式密码 */}
+            {/* 鍙楅檺妯″紡瀵嗙爜 */}
             <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>{t('settings.restrictedMode') || '受限模式'}</Typography>
+            <Typography variant="h6" gutterBottom>{t('settings.restrictedMode') || '鍙楅檺妯″紡'}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {t('settings.restrictedModeDesc') || '设置一个独立的受限密码，让他人可用该密码登录并查看数据，但无法修改密码、上传数据等敏感操作。留空受限密码并保存可关闭受限模式。'}
+              {t('settings.restrictedModeDesc') || 'Set a separate restricted password so others can sign in to view data without changing sensitive settings.'}
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 400 }}>
                 <TextField
-                label={t('settings.restrictedPwd') || '受限密码（留空则关闭受限模式）'}
+                label={t('settings.restrictedPwd') || 'Restricted password (leave blank to disable)'}
                 type="password"
                 value={restrictedPwdForm.restricted}
                 onChange={(e) => setRestrictedPwdForm(prev => ({ ...prev, restricted: e.target.value }))}
                 disabled={restrictedPwdLoading}
                 />
                 <TextField
-                label={t('settings.confirmPwd') || '确认受限密码'}
+                label={t('settings.confirmPwd') || '纭鍙楅檺瀵嗙爜'}
                 type="password"
                 value={restrictedPwdForm.confirm}
                 onChange={(e) => setRestrictedPwdForm(prev => ({ ...prev, confirm: e.target.value }))}
                 disabled={restrictedPwdLoading || !restrictedPwdForm.restricted}
-                helperText={!restrictedPwdForm.restricted ? (t('settings.restrictedDisableHint') || '不填写受限密码即为关闭受限模式') : ''}
+                helperText={!restrictedPwdForm.restricted ? (t('settings.restrictedDisableHint') || 'Leave the restricted password empty to disable restricted mode.') : ''}
                 />
                 <Button
                   variant="contained"
@@ -393,54 +392,56 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ authToken, username, avatar
                   disabled={restrictedPwdLoading}
                   sx={{ alignSelf: 'flex-start' }}
                 >
-                  {restrictedPwdLoading ? <CircularProgress size={24} /> : (t('common.save') || '保存')}
+                  {restrictedPwdLoading ? <CircularProgress size={24} /> : (t('common.save') || '淇濆瓨')}
                 </Button>
             </Box>
             </Paper>
 
-            {/* 危险区域 */}
+            {/* 鍗遍櫓鍖哄煙 */}
             <Paper sx={{ p: 3, borderColor: 'error.main' }}>
-            <Typography variant="h6" color="error" gutterBottom>{t('settings.dangerZone') || '危险区域'}</Typography>
+            <Typography variant="h6" color="error" gutterBottom>{t('settings.dangerZone') || '鍗遍櫓鍖哄煙'}</Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
-                {t('settings.deleteDesc') || '注销账号将永久删除您的所有数据，此操作无法撤销。'}
+                {t('settings.deleteDesc') || 'Deleting the account will permanently remove all associated data.'}
             </Typography>
             <Button 
                 variant="outlined" 
                 color="error" 
                 onClick={() => setDeleteDialogOpen(true)}
             >
-                {t('settings.deleteAccount') || '注销账号'}
+                {t('settings.deleteAccount') || '娉ㄩ攢璐﹀彿'}
             </Button>
             </Paper>
 
-            {/* 删除确认弹窗 */}
+            {/* 鍒犻櫎纭寮圭獥 */}
             <Dialog
                 open={deleteDialogOpen}
                 onClose={() => !deleteLoading && setDeleteDialogOpen(false)}
             >
-                <DialogTitle>{t('settings.deleteConfirmTitle') || '确认注销账号？'}</DialogTitle>
+                <DialogTitle>{t('settings.deleteConfirmTitle') || 'Confirm account deletion'}</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        {t('settings.deleteConfirmContent') || '此操作无法撤销，您的所有数据将被永久删除。是否继续？'}
+                        {t('settings.deleteConfirmContent') || '姝ゆ搷浣滄棤娉曟挙閿€锛屾偍鐨勬墍鏈夋暟鎹皢琚案涔呭垹闄ゃ€傛槸鍚︾户缁紵'}
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
-                        {t('common.cancel') || '取消'}
+                        {t('common.cancel') || '鍙栨秷'}
                     </Button>
                     <Button onClick={handleDeleteAccount} color="error" autoFocus disabled={deleteLoading}>
-                        {deleteLoading ? <CircularProgress size={20} /> : (t('common.confirm') || '确认')}
+                        {deleteLoading ? <CircularProgress size={20} /> : (t('common.confirm') || '纭')}
                     </Button>
                 </DialogActions>
             </Dialog>
         </>
       ) : authToken && restricted ? (
-        <Alert severity="info">{t('settings.restrictedNoEdit') || '受限模式下无法访问账号设置'}</Alert>
+        <Alert severity="info">{t('settings.restrictedNoEdit') || 'Restricted mode cannot edit account settings.'}</Alert>
       ) : (
-        <Alert severity="info">{t('settings.loginRequired') || '请登录以访问账号安全设置'}</Alert>
+        <Alert severity="info">{t('settings.loginRequired') || '璇风櫥褰曚互璁块棶璐﹀彿瀹夊叏璁剧疆'}</Alert>
       )}
     </Box>
   )
 }
 
 export default SettingsPage
+
+

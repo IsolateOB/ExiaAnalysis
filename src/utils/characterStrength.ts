@@ -6,11 +6,31 @@ import { itemData } from '../data/item'
 import { fetchRoledata } from '../services/roledata'
 import type { Lang } from '../translations'
 
+type CharacterEquipmentStat = {
+  function_type?: string
+  function_value?: number
+}
+
+type CharacterStrengthData = {
+  equipments?: Record<string, CharacterEquipmentStat[]>
+  limit_break?: {
+    grade?: number
+    core?: number
+  }
+  synchroLevel?: number
+  item_rare?: string
+  item_level?: number
+}
+
+type CharacterRootData = {
+  synchroLevel?: number
+}
+
 // 计算角色强度的工具函数
 export const calculateCharacterStrength = async (
-  characterData: any, 
-  characterInfo?: Character, 
-  rootData?: any,
+  characterData: CharacterStrengthData,
+  characterInfo?: Character,
+  rootData?: CharacterRootData,
   lang: Lang = 'zh'
 ): Promise<number> => {
   if (!characterData || !characterData.equipments) {
@@ -21,9 +41,9 @@ export const calculateCharacterStrength = async (
   let totalStatAtk = 0
 
   // 遍历所有装备槽 (0-3)
-  Object.values(characterData.equipments).forEach((equipmentSlot: any) => {
+  Object.values(characterData.equipments).forEach((equipmentSlot) => {
     if (Array.isArray(equipmentSlot)) {
-      equipmentSlot.forEach((equipment: any) => {
+      equipmentSlot.forEach((equipment) => {
         if (equipment.function_type === 'IncElementDmg') {
           totalIncElementDmg += equipment.function_value || 0
         } else if (equipment.function_type === 'StatAtk') {
@@ -42,7 +62,7 @@ export const calculateCharacterStrength = async (
   try {
     const rid = characterInfo?.resource_id
     const role = rid != null && rid !== '' ? await fetchRoledata(rid, lang) : {}
-    const atkList = (role as any)?.character_level_attack_list as number[] | undefined
+    const atkList = role.character_level_attack_list
     const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
     const syncAttack = atkList && synchroLevel > 0
       ? atkList[Math.min(Math.max(synchroLevel - 1, 0), atkList.length - 1)] ?? 0

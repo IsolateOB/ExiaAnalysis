@@ -51,6 +51,10 @@ const setCors = (res: VercelResponse) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 }
 
+const getErrorMessage = (error: unknown) => (
+  error instanceof Error ? error.message : 'Unknown error'
+)
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res)
 
@@ -87,8 +91,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Vercel cache: one day fresh, one week stale while revalidate
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800')
     return res.status(200).json(data)
-  } catch (e: any) {
-    console.error('roledata proxy error:', e)
+  } catch (error: unknown) {
+    console.error('roledata proxy error:', getErrorMessage(error))
     return res.status(500).json({ error: 'Internal server error' })
   }
 }

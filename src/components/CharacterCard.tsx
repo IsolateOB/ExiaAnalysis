@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React from 'react'
@@ -7,7 +7,9 @@ import { Add, Delete } from '@mui/icons-material'
 import { Character, AttributeCoefficients, RawAttributeScores, AttributeKey } from '../types'
 import { ExpandMore } from '@mui/icons-material'
 import { Collapse, Divider, Tooltip } from '@mui/material'
-import { useI18n } from '../i18n'
+import { useI18n } from '../hooks/useI18n'
+
+type AxisCoefficientKey = 'axisAttack' | 'axisDefense' | 'axisHP'
 
 interface CharacterCardProps {
   character?: Character
@@ -47,14 +49,14 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   const { t, lang } = useI18n()
   const [openDetails, setOpenDetails] = React.useState(false)
 
-  // 与头部一致的网格列定义：确保详情区第2列与头部“总系数”列完全对齐
+  // 涓庡ご閮ㄤ竴鑷寸殑缃戞牸鍒楀畾涔夛細纭繚璇︽儏鍖虹2鍒椾笌澶撮儴鈥滄€荤郴鏁扳€濆垪瀹屽叏瀵归綈
   const headerGridTemplate = React.useMemo(() => (
     hideMetrics
       ? { xs: 'minmax(120px,1fr) 56px 40px', sm: 'minmax(140px,1fr) 72px 44px', md: 'minmax(160px,1fr) 88px 48px' }
       : { xs: 'minmax(120px,1fr) 80px minmax(140px,1.1fr) 48px', sm: 'minmax(140px,1fr) 96px minmax(160px,1.2fr) 56px', md: 'minmax(160px,0.7fr) 120px minmax(170px,1.2fr) 64px' }
   ), [hideMetrics])
 
-  // 词条/属性标签使用 i18n（参考 translations.js 的缩写约定）
+  // 璇嶆潯/灞炴€ф爣绛句娇鐢?i18n锛堝弬鑰?translations.js 鐨勭缉鍐欑害瀹氾級
   const labelFor = (k: string): string => {
     switch (k) {
       case 'IncElementDmg': return t('stat.elementAdvantage')
@@ -82,33 +84,33 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
     'StatAccuracyCircle',
     'StatDef',
   ]
-  // 翻译映射
+  // 缈昏瘧鏄犲皠
   const translations = {
     class: {
-      'Attacker': '火力型',
-      'Defender': '防御型',
-      'Supporter': '支援型'
+      Attacker: 'Attacker',
+      Defender: 'Defender',
+      Supporter: 'Supporter',
     },
     element: {
-      'Electronic': '电击',
-      'Fire': '燃烧',
-      'Wind': '风压',
-      'Water': '水冷',
-      'Iron': '铁甲'
+      Electronic: 'Electronic',
+      Fire: 'Fire',
+      Wind: 'Wind',
+      Water: 'Water',
+      Iron: 'Iron',
     },
     corporation: {
-      'ELYSION': '极乐净土',
-      'MISSILIS': '米西利斯',
-      'TETRA': '泰特拉',
-      'PILGRIM': '朝圣者',
-      'ABNORMAL': '反常'
+      ELYSION: 'ELYSION',
+      MISSILIS: 'MISSILIS',
+      TETRA: 'TETRA',
+      PILGRIM: 'PILGRIM',
+      ABNORMAL: 'ABNORMAL',
     },
     burstSkill: {
-      'Step1': '阶段I',
-      'Step2': '阶段II',
-      'Step3': '阶段III',
-      'AllStep': '全阶段'
-    }
+      Step1: 'Step I',
+      Step2: 'Step II',
+      Step3: 'Step III',
+      AllStep: 'All Steps',
+    },
   }
   
   if (!character) {
@@ -147,7 +149,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
 
   return (
     <Box sx={{ width: '100%', pl: 0, pr: 0.75, minHeight: 84, overflow: 'hidden', borderBottom: '1px solid #e5e7eb' }}>
-      {/* 行卡头部：名称、简要信息、系数与指标汇总，单行展示（垂直居中） */}
+      {/* 琛屽崱澶撮儴锛氬悕绉般€佺畝瑕佷俊鎭€佺郴鏁颁笌鎸囨爣姹囨€伙紝鍗曡灞曠ず锛堝瀭鐩村眳涓級 */}
   <Box sx={{ minHeight: 84, display: 'flex', alignItems: 'center' }}>
   <Box
     sx={{
@@ -173,11 +175,11 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{lang === 'zh' ? character.name_cn : character.name_en}</Typography>
             <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
               {lang === 'zh' ? translations.element[character.element] : character.element}
-              {' '}·{' '}
+              {' '}路{' '}
               {lang === 'zh' ? translations.burstSkill[character.use_burst_skill] : (
                 character.use_burst_skill === 'Step1' ? 'Step I' : character.use_burst_skill === 'Step2' ? 'Step II' : character.use_burst_skill === 'Step3' ? 'Step III' : 'All Steps'
               )}
-              {' '}·{' '}
+              {' '}路{' '}
               {lang === 'zh' ? translations.class[character.class] : character.class}
             </Typography>
           </Box>
@@ -210,8 +212,8 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.25, alignItems: 'center', minWidth: { xs: 140, md: 170 } }}>
             <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>{t('card.ael')}</Typography>
             <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>{t('card.strength')}</Typography>
-            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)}→${targetScore.toFixed(2)}`}</Typography>
-            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)}→${targetStrength.toFixed(1)}`}</Typography>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'success.main' }}>{`${baselineScore.toFixed(2)} -> ${targetScore.toFixed(2)}`}</Typography>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'primary.main' }}>{`${baselineStrength.toFixed(1)} -> ${targetStrength.toFixed(1)}`}</Typography>
           </Box>
         )}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', minWidth: { xs: 40, sm: 44, md: 48 }, flexShrink: 0 }}>
@@ -229,7 +231,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
             <IconButton
               size="small"
               onClick={onRemoveCharacter}
-              aria-label={t('common.remove') || t('filter.remove') || '删除'}
+              aria-label={t('common.remove') || t('filter.remove') || 'Remove'}
               sx={{ color: 'error.main', p: 0, m: 0 }}
             >
               <Delete sx={{ fontSize: 16 }} />
@@ -239,16 +241,16 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         </Box>
       </Box>
 
-      {/* 详情折叠区 */}
+      {/* 璇︽儏鎶樺彔鍖?*/}
       <Collapse in={openDetails} timeout="auto" unmountOnExit>
         <Divider sx={{ mx: 1 }} />
   <Box sx={{ px: 0, py: 1.25 }}>
-          {/* 基础三轴（仅显示系数列），与 Total Coeff 对齐：110px + 100px；去掉表头，使用 shrink 标签 */}
+          {/* 鍩虹涓夎酱锛堜粎鏄剧ず绯绘暟鍒楋級锛屼笌 Total Coeff 瀵归綈锛?10px + 100px锛涘幓鎺夎〃澶达紝浣跨敤 shrink 鏍囩 */}
           <Box sx={{ mt: 0.5, display: 'grid', gridTemplateColumns: headerGridTemplate, alignItems: 'center', columnGap: 0.25, rowGap: 1, mb: 1 }}>
             {[
-              { label: t('card.axisAtk'), key: 'axisAttack', baseB: baselineRaw?.baseAttack, baseT: targetRaw?.baseAttack },
-              { label: t('card.axisDef'), key: 'axisDefense', baseB: baselineRaw?.baseDefense, baseT: targetRaw?.baseDefense },
-              { label: t('card.axisHP'), key: 'axisHP', baseB: baselineRaw?.baseHP, baseT: targetRaw?.baseHP },
+              { label: t('card.axisAtk'), key: 'axisAttack' as AxisCoefficientKey, baseB: baselineRaw?.baseAttack, baseT: targetRaw?.baseAttack },
+              { label: t('card.axisDef'), key: 'axisDefense' as AxisCoefficientKey, baseB: baselineRaw?.baseDefense, baseT: targetRaw?.baseDefense },
+              { label: t('card.axisHP'), key: 'axisHP' as AxisCoefficientKey, baseB: baselineRaw?.baseHP, baseT: targetRaw?.baseHP },
             ].map(row => (
               <React.Fragment key={row.key}>
                 <Typography variant="body2" sx={{ fontSize: '1rem', gridColumn: '1 / 2' }}>{row.label}</Typography>
@@ -257,7 +259,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                     <TextField
                       type="number"
                       size="small"
-                      value={(coefficients as any)[row.key] ?? 0}
+                      value={coefficients[row.key] ?? 0}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value)
                         if (!onCoefficientsChange) return
@@ -279,13 +281,13 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                     />
                   )}
                 </Box>
-                {/* 占位以强制每行只占用前两列，随后换行 */}
+                {/* 鍗犱綅浠ュ己鍒舵瘡琛屽彧鍗犵敤鍓嶄袱鍒楋紝闅忓悗鎹㈣ */}
                 <Box sx={{ gridColumn: '3 / -1' }} />
               </React.Fragment>
             ))}
           </Box>
 
-          {/* 百分比词条（仅显示系数列），与 Total Coeff 对齐：110px + 100px；去掉表头，使用 shrink 标签 */}
+          {/* 鐧惧垎姣旇瘝鏉★紙浠呮樉绀虹郴鏁板垪锛夛紝涓?Total Coeff 瀵归綈锛?10px + 100px锛涘幓鎺夎〃澶达紝浣跨敤 shrink 鏍囩 */}
           <Box sx={{ display: 'grid', gridTemplateColumns: headerGridTemplate, alignItems: 'center', columnGap: 0.25, rowGap: 1 }}>
             {percentKeys.map((k) => (
               <React.Fragment key={k}>
@@ -295,7 +297,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                     <TextField
                       type="number"
                       size="small"
-                      value={(coefficients as any)[k]}
+                      value={coefficients[k]}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value)
                         if (!onCoefficientsChange) return
@@ -318,7 +320,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                     />
                   )}
                 </Box>
-                {/* 占位以强制每行只占用前两列，随后换行 */}
+                {/* 鍗犱綅浠ュ己鍒舵瘡琛屽彧鍗犵敤鍓嶄袱鍒楋紝闅忓悗鎹㈣ */}
                 <Box sx={{ gridColumn: '3 / -1' }} />
               </React.Fragment>
             ))}
@@ -330,3 +332,5 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
 }
 
 export default CharacterCard
+
+

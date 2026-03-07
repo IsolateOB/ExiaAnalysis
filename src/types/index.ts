@@ -17,6 +17,70 @@ export interface Character {
   original_rare: 'SSR' | 'SR' | 'R'
 }
 
+export interface AccountCharacterEquipmentEffect {
+  function_type?: string
+  function_value?: number
+  [key: string]: unknown
+}
+
+export interface AccountCharacterDetail {
+  AtkElemLbScore?: number
+  atkElemLbScore?: number
+  equipments?: Record<string, AccountCharacterEquipmentEffect[] | undefined>
+  limit_break?: {
+    grade?: number
+    core?: number
+  }
+  grade?: number
+  core?: number
+  item_level?: number
+  item_rare?: string
+  favorite_item_lv?: number
+  favorite_item_tid?: number
+  skill1_lv?: number
+  skill2_lv?: number
+  ulti_skill_lv?: number
+  name_code?: number
+  synchroLevel?: number
+  [key: string]: unknown
+}
+
+export interface AccountRecord {
+  id?: string | number
+  name?: string
+  role_name?: string
+  game_uid?: string
+  gameUid?: string
+  gameUID?: string
+  game_openid?: string
+  gameOpenId?: string
+  cookie?: string
+  area_id?: string | number
+  synchroLevel?: number
+  SynchroLevel?: number
+  synchro_level?: number
+  outpostLevel?: number
+  outpost_level?: number
+  restricted?: boolean
+  characterDetailsByCode?: Record<string, AccountCharacterDetail>
+  data?: AccountRecord[]
+  [key: string]: unknown
+}
+
+export interface AccountListRecord {
+  id: string
+  name: string
+  data: AccountRecord[]
+}
+
+export interface RoledataRecord {
+  character_level_attack_list?: number[]
+  character_level_defence_list?: number[]
+  character_level_defense_list?: number[]
+  character_level_hp_list?: number[]
+  [key: string]: unknown
+}
+
 // 队伍角色位置
 export interface TeamCharacter {
   character?: Character

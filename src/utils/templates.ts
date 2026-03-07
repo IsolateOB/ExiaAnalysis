@@ -1,11 +1,13 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+import type { AttributeCoefficients } from '../types/index.ts'
+
 export interface TeamTemplateMember {
   position: number
   characterId?: string
   damageCoefficient: number
-  coefficients: any // AttributeCoefficients shape, typed at call sites to avoid circular imports
+  coefficients: AttributeCoefficients
 }
 
 export interface TeamTemplate {

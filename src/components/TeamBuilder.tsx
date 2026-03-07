@@ -1,8 +1,8 @@
-/*
+﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, MenuItem, Select } from '@mui/material'
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
@@ -10,7 +10,7 @@ import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 
-import type { Character, TeamCharacter, AttributeCoefficients } from '../types'
+import type { AccountCharacterDetail, AccountRecord, AttributeCoefficients, Character, RawAttributeScores, TeamCharacter } from '../types'
 import CharacterCard from './CharacterCard'
 import CharacterFilterDialog from './CharacterFilterDialog'
 import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficients } from '../utils/attributeStrength'
@@ -36,14 +36,34 @@ import {
   reconcileTemplateAck,
   type TeamTemplateRealtimePatch,
 } from './TeamBuilder/cloudRealtime'
-import { useI18n } from '../i18n'
-import { itemData } from '../data/item'
-import { fetchRoledata } from '../services/roledata'
-import type { Lang } from '../translations'
+import { useI18n } from '../hooks/useI18n'
+import InteractiveSelector from './shared/InteractiveSelector'
+
+type TeamBuilderCharacterData = AccountCharacterDetail & {
+  id?: number | string
+}
+
+type TeamBuilderRootData = AccountRecord & {
+  elements?: Record<string, TeamBuilderCharacterData[]>
+}
+
+type RawStrengthMap = {
+  [position: number]: {
+    baseline?: RawAttributeScores
+    target?: RawAttributeScores
+  }
+}
+
+type TeamBuilderRealtimeMessage =
+  | { type: 'snapshot'; revision?: number; templates?: TeamTemplate[] }
+  | { type: 'patch_replay'; revision?: number; patches?: TeamTemplateRealtimePatch[] }
+  | { type: 'ack'; revision?: number; clientMutationId?: string; appliedPatch?: TeamTemplateRealtimePatch }
+  | { type: 'patch_broadcast'; revision?: number; sessionId?: string; patch?: TeamTemplateRealtimePatch }
+  | { type: 'error'; message?: string }
 
 interface TeamBuilderProps {
-  baselineData?: any
-  targetData?: any
+  baselineData?: TeamBuilderRootData
+  targetData?: TeamBuilderRootData
   onTeamStrengthChange?: (baselineStrength: number, targetStrength: number) => void
   onTeamRatioChange?: (scale: number, ratioLabel: string) => void
   onTeamSelectionChange?: (chars: (Character | undefined)[], coeffs: { [position: number]: AttributeCoefficients }) => void
@@ -55,7 +75,7 @@ interface TeamBuilderProps {
 const API_BASE_URL = 'https://backend.nikke-exia.com'
 const REALTIME_API_BASE_URL = API_BASE_URL.replace(/^http/, 'ws')
 const DEFAULT_TEMPLATE_ID = 'default'
-const DEFAULT_TEMPLATE_NAME = '默认模板'
+const DEFAULT_TEMPLATE_NAME = '榛樿妯℃澘'
 const MAX_TEMPLATES = 200
 
 const createInitialTeam = (): TeamCharacter[] => (
@@ -65,62 +85,31 @@ const createInitialTeam = (): TeamCharacter[] => (
   }))
 )
 
-const calculateCharacterStrength = async (
-  characterData: any,
-  character: Character,
-  rootData?: any,
-  lang: Lang = 'zh',
-): Promise<number> => {
-  if (!characterData || !characterData.equipments) {
-    return 0
+const normalizeTemplateCoefficients = (coefficients?: AttributeCoefficients): AttributeCoefficients => {
+  const base: AttributeCoefficients = coefficients ? { ...coefficients } : getDefaultCoefficients()
+  if (base.axisAttack == null) base.axisAttack = 1
+  if (base.axisDefense == null) base.axisDefense = 0
+  if (base.axisHP == null) base.axisHP = base.hp ? base.hp : 0
+  if (base.hp == null) base.hp = 0
+  return base
+}
+
+const readInitialPersistentTemplates = (): TeamTemplate[] => {
+  const existing = listTemplates()
+  if (existing.some((template) => template.id === DEFAULT_TEMPLATE_ID)) {
+    return existing
   }
 
-  let totalIncElementDmg = 0
-  let totalStatAtk = 0
-
-  Object.values(characterData.equipments).forEach((equipmentSlot: any) => {
-    if (Array.isArray(equipmentSlot)) {
-      equipmentSlot.forEach((equipment: any) => {
-        if (equipment.function_type === 'IncElementDmg') {
-          totalIncElementDmg += equipment.function_value || 0
-        } else if (equipment.function_type === 'StatAtk') {
-          totalStatAtk += equipment.function_value || 0
-        }
-      })
-    }
+  const defaultTemplate = buildTemplateSnapshot({
+    id: DEFAULT_TEMPLATE_ID,
+    name: DEFAULT_TEMPLATE_NAME,
+    team: createInitialTeam(),
+    coefficientsMap: {},
+    normalizeCoefficients: normalizeTemplateCoefficients,
   })
-
-  const breakThrough = characterData.limit_break || {}
-  const grade = breakThrough.grade || 0
-  const core = breakThrough.core || 0
-  const breakthroughCoeff = 1 + (grade * 0.03) + (core * 0.02)
-
-  try {
-    const rid = (character as any)?.resource_id
-    const role = rid != null && rid !== '' ? await fetchRoledata(rid, lang) : {}
-    const attackList = (role as any)?.character_level_attack_list as number[] | undefined
-    const synchroLevel = rootData?.synchroLevel || characterData.synchroLevel || 0
-    const syncAttack = attackList && synchroLevel > 0
-      ? attackList[Math.min(Math.max(synchroLevel - 1, 0), attackList.length - 1)] ?? 0
-      : 0
-
-    const itemArray = itemData.item_atk || []
-    let itemAttack = 0
-    if (characterData.item_rare === 'SSR') {
-      itemAttack = 9688
-    } else if (characterData.item_rare === 'SR') {
-      const itemLevel = characterData.item_level || 0
-      const itemIndex = Math.min(Math.max(itemLevel, 0), itemArray.length - 1)
-      itemAttack = itemArray[itemIndex] || 0
-    }
-
-    const baseAttack = syncAttack * breakthroughCoeff + itemAttack
-    const attackWithStatAtk = baseAttack * (1 + 0.9 * totalStatAtk / 100)
-    return attackWithStatAtk * (1 + totalIncElementDmg / 100)
-  } catch (error) {
-    console.error('Error computing character strength:', error)
-    return 0
-  }
+  const nextTemplates = [defaultTemplate, ...existing]
+  saveTemplates(nextTemplates)
+  return nextTemplates
 }
 
 const buildCharactersTeam = (characters: (Character | undefined)[]): TeamCharacter[] => (
@@ -141,17 +130,12 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   authToken,
   nikkeList: propNikkeList,
 }) => {
-  const { t, lang } = useI18n()
-  const nikkeList = propNikkeList || []
+  const { t } = useI18n()
+  const reactId = useId()
+  const stableIdBase = useMemo(() => reactId.replace(/:/g, ''), [reactId])
+  const nikkeList = useMemo(() => propNikkeList ?? [], [propNikkeList])
 
-  const normalizeCoefficients = useCallback((coefficients?: AttributeCoefficients): AttributeCoefficients => {
-    const base: any = coefficients ? { ...coefficients } : getDefaultCoefficients()
-    if (base.axisAttack == null) base.axisAttack = 1
-    if (base.axisDefense == null) base.axisDefense = 0
-    if (base.axisHP == null) base.axisHP = base.hp ? base.hp : 0
-    if (base.hp == null) base.hp = 0
-    return base as AttributeCoefficients
-  }, [])
+  const normalizeCoefficients = normalizeTemplateCoefficients
 
   const buildCoefficientsMapForTeam = useCallback((teamState: TeamCharacter[]) => {
     const next: { [position: number]: AttributeCoefficients } = {}
@@ -166,8 +150,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [selectedPosition, setSelectedPosition] = useState(0)
   const [characterStrengths, setCharacterStrengths] = useState<{ [position: number]: { baseline: number, target: number } }>({})
   const [coefficientsMap, setCoefficientsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
-  const [rawMap, setRawMap] = useState<{ [position: number]: { baseline?: any, target?: any } }>({})
-  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(() => listTemplates())
+  const [rawMap, setRawMap] = useState<RawStrengthMap>({})
+  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(readInitialPersistentTemplates)
   const [temporaryCopyTemplate, setTemporaryCopyTemplate] = useState<TeamTemplate | null>(() => getTemporaryCopyTemplate())
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
@@ -175,7 +159,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [renameValue, setRenameValue] = useState('')
   const [reconnectNonce, setReconnectNonce] = useState(0)
 
-  const defaultTemplateInitRef = useRef(false)
+  const defaultTemplateInitRef = useRef(true)
   const isHydratingTemplateRef = useRef(false)
   const isInternalUpdateRef = useRef(false)
   const lastAppliedTemplateIdRef = useRef('')
@@ -190,16 +174,33 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptRef = useRef(0)
   const lastRevisionRef = useRef(0)
-  const sessionIdRef = useRef(
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2),
-  )
+  const localIdCounterRef = useRef(0)
+  const logicalTimestampRef = useRef(0)
+  const sessionIdRef = useRef(`team-builder-${stableIdBase}`)
+
+  const nextSequenceId = useCallback((prefix: string) => {
+    localIdCounterRef.current += 1
+    return `${prefix}-${stableIdBase}-${localIdCounterRef.current}`
+  }, [stableIdBase])
+
+  const nextTimestamp = useCallback(() => {
+    logicalTimestampRef.current += 1
+    return logicalTimestampRef.current
+  }, [])
 
   const visibleTemplates = useMemo(
     () => temporaryCopyTemplate ? [temporaryCopyTemplate, ...persistentTemplates] : persistentTemplates,
     [persistentTemplates, temporaryCopyTemplate],
   )
+
+  useEffect(() => {
+    const maxTimestamp = visibleTemplates.reduce((maxValue, template) => (
+      Math.max(maxValue, template.createdAt || 0, template.updatedAt || 0)
+    ), 0)
+    if (maxTimestamp > logicalTimestampRef.current) {
+      logicalTimestampRef.current = maxTimestamp
+    }
+  }, [visibleTemplates])
 
   const characterFromList = useMemo(() => {
     const map = new Map<string, Character>()
@@ -309,17 +310,17 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const generateNextDefaultName = useCallback(() => {
     const existingNames = persistentTemplatesRef.current.map((template) => template.name)
     let nextIndex = 1
-    while (existingNames.includes(`模板${nextIndex}`)) nextIndex += 1
-    return `模板${nextIndex}`
+    while (existingNames.includes(`妯℃澘${nextIndex}`)) nextIndex += 1
+    return `妯℃澘${nextIndex}`
   }, [])
 
-  const findCharacterDataById = useCallback((characterId: string, jsonData: any) => {
-    if (!jsonData || !jsonData.elements) return null
+  const findCharacterDataById = useCallback((characterId: string, jsonData?: TeamBuilderRootData) => {
+    if (!jsonData?.elements) return null
 
     for (const elementType of Object.keys(jsonData.elements)) {
       const characters = jsonData.elements[elementType]
       if (Array.isArray(characters)) {
-        const found = characters.find((character: any) => character.id?.toString() === characterId)
+        const found = characters.find((character) => character.id?.toString() === characterId)
         if (found) return found
       }
     }
@@ -329,30 +330,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   useEffect(() => {
     persistentTemplatesRef.current = persistentTemplates
   }, [persistentTemplates])
-
-  useEffect(() => {
-    if (defaultTemplateInitRef.current) return
-
-    const existing = listTemplates()
-    if (!existing.some((template) => template.id === DEFAULT_TEMPLATE_ID)) {
-      const defaultTemplate = buildTemplateSnapshot({
-        id: DEFAULT_TEMPLATE_ID,
-        name: DEFAULT_TEMPLATE_NAME,
-        team,
-        coefficientsMap,
-        normalizeCoefficients,
-      })
-      existing.unshift(defaultTemplate)
-      saveTemplates(existing)
-    }
-
-    const nextTemplates = listTemplates()
-    defaultTemplateInitRef.current = true
-    persistentTemplatesRef.current = nextTemplates
-    authoritativeTemplatesRef.current = nextTemplates
-    optimisticTemplatesRef.current = nextTemplates
-    setPersistentTemplates(nextTemplates)
-  }, [coefficientsMap, normalizeCoefficients, team])
 
   useEffect(() => {
     if (selectedTemplateId && visibleTemplates.some((template) => template.id === selectedTemplateId)) {
@@ -365,8 +342,17 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       || visibleTemplates[0]?.id
       || ''
 
-    if (nextSelectedTemplateId) {
-      setSelectedTemplateId(nextSelectedTemplateId)
+    if (!nextSelectedTemplateId) return
+
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setSelectedTemplateId(nextSelectedTemplateId)
+      }
+    })
+
+    return () => {
+      cancelled = true
     }
   }, [persistentTemplates, selectedTemplateId, temporaryCopyTemplate, visibleTemplates])
 
@@ -382,19 +368,27 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const snapshot = buildTemplateSnapshot({
       id: TEMPORARY_COPY_TEMPLATE_ID,
       name: TEMPORARY_COPY_TEMPLATE_NAME,
-      createdAt: temporaryCopyTemplate?.createdAt ?? Date.now(),
+      createdAt: temporaryCopyTemplate?.createdAt ?? nextTimestamp(),
       team: nextTeam,
       coefficientsMap: nextCoefficients,
       normalizeCoefficients,
     })
 
-    persistTemporaryTemplate(snapshot)
-    isHydratingTemplateRef.current = true
-    lastAppliedTemplateIdRef.current = TEMPORARY_COPY_TEMPLATE_ID
-    setSelectedTemplateId(TEMPORARY_COPY_TEMPLATE_ID)
-    setTeam(nextTeam)
-    setCoefficientsMap(nextCoefficients)
-  }, [buildCoefficientsMapForTeam, externalTeam, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt])
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      persistTemporaryTemplate(snapshot)
+      isHydratingTemplateRef.current = true
+      lastAppliedTemplateIdRef.current = TEMPORARY_COPY_TEMPLATE_ID
+      setSelectedTemplateId(TEMPORARY_COPY_TEMPLATE_ID)
+      setTeam(nextTeam)
+      setCoefficientsMap(nextCoefficients)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [buildCoefficientsMapForTeam, externalTeam, nextTimestamp, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt])
 
   useEffect(() => {
     if (!selectedTemplateId) return
@@ -403,7 +397,16 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const selectedTemplate = getTemplateById(selectedTemplateId)
     if (!selectedTemplate) return
 
-    restoreTemplate(selectedTemplate)
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) {
+        restoreTemplate(selectedTemplate)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [getTemplateById, restoreTemplate, selectedTemplateId])
 
   useEffect(() => {
@@ -422,14 +425,21 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const snapshot = buildCurrentSnapshot(currentTemplate)
 
     if (currentTemplate.id === TEMPORARY_COPY_TEMPLATE_ID) {
-      persistTemporaryTemplate(snapshot)
-      return
+      let cancelled = false
+      queueMicrotask(() => {
+        if (!cancelled) {
+          persistTemporaryTemplate(snapshot)
+        }
+      })
+      return () => {
+        cancelled = true
+      }
     }
 
     if (authToken) {
       queueRealtimeMutations([
         buildTemplateReplaceMembersPatch({
-          clientMutationId: Math.random().toString(36).slice(2),
+          clientMutationId: nextSequenceId('mutation'),
           sessionId: sessionIdRef.current,
           baseRevision: lastRevisionRef.current,
           templateId: currentTemplate.id,
@@ -443,7 +453,16 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, snapshot)
     authoritativeTemplatesRef.current = nextTemplates
     optimisticTemplatesRef.current = nextTemplates
-    persistPersistentTemplates(nextTemplates)
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) {
+        persistPersistentTemplates(nextTemplates)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [
     authToken,
     buildCurrentSnapshot,
@@ -452,6 +471,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     persistPersistentTemplates,
     persistTemporaryTemplate,
     queueRealtimeMutations,
+    nextSequenceId,
     selectedTemplateId,
     team,
   ])
@@ -459,7 +479,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   useEffect(() => {
     const calculateAllStrengths = async () => {
       const newStrengths: { [position: number]: { baseline: number, target: number } } = {}
-      const newRaw: { [position: number]: { baseline?: any, target?: any } } = {}
+      const newRaw: RawStrengthMap = {}
       let totalBaselineStrength = 0
       let totalTargetStrength = 0
       let ratioWeightedSum = 0
@@ -578,9 +598,9 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     socket.onmessage = (event) => {
       if (currentSocketRef.current !== socket) return
 
-      let message: any
+      let message: TeamBuilderRealtimeMessage
       try {
-        message = JSON.parse(event.data)
+        message = JSON.parse(event.data) as TeamBuilderRealtimeMessage
       } catch (error) {
         console.error('Failed to parse team-template realtime message', error)
         return
@@ -771,7 +791,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
     const emptyTeam = createEmptyTeam()
     const template = buildTemplateSnapshot({
-      id: Math.random().toString(36).slice(2),
+      id: nextSequenceId('template'),
       name: generateNextDefaultName(),
       team: emptyTeam,
       coefficientsMap: {},
@@ -787,14 +807,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (authToken) {
       queueRealtimeMutations([
         buildTemplateCreatePatch({
-          clientMutationId: Math.random().toString(36).slice(2),
+          clientMutationId: nextSequenceId('mutation'),
           sessionId: sessionIdRef.current,
           baseRevision: lastRevisionRef.current,
           templateId: template.id,
           name: template.name,
         }),
         buildTemplateReplaceMembersPatch({
-          clientMutationId: Math.random().toString(36).slice(2),
+          clientMutationId: nextSequenceId('mutation'),
           sessionId: sessionIdRef.current,
           baseRevision: lastRevisionRef.current,
           templateId: template.id,
@@ -833,7 +853,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (authToken) {
       queueRealtimeMutations([{
         type: 'patch',
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextSequenceId('mutation'),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         op: 'template.rename',
@@ -842,7 +862,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     } else {
       const nextTemplates = persistentTemplatesRef.current.map((template) => (
         template.id === templateId
-          ? { ...template, name: nextName, updatedAt: Date.now() }
+          ? { ...template, name: nextName, updatedAt: nextTimestamp() }
           : template
       ))
       authoritativeTemplatesRef.current = nextTemplates
@@ -863,7 +883,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (authToken) {
       queueRealtimeMutations([{
         type: 'patch',
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextSequenceId('mutation'),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         op: 'template.delete',
@@ -888,10 +908,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
     const copy: TeamTemplate = {
       ...sourceTemplate,
-      id: Math.random().toString(36).slice(2),
+      id: nextSequenceId('template'),
       name: generateNextDefaultName(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: nextTimestamp(),
+      updatedAt: nextTimestamp(),
       members: sourceTemplate.members.map((member) => ({
         ...member,
         coefficients: member.coefficients == null ? member.coefficients : { ...member.coefficients },
@@ -906,14 +926,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (authToken) {
       queueRealtimeMutations([
         buildTemplateCreatePatch({
-          clientMutationId: Math.random().toString(36).slice(2),
+          clientMutationId: nextSequenceId('mutation'),
           sessionId: sessionIdRef.current,
           baseRevision: lastRevisionRef.current,
           templateId: copy.id,
           name: copy.name,
         }),
         buildTemplateReplaceMembersPatch({
-          clientMutationId: Math.random().toString(36).slice(2),
+          clientMutationId: nextSequenceId('mutation'),
           sessionId: sessionIdRef.current,
           baseRevision: lastRevisionRef.current,
           templateId: copy.id,
@@ -930,25 +950,26 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     persistPersistentTemplates(nextTemplates)
   }
 
+  const handleSelectTemplate = useCallback((templateId: string) => {
+    const nextTemplateId = String(templateId || '')
+    lastAppliedTemplateIdRef.current = ''
+    setSelectedTemplateId(nextTemplateId)
+    const template = getTemplateById(nextTemplateId)
+    if (template) {
+      restoreTemplate(template)
+    }
+  }, [getTemplateById, restoreTemplate])
+
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Box sx={{ p: 1, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Select
-            size="small"
-            value={selectedTemplateId || ''}
-            onChange={(event) => {
-              const nextTemplateId = String(event.target.value || '')
-              lastAppliedTemplateIdRef.current = ''
-              setSelectedTemplateId(nextTemplateId)
-              const template = getTemplateById(nextTemplateId)
-              if (template) {
-                restoreTemplate(template)
-              }
-            }}
-            sx={{ minWidth: 220, width: 260, flex: 1 }}
-            renderValue={(value) => {
-              const template = getTemplateById(String(value || ''))
+          <InteractiveSelector
+            width={260}
+            minWidth={220}
+            menuMinWidth={260}
+            value={(() => {
+              const template = getTemplateById(selectedTemplateId || '')
               if (!template) return ''
 
               const isTemporary = template.id === TEMPORARY_COPY_TEMPLATE_ID
@@ -959,23 +980,42 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                   </Typography>
                   {isTemporary ? (
                     <Box component="span" sx={{ px: 0.75, py: 0.15, borderRadius: 999, bgcolor: '#fef3c7', color: '#92400e', fontSize: 12, lineHeight: 1.6, flexShrink: 0 }}>
-                      仅本地
+                      浠呮湰鍦?
                     </Box>
                   ) : null}
                 </Box>
               )
-            }}
-            MenuProps={{ PaperProps: { style: { maxHeight: 320 } } }}
+            })()}
           >
-            {visibleTemplates.map((template) => {
+            {({ close }) => visibleTemplates.map((template) => {
               const isTemporary = template.id === TEMPORARY_COPY_TEMPLATE_ID
+              const isSelected = template.id === selectedTemplateId
+              const isRenamingCurrentTemplate = isRenaming && renameId === template.id
+
               return (
-                <MenuItem
+                <Box
                   key={template.id}
-                  value={template.id}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: isTemporary ? '#fff8e1' : undefined, borderBottom: isTemporary ? '1px solid #f3e8b6' : undefined }}
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={isRenamingCurrentTemplate ? undefined : () => {
+                    handleSelectTemplate(template.id)
+                    close()
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    px: 1.5,
+                    py: 0.75,
+                    cursor: isRenamingCurrentTemplate ? 'default' : 'pointer',
+                    bgcolor: isTemporary ? '#fff8e1' : (isSelected ? 'action.selected' : 'transparent'),
+                    borderBottom: isTemporary ? '1px solid #f3e8b6' : undefined,
+                    '&:hover': isRenamingCurrentTemplate ? undefined : {
+                      bgcolor: isTemporary ? '#fff3cd' : 'action.hover',
+                    },
+                  }}
                 >
-                  {isRenaming && renameId === template.id ? (
+                  {isRenamingCurrentTemplate ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(event) => event.stopPropagation()}>
                       <TextField
                         size="small"
@@ -985,6 +1025,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                           if (event.key === 'Enter') {
                             event.stopPropagation()
                             confirmRename()
+                            close()
                           }
                           if (event.key === 'Escape') {
                             event.stopPropagation()
@@ -997,7 +1038,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                         inputRef={renameInputRef}
                         sx={{ flex: 1, minWidth: 0 }}
                       />
-                      <IconButton size="small" color="primary" onClick={(event) => { event.stopPropagation(); confirmRename() }}>
+                      <IconButton size="small" color="primary" onClick={(event) => { event.stopPropagation(); confirmRename(); close() }}>
                         <CheckIcon fontSize="small" />
                       </IconButton>
                       <IconButton size="small" onClick={(event) => {
@@ -1017,28 +1058,28 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                         </Typography>
                         {isTemporary ? (
                           <Box component="span" sx={{ px: 0.75, py: 0.15, borderRadius: 999, bgcolor: '#f59e0b', color: '#fff', fontSize: 12, lineHeight: 1.6, flexShrink: 0 }}>
-                            仅本地
+                            浠呮湰鍦?
                           </Box>
                         ) : null}
                       </Box>
                       {!isTemporary ? (
                         <Tooltip title={t('tpl.rename') || '重命名'}>
-                          <IconButton size="small" onClick={(event) => { event.stopPropagation(); event.preventDefault(); startRenameTemplate(template.id) }}>
+                          <IconButton size="small" onClick={(event) => { event.stopPropagation(); startRenameTemplate(template.id) }}>
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       ) : (
                         <Box sx={{ width: 32, flexShrink: 0 }} />
                       )}
-                      <Tooltip title={t('tpl.copy') || '复制'}>
-                        <IconButton size="small" onClick={(event) => { event.stopPropagation(); event.preventDefault(); handleDuplicateTemplate(template.id) }}>
+                      <Tooltip title={t('tpl.copy') || '澶嶅埗'}>
+                        <IconButton size="small" onClick={(event) => { event.stopPropagation(); handleDuplicateTemplate(template.id); close() }}>
                           <ContentCopyIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       {!isTemporary ? (
-                        <Tooltip title={t('tpl.delete') || '删除'}>
+                        <Tooltip title={t('tpl.delete') || '鍒犻櫎'}>
                           <span>
-                            <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); event.preventDefault(); handleDeleteTemplate(template.id) }}>
+                            <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); handleDeleteTemplate(template.id); close() }}>
                               <DeleteIcon fontSize="small" />
                             </IconButton>
                           </span>
@@ -1048,14 +1089,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                       )}
                     </>
                   )}
-                </MenuItem>
+                </Box>
               )
             })}
-          </Select>
+          </InteractiveSelector>
 
-          <Tooltip title={t('tpl.save') || '保存为新模板'}>
+          <Tooltip title={t('tpl.save') || '淇濆瓨涓烘柊妯℃澘'}>
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreateTemplate} disabled={persistentTemplates.length >= MAX_TEMPLATES}>
-              {t('tpl.create') || '新建'}
+              {t('tpl.create') || '鏂板缓'}
             </Button>
           </Tooltip>
         </Stack>
@@ -1105,3 +1146,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 }
 
 export default TeamBuilder
+
+
+
+

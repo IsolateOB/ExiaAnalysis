@@ -8,7 +8,7 @@ export type Roledata = {
   character_level_defence_list?: number[]
   character_level_defense_list?: number[]
   character_level_hp_list?: number[]
-  [k: string]: any
+  [k: string]: unknown
 }
 
 const toRoledataLang = (lang: Lang): string => {

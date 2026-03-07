@@ -1,8 +1,26 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+﻿import { useState, useCallback, useRef, useEffect } from 'react'
 import { fetchProfile } from '../services/api'
 
 const AUTH_STORAGE_KEY = 'exia-analysis-auth'
 const AUTH_BROADCAST_CHANNEL = 'exia-auth'
+
+type BroadcastChannelWindow = typeof window & {
+  BroadcastChannel?: typeof BroadcastChannel
+}
+
+type AuthStoragePayload = {
+  token?: string
+  username?: string
+  avatar_url?: string | null
+}
+
+type AuthBroadcastPayload = {
+  type?: 'auth:clear' | 'auth:update' | 'auth:status'
+  token?: string | null
+  username?: string | null
+  avatar_url?: string | null
+  loggedIn?: boolean
+}
 
 export const useAuth = (onStatusChange: (msg: string, severity: 'success' | 'error' | 'info' | 'warning') => void) => {
   const [authToken, setAuthToken] = useState<string | null>(null)
@@ -23,7 +41,7 @@ export const useAuth = (onStatusChange: (msg: string, severity: 'success' | 'err
     try {
       const authRaw = window.localStorage.getItem(AUTH_STORAGE_KEY)
       if (authRaw) {
-        const parsedAuth = JSON.parse(authRaw)
+        const parsedAuth = JSON.parse(authRaw) as AuthStoragePayload
         if (parsedAuth?.token && parsedAuth?.username) {
           setAuthToken(parsedAuth.token)
           setAuthUsername(parsedAuth.username)
@@ -56,9 +74,9 @@ export const useAuth = (onStatusChange: (msg: string, severity: 'success' | 'err
     }
   }, [authToken, authUsername, authAvatarUrl])
 
-  const broadcastAuth = useCallback((payload: any) => {
+  const broadcastAuth = useCallback((payload: AuthBroadcastPayload) => {
     if (typeof window === 'undefined') return
-    if (!(window as any).BroadcastChannel) return
+    if (!(window as BroadcastChannelWindow).BroadcastChannel) return
     try {
       const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
       channel.postMessage(payload)
@@ -71,15 +89,15 @@ export const useAuth = (onStatusChange: (msg: string, severity: 'success' | 'err
   // Broadcast listener
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (!(window as any).BroadcastChannel) return
+    if (!(window as BroadcastChannelWindow).BroadcastChannel) return
     const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
     channel.onmessage = (event) => {
-      const payload = event?.data || {}
+      const payload = (event?.data || {}) as AuthBroadcastPayload
       if (payload.type === 'auth:clear') {
         setAuthToken(null)
         setAuthUsername(null)
         setAuthAvatarUrl(null)
-        onStatusChange('已退出', 'info')
+        onStatusChange('已退出登录', 'info')
         return
       }
       if (payload.type === 'auth:update' && payload.token) {

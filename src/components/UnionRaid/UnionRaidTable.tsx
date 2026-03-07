@@ -23,7 +23,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import { alpha } from '@mui/material/styles'
 import type { Theme } from '@mui/material/styles'
-import type { SortKey, StrikeView } from './types'
+import type { ActualStrike, SortKey, StrikeView } from './types'
 import {
   ACCOUNT_COLUMN_WIDTH,
   MAX_PLAN_CHARACTERS,
@@ -56,7 +56,7 @@ const SortIcon = (props: React.ComponentProps<typeof KeyboardDoubleArrowDownIcon
 )
 
 export type UnionRaidTableProps = {
-  sortedData: any[]
+  sortedData: UnionRaidTableRow[]
   isFilterActive: boolean
   remainingStrikes: number
   sortBy: SortKey | null
@@ -64,9 +64,8 @@ export type UnionRaidTableProps = {
   onSort: (key: SortKey) => void
   onPlanStepChange: (accountKey: string, planIndex: number, value: string) => void
   onPredictedDamageChange: (accountKey: string, planIndex: number, value: string) => void
-  onRemovePlanCharacter: (accountKey: string, planIndex: number, characterId: number) => void
   onOpenCharacterPicker: (accountKey: string, planIndex: number) => void
-  onCopyTeam: (squad: any[]) => void
+  onCopyTeam: (squad: ActualStrike['squadData']) => void
   onCopyPlannedTeam: (characterIds: number[]) => void
   onPastePlannedTeam: (accountKey: string, planIndex: number) => void
   canPastePlannedTeam: boolean
@@ -74,9 +73,18 @@ export type UnionRaidTableProps = {
   getCharacterAvatarUrl: (id: number) => string
   sortCharacterIdsByBurst: (ids: number[]) => number[]
   formatActualDamage: (value: number | null | undefined) => string
-  countRemainingStrikes: (row: any) => number
+  countRemainingStrikes: (row: UnionRaidTableRow) => number
   t: (key: string) => string
   restricted?: boolean
+}
+
+type UnionRaidTableRow = {
+  name: string
+  accountKey: string
+  synchroLevel: number
+  actualStrikes: ActualStrike[]
+  strikeViews: StrikeView[]
+  actualCount: number
 }
 
 export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
@@ -88,7 +96,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
   onSort,
   onPlanStepChange,
   onPredictedDamageChange,
-  onRemovePlanCharacter,
   onOpenCharacterPicker,
   onCopyTeam,
   onCopyPlannedTeam,
@@ -293,7 +300,7 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
           </TableRow>
         </TableHead>
         <TableBody>
-          {sortedData.map((row: any, idx: number) => {
+          {sortedData.map((row, idx: number) => {
             const remainingCount = countRemainingStrikes(row)
             const accountKey = row.accountKey || row.gameOpenid || row.name
             const strikeViews: StrikeView[] = row.strikeViews || []
@@ -442,7 +449,6 @@ export const UnionRaidTable: React.FC<UnionRaidTableProps> = ({
                     : {}
                   const actualBossLabel = actual ? `${actual.level}-${STEP_TO_ROMAN[actual.step] || actual.step}` : null
                   const planStepValue = plan.step === null ? 'none' : String(plan.step)
-                  const atCharacterLimit = plan.characterIds.length >= MAX_PLAN_CHARACTERS
                   const overlappingCharacterIds = actual
                     ? new Set(plan.characterIds.filter((id) => actual.characterIds.includes(id)))
                     : new Set<number>()

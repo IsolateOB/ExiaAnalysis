@@ -25,10 +25,10 @@ export const theme = createTheme({
           boxShadow: theme.shadows[4],
           border: 'none',
           // 避免被全局 Paper 的 outlined 覆盖
-          ['&.MuiPaper-outlined' as any]: {
+          '&.MuiPaper-outlined': {
             border: 'none',
           },
-          ['&.MuiPaper-elevation0' as any]: {
+          '&.MuiPaper-elevation0': {
             boxShadow: theme.shadows[4],
           },
         }),

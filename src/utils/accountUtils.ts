@@ -1,3 +1,23 @@
+type EquipmentFunctionDetail = {
+  function_type: string
+  function_value: number
+  level?: number
+}
+
+type EquipmentEffect = {
+  function_details?: EquipmentFunctionDetail[]
+}
+
+type EquipmentStatsOwner = Record<string, number | string | undefined>
+
+type AccountListLike = {
+  id?: string | number
+  list_id?: string | number
+  name?: string
+  data?: unknown[]
+  accounts?: unknown[]
+}
+
 export const parseCookieValue = (cookieStr: string, name: string) => {
   if (!cookieStr) return ''
   const match = cookieStr.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
@@ -10,18 +30,18 @@ export const parseGameOpenIdFromCookie = (cookieStr: string) => {
   return match ? match[1] : ''
 }
 
-export const buildEquipments = (char: any, effectsMap: Record<string, any>) => {
-  const equipments: Record<number, any[]> = {}
+export const buildEquipments = (char: EquipmentStatsOwner, effectsMap: Record<string, EquipmentEffect>) => {
+  const equipments: Record<number, EquipmentFunctionDetail[]> = {}
   const equipSlots = ['head', 'torso', 'arm', 'leg']
   equipSlots.forEach((slot, idx) => {
-    const details: any[] = []
+    const details: EquipmentFunctionDetail[] = []
     for (let i = 1; i <= 3; i += 1) {
       const optionKey = `${slot}_equip_option${i}_id`
       const optionId = char[optionKey]
       if (optionId && optionId !== 0) {
         const effect = effectsMap[String(optionId)]
         if (effect?.function_details) {
-          effect.function_details.forEach((func: any) => {
+          effect.function_details.forEach((func) => {
             details.push({
               function_type: func.function_type,
               function_value: Math.abs(func.function_value) / 100,
@@ -46,12 +66,12 @@ export const resolveItemRare = (tid: number | undefined) => {
   return ''
 }
 
-export const getEquipSumStats = (equipments: Record<number, any[]> | undefined) => {
+export const getEquipSumStats = (equipments: Record<number, EquipmentFunctionDetail[]> | undefined) => {
   const sum = { IncElementDmg: 0, StatAtk: 0 }
   if (!equipments) return sum
   for (let slot = 0; slot < 4; slot += 1) {
     const eqList = Array.isArray(equipments?.[slot]) ? equipments[slot] : []
-    eqList.forEach(({ function_type, function_value }: any) => {
+    eqList.forEach(({ function_type, function_value }) => {
       const v = typeof function_value === 'number' ? function_value / 100 : 0
       if (function_type === 'IncElementDmg') sum.IncElementDmg += v
       if (function_type === 'StatAtk') sum.StatAtk += v
@@ -64,11 +84,13 @@ export const computeAELScore = (grade: number, core: number, atk: number, elem: 
   return (1 + 0.9 * atk) * (1 + (elem + 0.10)) * (grade * 0.03 + core * 0.02 + 1)
 }
 
-export const normalizeAccountLists = (input: any, fallbackName: string) => {
+export const normalizeAccountLists = (input: unknown, fallbackName: string) => {
   if (Array.isArray(input)) {
-    if (input.length > 0 && (input[0]?.data || input[0]?.accounts || input[0]?.name || input[0]?.id)) {
+    const firstItem = input[0] as AccountListLike | undefined
+    if (input.length > 0 && (firstItem?.data || firstItem?.accounts || firstItem?.name || firstItem?.id)) {
       return input
-        .map((item: any, idx: number) => {
+        .map((entry, idx: number) => {
+          const item = entry as AccountListLike
           const data = Array.isArray(item?.data) ? item.data : (Array.isArray(item?.accounts) ? item.accounts : [])
           const id = item?.id ?? item?.list_id ?? String(idx + 1)
           return {
@@ -77,7 +99,7 @@ export const normalizeAccountLists = (input: any, fallbackName: string) => {
             data,
           }
         })
-        .filter((item: any) => item.id || item.name)
+        .filter((item) => item.id || item.name)
     }
     return [{ id: 'default', name: fallbackName, data: input }]
   }

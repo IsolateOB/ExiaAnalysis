@@ -1,7 +1,7 @@
-/*
+﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Typography,
@@ -19,20 +19,18 @@ import {
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
-import SaveIcon from '@mui/icons-material/Save'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import CircularProgress from '@mui/material/CircularProgress'
 import type { SelectChangeEvent } from '@mui/material/Select'
-import type { Character } from '../types'
-import { useI18n } from '../i18n'
+import type { AccountRecord, Character } from '../types'
+import { useI18n } from '../hooks/useI18n'
 import CharacterFilterDialog from './CharacterFilterDialog'
+import InteractiveSelector from './shared/InteractiveSelector'
 import { UnionRaidTable } from './UnionRaid/UnionRaidTable'
 import { useUnionRaidPlanning } from './UnionRaid/useUnionRaidPlanning'
 import {
@@ -47,7 +45,8 @@ import {
   getNextDispatchableMutation,
   reconcileIncomingPatch,
   reconcileMutationAck,
-  selectPatchBasePlans
+  selectPatchBasePlans,
+  type RaidRealtimePatch,
 } from './UnionRaid/cloudRealtime.ts'
 import { mapIdsToCharacters } from '../utils/characters'
 import {
@@ -65,16 +64,39 @@ import {
   STEP_TO_ROMAN,
   MAX_PLAN_CHARACTERS
 } from './UnionRaid/constants'
-import { getAccountKey, getCharacterName, getGameUid, sortCharacterIdsByBurst } from './UnionRaid/helpers'
+import { getAccountKey, getCharacterName, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
 
 type RaidPlan = ReturnType<typeof normalizeRaidPlans>[number]
 
+type RaidParticipateEntry = {
+  difficulty?: number
+  level?: number | string
+  step?: number | string
+  openid?: string
+  squad?: ActualStrike['squadData']
+  total_damage?: number | string
+  participate_seq?: number | string
+}
+
+type RaidData = {
+  participate_data?: RaidParticipateEntry[]
+}
+
+type RaidTableEntry = {
+  name: string
+  accountKey: string
+  synchroLevel: number
+  actualStrikes: ActualStrike[]
+  strikeViews: StrikeView[]
+  planSlots: PlanSlot[]
+  actualCount: number
+}
+
 interface UnionRaidStatsProps {
-  accounts: any[]
+  accounts: AccountRecord[]
   nikkeList?: Character[]
   onCopyTeam?: (characters: Character[]) => void
-  uploadedFileName?: string
   onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
   teamBuilderTeam?: (Character | undefined)[]
   authToken?: string | null
@@ -83,22 +105,23 @@ interface UnionRaidStatsProps {
 
 const API_BASE_URL = 'https://backend.nikke-exia.com'
 
-const countRemainingStrikes = (row: any) => Math.max(3 - (row.actualCount || 0), 0)
+const countRemainingStrikes = (row: RaidTableEntry) => Math.max(3 - (row.actualCount || 0), 0)
 
 const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   accounts,
   nikkeList,
   onCopyTeam,
-  uploadedFileName,
   onNotify,
   teamBuilderTeam,
   authToken,
   restricted = false
 }) => {
   const { t, lang } = useI18n()
+  const reactId = useId()
+  const stableIdBase = useMemo(() => reactId.replace(/:/g, ''), [reactId])
   const [fatalError, setFatalError] = useState<string>()
   const [fetchStatus, setFetchStatus] = useState<string | null>(null)
-  const [raidData, setRaidData] = useState<any>(null)
+  const [raidData, setRaidData] = useState<RaidData | null>(null)
   const [nikkeMap, setNikkeMap] = useState<Record<number, Character>>({})
   const [sortBy, setSortBy] = useState<'name' | 'synchro' | 'remaining' | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
@@ -130,20 +153,22 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const lastRevisionRef = useRef<number>(0)
   const authoritativePlansRef = useRef<RaidPlan[]>([])
   const optimisticPlansRef = useRef<RaidPlan[]>([])
-  const pendingMutationsRef = useRef<any[]>([])
+  const pendingMutationsRef = useRef<RaidRealtimePatch[]>([])
   const inflightMutationIdRef = useRef<string | null>(null)
   const plansRef = useRef<RaidPlan[]>([])
   const currentPlanIdRef = useRef<string>('')
   const planningStateRef = useRef<Record<string, PlanSlot[]>>({})
   const onNotifyRef = useRef(onNotify)
   const realtimeConnectionIdRef = useRef(0)
-  const sessionIdRef = useRef(
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2),
-  )
+  const mutationCounterRef = useRef(0)
+  const sessionIdRef = useRef(`raid-plan-${stableIdBase}`)
 
-  const { planningState, mutatePlanSlot, importPlanningData, replaceAllPlanning } = useUnionRaidPlanning(accounts)
+  const nextMutationId = useCallback(() => {
+    mutationCounterRef.current += 1
+    return `raid-mutation-${stableIdBase}-${mutationCounterRef.current}`
+  }, [stableIdBase])
+
+  const { planningState, mutatePlanSlot, replaceAllPlanning } = useUnionRaidPlanning(accounts)
 
   useEffect(() => {
     plansRef.current = plans
@@ -184,7 +209,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const commitRealtimeState = useCallback((nextState: {
     authoritativePlans: RaidPlan[]
     optimisticPlans: RaidPlan[]
-    pendingMutations: any[]
+    pendingMutations: RaidRealtimePatch[]
     lastRevision: number
   }, requestedPlanId?: string) => {
     authoritativePlansRef.current = normalizeRaidPlans(nextState.authoritativePlans)
@@ -224,7 +249,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     socket.send(JSON.stringify(outboundMutation))
   }, [])
 
-  const queueRealtimePatches = useCallback((patches: any[], requestedPlanId?: string) => {
+  const queueRealtimePatches = useCallback((patches: RaidRealtimePatch[], requestedPlanId?: string) => {
     if (!Array.isArray(patches) || patches.length === 0) return
 
     const nextPending = [...pendingMutationsRef.current]
@@ -246,7 +271,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     sendPendingMutations()
   }, [applyPlanSelection, sendPendingMutations])
 
-  const queueRealtimePatch = useCallback((patch: any, requestedPlanId?: string) => {
+  const queueRealtimePatch = useCallback((patch: RaidRealtimePatch, requestedPlanId?: string) => {
     queueRealtimePatches([patch], requestedPlanId)
   }, [queueRealtimePatches])
 
@@ -343,7 +368,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                 plans: fallbackPlans,
                 sessionId: sessionIdRef.current,
                 baseRevision: snapshotRevision,
-                createMutationId: () => Math.random().toString(36).slice(2),
+                createMutationId: nextMutationId,
               })
               const nextState = createOptimisticState({
                 plans: snapshotPlans,
@@ -425,7 +450,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
           if (message?.type === 'error') {
             setCloudLoading(false)
-            onNotifyRef.current?.(String(message?.message || '实时同步失败'), 'error')
+            onNotifyRef.current?.(String(message?.message || '瀹炴椂鍚屾澶辫触'), 'error')
           }
         } catch (error) {
           console.error('Failed to process realtime message:', error)
@@ -462,7 +487,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         websocketRef.current = null
       }
     }
-  }, [authToken, buildRealtimeUrl, commitRealtimeState, sendPendingMutations])
+  }, [authToken, buildRealtimeUrl, commitRealtimeState, nextMutationId, sendPendingMutations])
 
   useEffect(() => {
     if (!currentPlanId) return
@@ -481,45 +506,19 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   }, [planningState, currentPlanId])
 
   const handleCreatePlan = () => {
-    const newPlanId = Math.random().toString(36).slice(2)
+    const newPlanId = nextMutationId()
     const patch = {
       type: 'patch',
-      clientMutationId: Math.random().toString(36).slice(2),
+      clientMutationId: nextMutationId(),
       sessionId: sessionIdRef.current,
       baseRevision: lastRevisionRef.current,
       op: 'plan.create',
       payload: {
         planId: newPlanId,
-        name: '规划 ' + (plans.length + 1),
+        name: '瑙勫垝 ' + (plans.length + 1),
       },
     }
     queueRealtimePatch(patch, newPlanId)
-  }
-
-  const handleDeletePlan = () => {
-    if (plans.length <= 1) {
-      onNotify?.(t('common.error') || '至少保留一个规划', 'warning')
-      return
-    }
-    const rest = plans.filter(p => p.id !== currentPlanId)
-    const patch = {
-      type: 'patch',
-      clientMutationId: Math.random().toString(36).slice(2),
-      sessionId: sessionIdRef.current,
-      baseRevision: lastRevisionRef.current,
-      op: 'plan.delete',
-      payload: { planId: currentPlanId },
-    }
-    queueRealtimePatch(patch, rest[0]?.id)
-  }
-
-  const handleRenamePlan = () => {
-    if (!currentPlanId) return
-    const p = plans.find(p => p.id === currentPlanId)
-    if (p) {
-      setRenamePlanName(p.name)
-      setIsRenamingPlan(true)
-    }
   }
 
   const startRenamePlanById = (id: string) => {
@@ -535,16 +534,23 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     setRenamePlanName('')
   }
 
+  const handleSelectPlanById = useCallback((id: string) => {
+    const plan = plans.find((candidate) => candidate.id === id)
+    if (plan) {
+      applyPlanSelection(plans, id)
+    }
+  }, [applyPlanSelection, plans])
+
   const handleDeletePlanById = (id: string) => {
     if (!id) return
     if (plans[0]?.id === id) {
-      onNotify?.(t('common.error') || '默认规划不可删除', 'warning')
+      onNotify?.(t('common.error') || '榛樿瑙勫垝涓嶅彲鍒犻櫎', 'warning')
       return
     }
     const rest = plans.filter(p => p.id !== id)
     const patch = {
       type: 'patch',
-      clientMutationId: Math.random().toString(36).slice(2),
+      clientMutationId: nextMutationId(),
       sessionId: sessionIdRef.current,
       baseRevision: lastRevisionRef.current,
       op: 'plan.delete',
@@ -557,7 +563,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     if (!renamePlanName.trim()) return
     const patch = {
       type: 'patch',
-      clientMutationId: Math.random().toString(36).slice(2),
+      clientMutationId: nextMutationId(),
       sessionId: sessionIdRef.current,
       baseRevision: lastRevisionRef.current,
       op: 'plan.rename',
@@ -573,11 +579,11 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handleDuplicatePlanById = (id: string) => {
     const p = plans.find(plan => plan.id === id)
     if (!p) return
-    const copyLabel = t('common.copy') || '复制'
-    const newPlanId = Math.random().toString(36).slice(2)
+    const copyLabel = t('common.copy') || '澶嶅埗'
+    const newPlanId = nextMutationId()
     const patch = {
       type: 'patch',
-      clientMutationId: Math.random().toString(36).slice(2),
+      clientMutationId: nextMutationId(),
       sessionId: sessionIdRef.current,
       baseRevision: lastRevisionRef.current,
       op: 'plan.duplicate',
@@ -590,7 +596,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     queueRealtimePatch(patch, newPlanId)
   }
 
-  // 直接从父组件传入的 nikkeList 构建 nikkeMap
+  // 鐩存帴浠庣埗缁勪欢浼犲叆鐨?nikkeList 鏋勫缓 nikkeMap
   useEffect(() => {
     if (!nikkeList || nikkeList.length === 0) return
     const map: Record<number, Character> = {}
@@ -614,7 +620,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   }, [])
 
   useEffect(() => {
-    // 上传或更换账号 JSON 时，重置上次成功的账号索引
+    // 涓婁紶鎴栨洿鎹㈣处鍙?JSON 鏃讹紝閲嶇疆涓婃鎴愬姛鐨勮处鍙风储寮?
     lastSuccessfulAccountRef.current = null
   }, [accounts])
 
@@ -626,7 +632,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       fetchTimeoutRef.current = null
     }
 
-    // 按优先顺序构建尝试队列：上次成功的账号优先，其余依次补全
+    // 鎸変紭鍏堥『搴忔瀯寤哄皾璇曢槦鍒楋細涓婃鎴愬姛鐨勮处鍙蜂紭鍏堬紝鍏朵綑渚濇琛ュ叏
     const indices: number[] = []
     const lastIdx = lastSuccessfulAccountRef.current
     if (lastIdx != null && lastIdx >= 0 && lastIdx < accounts.length) {
@@ -673,8 +679,8 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         scheduleNextFetch(30)
         success = true
         break
-      } catch (err: any) {
-        console.error(`Failed to fetch union raid data with account index ${idx}:`, err)
+      } catch (error) {
+        console.error(`Failed to fetch union raid data with account index ${idx}:`, error)
       }
     }
 
@@ -684,7 +690,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         setFatalError(t('unionRaid.noCookieOrArea'))
         setFetchStatus(null)
       } else {
-        const messageTemplate = t('unionRaid.fetchRetry') || '获取数据失败，{seconds}秒后重新获取'
+        const messageTemplate = t('unionRaid.fetchRetry') || '鑾峰彇鏁版嵁澶辫触锛寋seconds}绉掑悗閲嶆柊鑾峰彇'
         setFetchStatus(messageTemplate.replace('{seconds}', String(retrySeconds)))
       }
       scheduleNextFetch(retrySeconds)
@@ -781,7 +787,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   }
 
   const { tableData, matchedActualCount, matchedPlanCount } = useMemo(() => {
-    const accountMap: Record<string, any> = {}
+    const accountMap: Record<string, RaidTableEntry> = {}
 
     accounts.forEach(acc => {
       const key = getAccountKey(acc)
@@ -802,7 +808,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
     if (raidData?.participate_data) {
       const sortedData = [...raidData.participate_data].reverse()
-      sortedData.forEach((entry: any, order: number) => {
+      sortedData.forEach((entry: RaidParticipateEntry, order: number) => {
         if (entry.difficulty !== difficulty) return
 
         const level = Number(entry.level)
@@ -818,7 +824,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
         const squadArray = Array.isArray(entry.squad) ? entry.squad : []
         const characterIds = squadArray
-          .map((s: any) => tidToBaseId(s.tid))
+          .map((s) => tidToBaseId(s.tid))
           .filter((id: number) => Number.isFinite(id))
 
         const characterNames = characterIds.map((id: number) => {
@@ -865,7 +871,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
   const remainingStrikes = useMemo(() => {
     const total = accounts.length * 3
-    const used = tableData.reduce((sum, row: any) => {
+    const used = tableData.reduce((sum, row) => {
       if (!row.actualStrikes) return sum
       return sum + row.actualStrikes.length
     }, 0)
@@ -875,7 +881,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const sortedData = useMemo(() => {
     if (!sortBy) return tableData
     const sign = sortOrder === 'asc' ? 1 : -1
-    return [...tableData].sort((a: any, b: any) => {
+    return [...tableData].sort((a, b) => {
       if (sortBy === 'name') return sign * a.name.localeCompare(b.name)
       if (sortBy === 'synchro') return sign * (a.synchroLevel - b.synchroLevel)
       if (sortBy === 'remaining') {
@@ -918,7 +924,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handlePlanStepChange = useCallback((accountKey: string, planIndex: number, value: string) => {
     if (authToken && currentPlanId) {
       const patch = buildSlotUpdateFieldPatch({
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextMutationId(),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         planId: currentPlanId,
@@ -943,14 +949,14 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       const valid = Number.isFinite(parsed) && STEP_OPTIONS.includes(parsed as (typeof STEP_OPTIONS)[number])
       plan.step = valid ? parsed : null
     })
-  }, [authToken, currentPlanId, mutatePlan, mutatePlanSlot, queueRealtimePatch])
+  }, [authToken, currentPlanId, mutatePlan, mutatePlanSlot, nextMutationId, queueRealtimePatch])
 
   const handlePredictedDamageChange = useCallback((accountKey: string, planIndex: number, value: string) => {
-    // 只允许数字输入
+    // 鍙厑璁告暟瀛楄緭鍏?
     const numericValue = value.replace(/[^0-9]/g, '')
     if (authToken && currentPlanId) {
       const patch = buildSlotUpdateFieldPatch({
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextMutationId(),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         planId: currentPlanId,
@@ -965,28 +971,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     mutatePlan(accountKey, planIndex, (plan) => {
       plan.predictedDamage = numericValue ? Number(numericValue) : null
     })
-  }, [authToken, currentPlanId, mutatePlan, queueRealtimePatch])
-
-  const handleRemovePlanCharacter = useCallback((accountKey: string, planIndex: number, characterId: number) => {
-    if (authToken && currentPlanId) {
-      const currentCharacters = ensurePlanArray(planningState[accountKey])[planIndex]?.characterIds || []
-      const patch = buildSlotUpdateFieldPatch({
-        clientMutationId: Math.random().toString(36).slice(2),
-        sessionId: sessionIdRef.current,
-        baseRevision: lastRevisionRef.current,
-        planId: currentPlanId,
-        accountKey,
-        slotIndex: planIndex,
-        field: 'characterIds',
-        value: currentCharacters.filter((id) => id !== characterId),
-      })
-      queueRealtimePatch(patch, currentPlanId)
-      return
-    }
-    mutatePlan(accountKey, planIndex, (plan) => {
-      plan.characterIds = plan.characterIds.filter((id) => id !== characterId)
-    })
-  }, [authToken, currentPlanId, mutatePlan, planningState, queueRealtimePatch])
+  }, [authToken, currentPlanId, mutatePlan, nextMutationId, queueRealtimePatch])
 
   const handleCharacterDialogClose = useCallback(() => {
     setCharacterDialogOpen(false)
@@ -1006,7 +991,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       const currentCharacters = ensurePlanArray(planningState[accountKey])[planIndex]?.characterIds || []
       if (currentCharacters.includes(character.id)) return
       const patch = buildSlotUpdateFieldPatch({
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextMutationId(),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         planId: currentPlanId,
@@ -1026,7 +1011,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     })
     setCharacterDialogOpen(false)
     setActivePlanContext(null)
-  }, [activePlanContext, authToken, currentPlanId, mutatePlan, planningState, queueRealtimePatch])
+  }, [activePlanContext, authToken, currentPlanId, mutatePlan, nextMutationId, planningState, queueRealtimePatch])
 
   const handleCharactersSelected = useCallback((characters: Character[]) => {
     if (!activePlanContext) return
@@ -1034,7 +1019,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     const nextIds = characters.map((char) => char.id).slice(0, MAX_PLAN_CHARACTERS)
     if (authToken && currentPlanId) {
       const patch = buildSlotUpdateFieldPatch({
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextMutationId(),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         planId: currentPlanId,
@@ -1053,7 +1038,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     })
     setCharacterDialogOpen(false)
     setActivePlanContext(null)
-  }, [activePlanContext, authToken, currentPlanId, mutatePlan, queueRealtimePatch])
+  }, [activePlanContext, authToken, currentPlanId, mutatePlan, nextMutationId, queueRealtimePatch])
 
   const activePlanCharacters = useMemo(() => {
     if (!activePlanContext) return []
@@ -1068,17 +1053,17 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   }, [activePlanContext, nikkeMap, planningState])
 
   const getCharacterAvatarUrl = useCallback((id: number): string => {
-    const nikke = nikkeMap[id] as any
+    const nikke = nikkeMap[id]
     const rid = nikke?.resource_id
     if (rid === undefined || rid === null || rid === '') return ''
     const ridStr = String(rid).padStart(3, '0')
     return `https://raw.githubusercontent.com/Nikke-db/Nikke-db.github.io/main/images/sprite/si_c${ridStr}_00_s.png`
   }, [nikkeMap])
 
-  const handleCopyTeam = useCallback((squadData: any[]) => {
+  const handleCopyTeam = useCallback((squadData: ActualStrike['squadData']) => {
     if (!onCopyTeam || !squadData || squadData.length === 0) return
 
-    const baseIds = squadData.map((s: any) => tidToBaseId(s.tid))
+    const baseIds = squadData.map((s) => tidToBaseId(s.tid))
     onCopyTeam(mapIdsToCharacters(baseIds, nikkeMap))
   }, [nikkeMap, onCopyTeam])
 
@@ -1096,7 +1081,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handlePastePlannedTeam = useCallback((accountKey: string, planIndex: number) => {
     const available = (teamBuilderTeam || []).filter((char): char is Character => Boolean(char))
     if (available.length === 0) {
-      const emptyMessage = t('unionRaid.pastePlanTeamEmpty') || '构建器中没有可粘贴的队伍'
+      const emptyMessage = t('unionRaid.pastePlanTeamEmpty') || '鏋勫缓鍣ㄤ腑娌℃湁鍙矘璐寸殑闃熶紞'
       onNotify?.(emptyMessage, 'warning')
       return
     }
@@ -1104,7 +1089,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     const uniqueIds = Array.from(new Set(available.map((char) => char.id))).slice(0, MAX_PLAN_CHARACTERS)
     if (authToken && currentPlanId) {
       const patch = buildSlotUpdateFieldPatch({
-        clientMutationId: Math.random().toString(36).slice(2),
+        clientMutationId: nextMutationId(),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
         planId: currentPlanId,
@@ -1114,7 +1099,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         value: uniqueIds,
       })
       queueRealtimePatch(patch, currentPlanId)
-      const successMessage = t('unionRaid.pastePlanTeamSuccess') || '已从构建器粘贴到规划'
+      const successMessage = t('unionRaid.pastePlanTeamSuccess') || '宸蹭粠鏋勫缓鍣ㄧ矘璐村埌瑙勫垝'
       onNotify?.(successMessage, 'success')
       return
     }
@@ -1122,22 +1107,22 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       plan.characterIds = uniqueIds
     })
 
-    const successMessage = t('unionRaid.pastePlanTeamSuccess') || '已从构建器粘贴到规划'
+    const successMessage = t('unionRaid.pastePlanTeamSuccess') || '宸蹭粠鏋勫缓鍣ㄧ矘璐村埌瑙勫垝'
     onNotify?.(successMessage, 'success')
-  }, [authToken, currentPlanId, teamBuilderTeam, mutatePlan, onNotify, queueRealtimePatch, t])
+  }, [authToken, currentPlanId, teamBuilderTeam, mutatePlan, nextMutationId, onNotify, queueRealtimePatch, t])
 
 
 
-  const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '等级' : 'Level')
+  const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '绛夌骇' : 'Level')
   const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
-  const allLabelText = t('unionRaid.filter.all') || (lang === 'zh' ? '全部' : 'All')
+  const allLabelText = t('unionRaid.filter.all') || (lang === 'zh' ? '鍏ㄩ儴' : 'All')
   const levelSelectValue = selectedLevel === 'all' ? 'all' : String(selectedLevel)
   const stepSelectValue = selectedStep === 'all' ? 'all' : String(selectedStep)
   const formatLevelOption = (level: number) => String(level)
   const formatStepOption = (step: number) => STEP_TO_ROMAN[step] || String(step)
   const isFilterActive = selectedLevel !== 'all' || selectedStep !== 'all'
-  const actualLabel = lang === 'zh' ? '实际' : 'Actual'
-  const planLabel = lang === 'zh' ? '规划' : 'Plan'
+  const actualLabel = lang === 'zh' ? '瀹為檯' : 'Actual'
+  const planLabel = lang === 'zh' ? '瑙勫垝' : 'Plan'
   const statsLabel = `${actualLabel} ${matchedActualCount} / ${planLabel} ${matchedPlanCount}`
 
   if (fatalError) {
@@ -1174,94 +1159,110 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
           </ToggleButtonGroup>
           {authToken && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Select
-                    size="small"
-                    value={currentPlanId}
-                    onChange={(e) => {
-                        const newId = e.target.value
-                        const p = plans.find(pl => pl.id === newId)
-                        if (p) {
-                            applyPlanSelection(plans, newId)
-                        }
-                    }}
-                    sx={{ width: 160 }}
-                    renderValue={(val) => {
-                      const id = String(val || '')
-                      const item = plans.find((pl) => pl.id === id)
-                      const display = item?.name || ''
-                      return (
-                        <Typography noWrap title={display} sx={{ maxWidth: '100%', fontSize: '0.875rem' }}>
-                          {display}
-                        </Typography>
-                      )
-                    }}
-                    MenuProps={{ PaperProps: { style: { maxHeight: 300, minWidth: 220 } } }}
+                <InteractiveSelector
+                  width={160}
+                  minWidth={160}
+                  menuMinWidth={220}
+                  value={(() => {
+                    const item = plans.find((plan) => plan.id === currentPlanId)
+                    const display = item?.name || ''
+                    return (
+                      <Typography noWrap title={display} sx={{ maxWidth: '100%', fontSize: '0.875rem' }}>
+                        {display}
+                      </Typography>
+                    )
+                  })()}
                 >
-                    {plans.map((p, index) => (
-                      <MenuItem key={p.id} value={p.id} sx={{ display: 'flex', alignItems: 'center' }}>
-                          {isRenamingPlan && currentPlanId === p.id ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-                              <TextField
-                                size="small"
-                                value={renamePlanName}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRenamePlanName(e.target.value)}
-                                onKeyDown={(e: React.KeyboardEvent) => {
-                                  if (e.key === 'Enter') {
-                                    e.stopPropagation()
-                                    confirmRenamePlan()
-                                  }
-                                  if (e.key === 'Escape') {
-                                    e.stopPropagation()
-                                    cancelRenamePlan()
-                                  }
-                                }}
-                                autoFocus
-                                sx={{ flex: 1, minWidth: 0 }}
-                              />
-                              <IconButton size="small" color="primary" aria-label={t('common.confirm') || '确认'} onClick={(e) => { e.stopPropagation(); confirmRenamePlan() }}>
-                                <CheckIcon fontSize="small" />
-                              </IconButton>
-                              <IconButton size="small" aria-label={t('common.cancel') || '取消'} onClick={(e) => { e.stopPropagation(); cancelRenamePlan() }}>
-                                <CloseIcon fontSize="small" />
-                              </IconButton>
+                  {({ close }) => plans.map((plan, index) => {
+                    const isSelected = plan.id === currentPlanId
+                    const isRenamingCurrentPlan = isRenamingPlan && currentPlanId === plan.id
+                    return (
+                      <Box
+                        key={plan.id}
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={isRenamingCurrentPlan ? undefined : () => {
+                          handleSelectPlanById(plan.id)
+                          close()
+                        }}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          px: 1.5,
+                          py: 0.75,
+                          cursor: isRenamingCurrentPlan ? 'default' : 'pointer',
+                          bgcolor: isSelected ? 'action.selected' : 'transparent',
+                          '&:hover': isRenamingCurrentPlan ? undefined : {
+                            bgcolor: 'action.hover',
+                          },
+                        }}
+                      >
+                        {isRenamingCurrentPlan ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }} onClick={(event) => event.stopPropagation()}>
+                            <TextField
+                              size="small"
+                              value={renamePlanName}
+                              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setRenamePlanName(event.target.value)}
+                              onKeyDown={(event: React.KeyboardEvent) => {
+                                if (event.key === 'Enter') {
+                                  event.stopPropagation()
+                                  confirmRenamePlan()
+                                  close()
+                                }
+                                if (event.key === 'Escape') {
+                                  event.stopPropagation()
+                                  cancelRenamePlan()
+                                }
+                              }}
+                              autoFocus
+                              sx={{ flex: 1, minWidth: 0 }}
+                            />
+                            <IconButton size="small" color="primary" aria-label={t('common.confirm') || '纭'} onClick={(event) => { event.stopPropagation(); confirmRenamePlan(); close() }}>
+                              <CheckIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" aria-label={t('common.cancel') || '鍙栨秷'} onClick={(event) => { event.stopPropagation(); cancelRenamePlan() }}>
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        ) : (
+                          <>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="body2" noWrap title={plan.name}>{plan.name}</Typography>
                             </Box>
-                          ) : (
-                            <>
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="body2" noWrap title={p.name}>{p.name}</Typography>
-                              </Box>
-                              <Tooltip title={t('common.edit') || '重命名'}>
-                                <IconButton size="small" aria-label={t('common.edit') || '重命名'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); startRenamePlanById(p.id) }}>
-                                  <EditIcon fontSize="small" />
+                            <Tooltip title={t('common.edit') || '重命名'}>
+                              <IconButton size="small" aria-label={t('common.edit') || '重命名'} onClick={(event) => { event.stopPropagation(); startRenamePlanById(plan.id) }}>
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('common.copy') || '澶嶅埗'}>
+                              <IconButton size="small" aria-label={t('common.copy') || '澶嶅埗'} onClick={(event) => { event.stopPropagation(); handleDuplicatePlanById(plan.id); close() }}>
+                                <ContentCopyIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('common.delete') || '鍒犻櫎'}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  aria-label={t('common.delete') || '鍒犻櫎'}
+                                  onClick={(event) => { event.stopPropagation(); handleDeletePlanById(plan.id); close() }}
+                                  disabled={index === 0}
+                                >
+                                  <DeleteIcon fontSize="small" />
                                 </IconButton>
-                              </Tooltip>
-                              <Tooltip title={t('common.copy') || '复制'}>
-                                <IconButton size="small" aria-label={t('common.copy') || '复制'} onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDuplicatePlanById(p.id) }}>
-                                  <ContentCopyIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={t('common.delete') || '删除'}>
-                                <span>
-                                  <IconButton
-                                    size="small"
-                                    color="error"
-                                    aria-label={t('common.delete') || '删除'}
-                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeletePlanById(p.id) }}
-                                    disabled={index === 0}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                            </>
-                          )}
-                        </MenuItem>
-                    ))}
-                </Select>
+                              </span>
+                            </Tooltip>
+                          </>
+                        )}
+                      </Box>
+                    )
+                  })}
+                </InteractiveSelector>
                 
-                <Tooltip title={t('common.add') || '新建'}>
+                <Tooltip title={t('common.add') || '鏂板缓'}>
                   <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreatePlan}>
-                    {t('common.add') || '新建'}
+                    {t('common.add') || '鏂板缓'}
                   </Button>
                 </Tooltip>
                 
@@ -1316,7 +1317,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
           <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap', minWidth: 100, textAlign: 'right' }}>
             {statsLabel}
           </Typography>
-          <Tooltip title={t('unionRaid.refresh') || '刷新'}>
+          <Tooltip title={t('unionRaid.refresh') || '鍒锋柊'}>
             <Box
               onClick={handleManualRefresh}
               sx={{
@@ -1360,7 +1361,6 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         onSort={handleSort}
         onPlanStepChange={handlePlanStepChange}
         onPredictedDamageChange={handlePredictedDamageChange}
-        onRemovePlanCharacter={handleRemovePlanCharacter}
         onOpenCharacterPicker={handleOpenCharacterPicker}
         onCopyTeam={handleCopyTeam}
         onCopyPlannedTeam={handleCopyPlannedTeam}
@@ -1392,3 +1392,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 }
 
 export default UnionRaidStats
+
+
+
+

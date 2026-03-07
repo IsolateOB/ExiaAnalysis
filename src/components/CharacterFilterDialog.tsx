@@ -1,7 +1,7 @@
-/*
+﻿/*
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -20,13 +20,12 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Chip,
   Stack,
   Divider
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { Character, CharacterFilter } from '../types'
-import { useI18n } from '../i18n'
+import { useI18n } from '../hooks/useI18n'
 
 interface CharacterFilterDialogProps {
   open: boolean
@@ -52,7 +51,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   nikkeList: propNikkeList,
 }) => {
   const { t, lang } = useI18n()
-  const [filters, setFilters] = useState<CharacterFilter>({
+  const defaultFilters = useMemo<CharacterFilter>(() => ({
     name: '',
     class: '',
     element: initialElement || '',
@@ -60,12 +59,13 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     corporation: '',
     weapon_type: '',
     original_rare: '',
-  })
+  }), [initialElement])
+  const [filters, setFilters] = useState<CharacterFilter>(defaultFilters)
 
-  // 直接使用从父组件传入的 nikkeList
+  // 鐩存帴浣跨敤浠庣埗缁勪欢浼犲叆鐨?nikkeList
   const nikkeList = useMemo(() => {
     if (!propNikkeList || propNikkeList.length === 0) return []
-    return propNikkeList.filter((nikke: any) =>
+    return propNikkeList.filter((nikke) =>
       nikke.id &&
       nikke.name_cn &&
       nikke.name_en &&
@@ -78,58 +78,18 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     )
   }, [propNikkeList])
   
-  const [filteredCharacters, setFilteredCharacters] = useState<Character[]>([])
   const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([])
 
-  // 重置筛选条件
-  useEffect(() => {
-    if (open) {
-      setFilters({
-        name: '',
-        class: '',
-        element: initialElement || '',
-        use_burst_skill: '',
-        corporation: '',
-        weapon_type: '',
-        original_rare: '',
-      })
-      if (multiSelect) {
-        setSelectedCharacters(initialSelectedCharacters ? [...initialSelectedCharacters] : [])
-      }
+  const handleDialogEntered = useCallback(() => {
+    setFilters(defaultFilters)
+    if (multiSelect) {
+      setSelectedCharacters(initialSelectedCharacters ? [...initialSelectedCharacters] : [])
+      return
     }
-  }, [open, initialElement, initialSelectedCharacters, multiSelect])
+    setSelectedCharacters([])
+  }, [defaultFilters, initialSelectedCharacters, multiSelect])
 
-  // 翻译映射
-  const translations = {
-    class: {
-      'Attacker': '火力型',
-      'Defender': '防御型',
-      'Supporter': '支援型'
-    },
-    element: {
-      'Electronic': '电击',
-      'Fire': '燃烧',
-      'Wind': '风压',
-      'Water': '水冷',
-      'Iron': '铁甲'
-    },
-    corporation: {
-      'ELYSION': '极乐净土',
-      'MISSILIS': '米西利斯',
-      'TETRA': '泰特拉',
-      'PILGRIM': '朝圣者',
-      'ABNORMAL': '反常'
-    },
-    burstSkill: {
-      'Step1': 'I阶段',
-      'Step2': 'II阶段',
-      'Step3': 'III阶段',
-      'AllStep': '全阶段'
-    }
-  }
-
-  // 应用筛选
-  const applyFilters = useCallback(() => {
+  const filteredCharacters = useMemo(() => {
     let filtered = nikkeList
 
     Object.entries(filters).forEach(([key, value]) => {
@@ -142,7 +102,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
               char.name_en.toLowerCase().includes(searchTerm)
           )
         } else if (key === 'use_burst_skill') {
-          // AllStep 角色应该能被所有阶段筛选到
+          // AllStep 瑙掕壊搴旇鑳借鎵€鏈夐樁娈电瓫閫夊埌
           filtered = filtered.filter(
             (char: Character) => char[key] === value || char[key] === 'AllStep'
           )
@@ -152,12 +112,8 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
       }
     })
 
-    setFilteredCharacters(filtered)
-  }, [nikkeList, filters])
-
-  useEffect(() => {
-    applyFilters()
-  }, [applyFilters])
+    return filtered
+  }, [filters, nikkeList])
 
   const handleFilterChange = (field: keyof CharacterFilter, value: string) => {
     setFilters((prev) => ({ ...prev, [field]: value }))
@@ -192,7 +148,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   }
 
   const getCharacterAvatarUrl = (character: Character): string => {
-    const ridFromCharacter = (character as any)?.resource_id
+    const ridFromCharacter = character.resource_id
     const ridFromList = nikkeList.find((n) => n.id === character.id)?.resource_id
     const rid = ridFromCharacter ?? ridFromList
     if (rid === undefined || rid === null || rid === '') return ''
@@ -209,12 +165,12 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
 
     if (burst === 'AllStep') {
       const suffix = t('option.burst.AllStep')
-      return lang === 'zh' ? `爆裂 ${suffix}` : `Burst ${suffix}`
+      return lang === 'zh' ? `鐖嗚 ${suffix}` : `Burst ${suffix}`
     }
 
     const roman = romanMap[burst]
     if (roman) {
-      return lang === 'zh' ? `爆裂 ${roman}` : `Burst ${roman}`
+      return lang === 'zh' ? `鐖嗚 ${roman}` : `Burst ${roman}`
     }
 
     return t(`option.burst.${burst}`)
@@ -228,11 +184,17 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
     .replace('{max}', String(maxSelection))
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      slotProps={{ transition: { onEntered: handleDialogEntered } }}
+    >
       <DialogTitle>{t('filter.selectCharacter')}</DialogTitle>
       <DialogContent>
         <Box display="flex" flexDirection="column" gap={2} sx={{ mt: 1 }}>
-          {/* 搜索框 */}
+          {/* 鎼滅储妗?*/}
           <TextField
             size="small"
             label={t('filter.name')}
@@ -242,7 +204,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
             fullWidth
           />
 
-          {/* 筛选条件：按顺序显示 — 代码、阶段、职业、企业、武器（5 等分） */}
+          {/* 绛涢€夋潯浠讹細鎸夐『搴忔樉绀?鈥?浠ｇ爜銆侀樁娈点€佽亴涓氥€佷紒涓氥€佹鍣紙5 绛夊垎锛?*/}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', columnGap: 2, rowGap: 2 }}>
             <FormControl size="small" sx={{ width: '100%' }}>
               <InputLabel>{t('filter.element')}</InputLabel>
@@ -326,7 +288,7 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
             {t('filter.results')} ({filteredCharacters.length})
           </Typography>
 
-          {/* 结果列表 */}
+          {/* 缁撴灉鍒楄〃 */}
           <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
             { nikkeList.length === 0 ? (
               <Typography color="textSecondary" sx={{ textAlign: 'center', py: 4 }}>
@@ -493,3 +455,5 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
 }
 
 export default CharacterFilterDialog
+
+
