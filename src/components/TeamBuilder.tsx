@@ -75,7 +75,7 @@ interface TeamBuilderProps {
 const API_BASE_URL = 'https://backend.nikke-exia.com'
 const REALTIME_API_BASE_URL = API_BASE_URL.replace(/^http/, 'ws')
 const DEFAULT_TEMPLATE_ID = 'default'
-const DEFAULT_TEMPLATE_NAME = '榛樿妯℃澘'
+const DEFAULT_TEMPLATE_NAME_KEY = 'tpl.defaultName'
 const MAX_TEMPLATES = 200
 
 const createInitialTeam = (): TeamCharacter[] => (
@@ -94,7 +94,7 @@ const normalizeTemplateCoefficients = (coefficients?: AttributeCoefficients): At
   return base
 }
 
-const readInitialPersistentTemplates = (): TeamTemplate[] => {
+const readInitialPersistentTemplates = (defaultTemplateName: string): TeamTemplate[] => {
   const existing = listTemplates()
   if (existing.some((template) => template.id === DEFAULT_TEMPLATE_ID)) {
     return existing
@@ -102,7 +102,7 @@ const readInitialPersistentTemplates = (): TeamTemplate[] => {
 
   const defaultTemplate = buildTemplateSnapshot({
     id: DEFAULT_TEMPLATE_ID,
-    name: DEFAULT_TEMPLATE_NAME,
+    name: defaultTemplateName,
     team: createInitialTeam(),
     coefficientsMap: {},
     normalizeCoefficients: normalizeTemplateCoefficients,
@@ -163,7 +163,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [characterStrengths, setCharacterStrengths] = useState<{ [position: number]: { baseline: number, target: number } }>({})
   const [coefficientsMap, setCoefficientsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [rawMap, setRawMap] = useState<RawStrengthMap>({})
-  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(readInitialPersistentTemplates)
+  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(() => readInitialPersistentTemplates(t(DEFAULT_TEMPLATE_NAME_KEY) || 'Default Template'))
   const [temporaryCopyTemplate, setTemporaryCopyTemplate] = useState<TeamTemplate | null>(() => getTemporaryCopyTemplate())
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
@@ -322,9 +322,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const generateNextDefaultName = useCallback(() => {
     const existingNames = persistentTemplatesRef.current.map((template) => template.name)
     let nextIndex = 1
-    while (existingNames.includes(`妯℃澘${nextIndex}`)) nextIndex += 1
-    return `妯℃澘${nextIndex}`
-  }, [])
+    const defaultPrefix = t('tpl.defaultNamePrefix') || 'Template'
+    while (existingNames.includes(`${defaultPrefix}${nextIndex}`)) nextIndex += 1
+    return `${defaultPrefix}${nextIndex}`
+  }, [t])
 
   const findCharacterDataById = useCallback((characterId: string, jsonData?: TeamBuilderRootData) => {
     if (!jsonData?.elements) return null
@@ -1075,7 +1076,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                         ) : null}
                       </Box>
                       {!isTemporary ? (
-                        <Tooltip title={t('tpl.rename') || '重命名'}>
+                        <Tooltip title={t('tpl.rename') || 'Rename'}>
                           <IconButton size="small" onClick={(event) => { event.stopPropagation(); startRenameTemplate(template.id) }}>
                             <EditIcon fontSize="small" />
                           </IconButton>
@@ -1083,13 +1084,13 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                       ) : (
                         <Box sx={{ width: 32, flexShrink: 0 }} />
                       )}
-                      <Tooltip title={t('tpl.copy') || '澶嶅埗'}>
+                      <Tooltip title={t('tpl.copy') || 'Copy'}>
                         <IconButton size="small" onClick={(event) => { event.stopPropagation(); handleDuplicateTemplate(template.id); close() }}>
                           <ContentCopyIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       {!isTemporary ? (
-                        <Tooltip title={t('tpl.delete') || '鍒犻櫎'}>
+                        <Tooltip title={t('tpl.delete') || 'Delete'}>
                           <span>
                             <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); handleDeleteTemplate(template.id); close() }}>
                               <DeleteIcon fontSize="small" />
@@ -1106,9 +1107,9 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             })}
           </InteractiveSelector>
 
-          <Tooltip title={t('tpl.save') || '淇濆瓨涓烘柊妯℃澘'}>
+          <Tooltip title={t('tpl.saveAsNew') || 'Save as New Template'}>
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreateTemplate} disabled={persistentTemplates.length >= MAX_TEMPLATES}>
-              {t('tpl.create') || '鏂板缓'}
+              {t('tpl.create') || 'Create'}
             </Button>
           </Tooltip>
         </Stack>
