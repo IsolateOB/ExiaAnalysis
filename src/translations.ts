@@ -91,6 +91,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     
     'common.back': '返回',
     'common.confirm': '确认',
+    'common.cancel': '取消',
+    'common.edit': '编辑',
+    'common.delete': '删除',
     'common.save': '保存',
     'common.add': '新建',
     'common.copy': '复制',
@@ -107,6 +110,12 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'accountList.label': '账号列表',
     'accountList.default': '默认账号列表',
     'accountList.unnamed': '未命名账号列表',
+    'accountList.uploadExcel': '上传',
+    'accountList.uploadExcelTitle': '上传 ExiaInvasion 导出的 Excel',
+    'accountList.deleteLocal': '删除',
+    'accountList.deleteLocalTitle': '删除本地列表',
+    'accountList.importSuccess': '已成功导入 {count} 个本地账号',
+    'accountList.importExcelFailed': '解析 Excel 失败',
 
     // 分析页
     accountAnalysis: '账号分析',
@@ -187,6 +196,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.plan.characterLimit': '最多选择5名角色',
     'unionRaid.plan.predictedDamage': '预测伤害',
     'unionRaid.plan.none': '无',
+    'unionRaid.plan.defaultPrefix': '规划',
+    'unionRaid.defaultPlanUndeletable': '默认规划不可删除',
+    'unionRaid.realtimeSyncFailed': '实时同步失败',
 
     // 模板（Template）相关
     'tpl.import': '导入模板',
@@ -202,6 +214,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.importFailed': '导入模板失败：文件格式不正确',
     'tpl.exportFailed': '导出模板失败',
     'tpl.importFileAria': '导入模板文件',
+    'tpl.defaultName': '默认模板',
+    'tpl.defaultNamePrefix': '模板',
+    'tpl.saveAsNew': '保存为新模板',
 
     // 上传
     'upload.title': '上传账号 JSON',
@@ -214,6 +229,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'upload.readError': '文件读取失败',
     'upload.parseError': '文件解析失败',
     'common.remove': '移除',
+    'common.error': '错误',
 
     // 筛选弹窗（部分）
     'filter.selectCharacter': '选择妮姬',
@@ -374,6 +390,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
 
     'common.back': 'Back',
     'common.confirm': 'Confirm',
+    'common.cancel': 'Cancel',
+    'common.edit': 'Edit',
+    'common.delete': 'Delete',
     'common.save': 'Save',
     'common.add': 'Create',
     'common.copy': 'Copy',
@@ -390,6 +409,12 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'accountList.label': 'Account List',
     'accountList.default': 'Default Account List',
     'accountList.unnamed': 'Unnamed Account List',
+    'accountList.uploadExcel': 'Upload',
+    'accountList.uploadExcelTitle': 'Upload an Excel exported from ExiaInvasion',
+    'accountList.deleteLocal': 'Delete',
+    'accountList.deleteLocalTitle': 'Delete local list',
+    'accountList.importSuccess': 'Imported {count} local accounts successfully.',
+    'accountList.importExcelFailed': 'Failed to parse Excel',
 
     // Analyzer
     accountAnalysis: 'Account Analysis',
@@ -471,6 +496,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'unionRaid.plan.characterLimit': 'Up to 5 characters',
     'unionRaid.plan.predictedDamage': 'Estimated Damage',
     'unionRaid.plan.none': 'None',
+    'unionRaid.plan.defaultPrefix': 'Plan',
+    'unionRaid.defaultPlanUndeletable': 'Default plan cannot be deleted',
+    'unionRaid.realtimeSyncFailed': 'Realtime sync failed',
 
     // Template related
     'tpl.import': 'Import Templates',
@@ -486,6 +514,9 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.importFailed': 'Import failed: invalid file format',
     'tpl.exportFailed': 'Export failed',
     'tpl.importFileAria': 'Import template file',
+    'tpl.defaultName': 'Default Template',
+    'tpl.defaultNamePrefix': 'Template',
+    'tpl.saveAsNew': 'Save as New Template',
 
     // Upload
     'upload.title': 'Upload Accounts JSON',
@@ -498,6 +529,7 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'upload.readError': 'File reading failed',
     'upload.parseError': 'Parse failed',
     'common.remove': 'Remove',
+    'common.error': 'Error',
 
     // Filter dialog (partial)
     'filter.selectCharacter': 'Select Nikke',

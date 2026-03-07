@@ -450,7 +450,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
 
           if (message?.type === 'error') {
             setCloudLoading(false)
-            onNotifyRef.current?.(String(message?.message || '瀹炴椂鍚屾澶辫触'), 'error')
+            onNotifyRef.current?.(String(message?.message || t('unionRaid.realtimeSyncFailed') || 'Realtime sync failed'), 'error')
           }
         } catch (error) {
           console.error('Failed to process realtime message:', error)
@@ -487,7 +487,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         websocketRef.current = null
       }
     }
-  }, [authToken, buildRealtimeUrl, commitRealtimeState, nextMutationId, sendPendingMutations])
+  }, [authToken, buildRealtimeUrl, commitRealtimeState, nextMutationId, sendPendingMutations, t])
 
   useEffect(() => {
     if (!currentPlanId) return
@@ -515,7 +515,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       op: 'plan.create',
       payload: {
         planId: newPlanId,
-        name: '瑙勫垝 ' + (plans.length + 1),
+        name: `${t('unionRaid.plan.defaultPrefix') || 'Plan'} ${plans.length + 1}`,
       },
     }
     queueRealtimePatch(patch, newPlanId)
@@ -544,7 +544,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handleDeletePlanById = (id: string) => {
     if (!id) return
     if (plans[0]?.id === id) {
-      onNotify?.(t('common.error') || '榛樿瑙勫垝涓嶅彲鍒犻櫎', 'warning')
+      onNotify?.(t('unionRaid.defaultPlanUndeletable') || 'Default plan cannot be deleted', 'warning')
       return
     }
     const rest = plans.filter(p => p.id !== id)
@@ -579,7 +579,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handleDuplicatePlanById = (id: string) => {
     const p = plans.find(plan => plan.id === id)
     if (!p) return
-    const copyLabel = t('common.copy') || '澶嶅埗'
+    const copyLabel = t('common.copy') || 'Copy'
     const newPlanId = nextMutationId()
     const patch = {
       type: 'patch',
@@ -690,7 +690,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         setFatalError(t('unionRaid.noCookieOrArea'))
         setFetchStatus(null)
       } else {
-        const messageTemplate = t('unionRaid.fetchRetry') || '鑾峰彇鏁版嵁澶辫触锛寋seconds}绉掑悗閲嶆柊鑾峰彇'
+        const messageTemplate = t('unionRaid.fetchRetry') || 'Failed to fetch data, retrying in {seconds}s'
         setFetchStatus(messageTemplate.replace('{seconds}', String(retrySeconds)))
       }
       scheduleNextFetch(retrySeconds)
@@ -1081,7 +1081,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const handlePastePlannedTeam = useCallback((accountKey: string, planIndex: number) => {
     const available = (teamBuilderTeam || []).filter((char): char is Character => Boolean(char))
     if (available.length === 0) {
-      const emptyMessage = t('unionRaid.pastePlanTeamEmpty') || '鏋勫缓鍣ㄤ腑娌℃湁鍙矘璐寸殑闃熶紞'
+      const emptyMessage = t('unionRaid.pastePlanTeamEmpty') || 'No builder team available to paste'
       onNotify?.(emptyMessage, 'warning')
       return
     }
@@ -1099,7 +1099,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
         value: uniqueIds,
       })
       queueRealtimePatch(patch, currentPlanId)
-      const successMessage = t('unionRaid.pastePlanTeamSuccess') || '宸蹭粠鏋勫缓鍣ㄧ矘璐村埌瑙勫垝'
+      const successMessage = t('unionRaid.pastePlanTeamSuccess') || 'Builder team pasted into plan'
       onNotify?.(successMessage, 'success')
       return
     }
@@ -1107,22 +1107,22 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       plan.characterIds = uniqueIds
     })
 
-    const successMessage = t('unionRaid.pastePlanTeamSuccess') || '宸蹭粠鏋勫缓鍣ㄧ矘璐村埌瑙勫垝'
+    const successMessage = t('unionRaid.pastePlanTeamSuccess') || 'Builder team pasted into plan'
     onNotify?.(successMessage, 'success')
   }, [authToken, currentPlanId, teamBuilderTeam, mutatePlan, nextMutationId, onNotify, queueRealtimePatch, t])
 
 
 
-  const levelLabelText = t('unionRaid.filter.level') || (lang === 'zh' ? '绛夌骇' : 'Level')
-  const stepLabelText = t('unionRaid.filter.step') || (lang === 'zh' ? 'Boss' : 'Boss')
-  const allLabelText = t('unionRaid.filter.all') || (lang === 'zh' ? '鍏ㄩ儴' : 'All')
+  const levelLabelText = t('unionRaid.filter.level') || 'Level'
+  const stepLabelText = t('unionRaid.filter.step') || 'Boss'
+  const allLabelText = t('unionRaid.filter.all') || 'All'
   const levelSelectValue = selectedLevel === 'all' ? 'all' : String(selectedLevel)
   const stepSelectValue = selectedStep === 'all' ? 'all' : String(selectedStep)
   const formatLevelOption = (level: number) => String(level)
   const formatStepOption = (step: number) => STEP_TO_ROMAN[step] || String(step)
   const isFilterActive = selectedLevel !== 'all' || selectedStep !== 'all'
-  const actualLabel = lang === 'zh' ? '瀹為檯' : 'Actual'
-  const planLabel = lang === 'zh' ? '瑙勫垝' : 'Plan'
+  const actualLabel = t('unionRaid.plan.actualLabel') || 'Actual'
+  const planLabel = t('unionRaid.plan.planLabel') || 'Planning'
   const statsLabel = `${actualLabel} ${matchedActualCount} / ${planLabel} ${matchedPlanCount}`
 
   if (fatalError) {
@@ -1218,10 +1218,10 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                               autoFocus
                               sx={{ flex: 1, minWidth: 0 }}
                             />
-                            <IconButton size="small" color="primary" aria-label={t('common.confirm') || '纭'} onClick={(event) => { event.stopPropagation(); confirmRenamePlan(); close() }}>
+                            <IconButton size="small" color="primary" aria-label={t('common.confirm') || 'Confirm'} onClick={(event) => { event.stopPropagation(); confirmRenamePlan(); close() }}>
                               <CheckIcon fontSize="small" />
                             </IconButton>
-                            <IconButton size="small" aria-label={t('common.cancel') || '鍙栨秷'} onClick={(event) => { event.stopPropagation(); cancelRenamePlan() }}>
+                            <IconButton size="small" aria-label={t('common.cancel') || 'Cancel'} onClick={(event) => { event.stopPropagation(); cancelRenamePlan() }}>
                               <CloseIcon fontSize="small" />
                             </IconButton>
                           </Box>
@@ -1230,22 +1230,22 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography variant="body2" noWrap title={plan.name}>{plan.name}</Typography>
                             </Box>
-                            <Tooltip title={t('common.edit') || '重命名'}>
-                              <IconButton size="small" aria-label={t('common.edit') || '重命名'} onClick={(event) => { event.stopPropagation(); startRenamePlanById(plan.id) }}>
+                            <Tooltip title={t('common.edit') || 'Edit'}>
+                              <IconButton size="small" aria-label={t('common.edit') || 'Edit'} onClick={(event) => { event.stopPropagation(); startRenamePlanById(plan.id) }}>
                                 <EditIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title={t('common.copy') || '澶嶅埗'}>
-                              <IconButton size="small" aria-label={t('common.copy') || '澶嶅埗'} onClick={(event) => { event.stopPropagation(); handleDuplicatePlanById(plan.id); close() }}>
+                            <Tooltip title={t('common.copy') || 'Copy'}>
+                              <IconButton size="small" aria-label={t('common.copy') || 'Copy'} onClick={(event) => { event.stopPropagation(); handleDuplicatePlanById(plan.id); close() }}>
                                 <ContentCopyIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title={t('common.delete') || '鍒犻櫎'}>
+                            <Tooltip title={t('common.delete') || 'Delete'}>
                               <span>
                                 <IconButton
                                   size="small"
                                   color="error"
-                                  aria-label={t('common.delete') || '鍒犻櫎'}
+                                  aria-label={t('common.delete') || 'Delete'}
                                   onClick={(event) => { event.stopPropagation(); handleDeletePlanById(plan.id); close() }}
                                   disabled={index === 0}
                                 >
@@ -1260,9 +1260,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
                   })}
                 </InteractiveSelector>
                 
-                <Tooltip title={t('common.add') || '鏂板缓'}>
+                <Tooltip title={t('common.add') || 'Create'}>
                   <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreatePlan}>
-                    {t('common.add') || '鏂板缓'}
+                    {t('common.add') || 'Create'}
                   </Button>
                 </Tooltip>
                 
@@ -1317,7 +1317,7 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
           <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap', minWidth: 100, textAlign: 'right' }}>
             {statsLabel}
           </Typography>
-          <Tooltip title={t('unionRaid.refresh') || '鍒锋柊'}>
+          <Tooltip title={t('unionRaid.refresh') || 'Refresh'}>
             <Box
               onClick={handleManualRefresh}
               sx={{

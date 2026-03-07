@@ -242,11 +242,11 @@ const App: React.FC = () => {
 
         setAccountLists(prev => [newLocalList, ...prev.filter(list => list.id !== localListId)])
         setSelectedAccountListId(localListId)
-        handleStatusChange(`Imported ${localAccounts.length} local accounts successfully.`, 'success')
+        handleStatusChange((t('accountList.importSuccess') || 'Imported {count} local accounts successfully.').replace('{count}', String(localAccounts.length)), 'success')
 
       } catch (error) {
         console.error(error)
-        handleStatusChange('瑙ｆ瀽 Excel 澶辫触', 'error')
+        handleStatusChange(t('accountList.importExcelFailed') || 'Failed to parse Excel', 'error')
       }
     }
     reader.readAsArrayBuffer(file)
@@ -448,7 +448,7 @@ const App: React.FC = () => {
         ? gameAccounts
         : (await fetchCloudAccountLists(token)) || []
 
-      const normalized = normalizeAccountLists(source, t('accountList.default') || '榛樿璐﹀彿鍒楄〃')
+      const normalized = normalizeAccountLists(source, t('accountList.default') || 'Default Account List')
 
       const savedLocalListsJson = window.localStorage.getItem(LOCAL_LISTS_STORAGE_KEY)
       const savedLocalLists = savedLocalListsJson ? JSON.parse(savedLocalListsJson) as AccountListRecord[] : []
@@ -675,13 +675,13 @@ const App: React.FC = () => {
       })
 
       if (!res.ok) {
-        const msg = authMode === 'login' ? (t('auth.failedLogin') || '鐧诲綍澶辫触') : (t('auth.failedRegister') || '娉ㄥ唽澶辫触')
+        const msg = authMode === 'login' ? (t('auth.failedLogin') || 'Login failed') : (t('auth.failedRegister') || 'Registration failed')
         handleStatusChange(msg, 'error')
         return
       }
 
       if (authMode === 'register') {
-        handleStatusChange(t('auth.successRegister') || '娉ㄥ唽鎴愬姛锛岃鐧诲綍', 'success')
+        handleStatusChange(t('auth.successRegister') || 'Registration succeeded, please log in', 'success')
         setAuthMode('login')
         setAuthForm(prev => ({ ...prev, password: '' }))
         return
@@ -699,12 +699,12 @@ const App: React.FC = () => {
         setAuthDialogOpen(false)
         authSyncCheckedRef.current = false
         await loadAccountsFromBackend(data.token, data?.game_accounts || [])
-        handleStatusChange(t('auth.successLogin') || '鐧诲綍鎴愬姛', 'success')
+        handleStatusChange(t('auth.successLogin') || 'Login successful', 'success')
       } else {
-        handleStatusChange(t('auth.failedLogin') || '鐧诲綍澶辫触', 'error')
+        handleStatusChange(t('auth.failedLogin') || 'Login failed', 'error')
       }
     } catch {
-      const msg = authMode === 'login' ? (t('auth.failedLogin') || '鐧诲綍澶辫触') : (t('auth.failedRegister') || '娉ㄥ唽澶辫触')
+      const msg = authMode === 'login' ? (t('auth.failedLogin') || 'Login failed') : (t('auth.failedRegister') || 'Registration failed')
       handleStatusChange(msg, 'error')
     } finally {
       setAuthSubmitting(false)
@@ -827,11 +827,11 @@ const App: React.FC = () => {
                     <Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
                         <FormControl fullWidth size="small">
-                          <InputLabel id="account-list-select-label">{t('accountList.label') || '璐﹀彿鍒楄〃'}</InputLabel>
+                          <InputLabel id="account-list-select-label">{t('accountList.label') || 'Account List'}</InputLabel>
                           <Select
                             labelId="account-list-select-label"
                             value={selectedAccountListId}
-                            label={t('accountList.label') || '璐﹀彿鍒楄〃'}
+                            label={t('accountList.label') || 'Account List'}
                             onChange={async (event) => {
                               const nextId = String(event.target.value || '')
                               if (!nextId || nextId === selectedAccountListId) return
@@ -846,8 +846,8 @@ const App: React.FC = () => {
                             ))}
                           </Select>
                         </FormControl>
-                        <Button component="label" variant="outlined" sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} title="Upload an Excel exported from ExiaInvasion">
-                          Upload
+                        <Button component="label" variant="outlined" sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} title={t('accountList.uploadExcelTitle') || 'Upload an Excel exported from ExiaInvasion'}>
+                          {t('accountList.uploadExcel') || 'Upload'}
                           <input type="file" hidden accept=".xlsx,.xls" onChange={handleUploadAccountList} />
                         </Button>
                         {selectedAccountListId?.startsWith('local_') && (
@@ -855,7 +855,7 @@ const App: React.FC = () => {
                             variant="outlined" 
                             color="error" 
                             sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }} 
-                            title="Delete local list"
+                            title={t('accountList.deleteLocalTitle') || 'Delete local list'}
                             onClick={async () => {
                               const newList = accountLists.filter(l => l.id !== selectedAccountListId)
                               setAccountLists(newList)
@@ -874,7 +874,7 @@ const App: React.FC = () => {
                               await applyAccountListSelection(nextId, newList)
                             }}
                           >
-                            Delete
+                            {t('accountList.deleteLocal') || 'Delete'}
                           </Button>
                         )}
                       </Box>
