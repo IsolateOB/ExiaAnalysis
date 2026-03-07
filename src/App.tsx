@@ -3,7 +3,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ThemeProvider, CssBaseline, Box, Snackbar, Alert, Container, ToggleButtonGroup, ToggleButton, Button, Slide, FormControl, InputLabel, Select, MenuItem } from '@mui/material'
+import { ThemeProvider, CssBaseline, Box, Snackbar, Alert, Container, ToggleButtonGroup, ToggleButton, Button, Slide, FormControl, InputLabel, Select, MenuItem, Typography } from '@mui/material'
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import TeamBuilder from './components/TeamBuilder'
