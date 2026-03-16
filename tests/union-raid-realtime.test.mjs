@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import {
+import * as raidRealtime from '../src/components/UnionRaid/cloudRealtime.ts'
+
+const {
   applyIncomingPatch,
   buildPlanSeedPatches,
   buildSlotUpdateFieldPatch,
@@ -11,7 +13,8 @@ import {
   reconcileIncomingPatch,
   reconcileMutationAck,
   selectPatchBasePlans,
-} from '../src/components/UnionRaid/cloudRealtime.ts'
+  syncCurrentPlanData,
+} = raidRealtime
 
 const filledSlot = (step, damage = null, characterIds = []) => ({
   step,
@@ -377,4 +380,44 @@ test('selectPatchBasePlans prefers the currently visible plans over stale optimi
     planningState: {},
     now: 999,
   }))
+})
+
+test('syncCurrentPlanData updates the selected plan with the visible planning state', () => {
+  assert.equal(
+    typeof syncCurrentPlanData,
+    'function',
+    'syncCurrentPlanData should be exported so UnionRaidStats can keep visible plan data and realtime refs aligned',
+  )
+
+  const plans = [
+    makePlan({
+      id: 'main',
+      updatedAt: 100,
+      data: {
+        alpha: [filledSlot(1, 1000, [101])],
+      },
+    }),
+    makePlan({
+      id: 'secondary',
+      updatedAt: 50,
+      data: {
+        beta: [filledSlot(2, 2000, [202])],
+      },
+    }),
+  ]
+
+  const synced = syncCurrentPlanData({
+    plans,
+    currentPlanId: 'main',
+    planningState: {
+      alpha: [filledSlot(3, 3333, [303, 304])],
+      gamma: [filledSlot(null, null, [])],
+    },
+    updatedAt: 900,
+  })
+
+  assert.equal(synced[0].updatedAt, 900)
+  assert.deepEqual(synced[0].data.alpha[0], filledSlot(3, 3333, [303, 304]))
+  assert.equal(synced[1].updatedAt, 50)
+  assert.deepEqual(synced[1].data.beta[0], filledSlot(2, 2000, [202]))
 })

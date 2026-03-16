@@ -6,6 +6,7 @@ import {
   listTemplates,
   mergePersistentTemplates,
   saveTemporaryCopyTemplate,
+  templatesEqual,
 } from '../src/utils/templates.ts'
 import { buildTemplateSnapshot } from '../src/utils/teamTemplateState.ts'
 
@@ -198,4 +199,44 @@ test('mergePersistentTemplates ignores remote create stubs for templates that al
   assert.equal(merged[0].id, 'shared-id')
   assert.equal(merged[0].members.length, 5)
   assert.equal(merged[0].members[0].characterId, '1001')
+})
+
+test('templatesEqual treats normalized non-local metadata as unchanged', () => {
+  assert.equal(
+    typeof templatesEqual,
+    'function',
+    'templatesEqual should be exported so TeamBuilder can reuse normalized template comparisons',
+  )
+
+  const storedTemplate = {
+    id: 'tpl-1',
+    name: '模板1',
+    createdAt: 1,
+    updatedAt: 2,
+    localOnly: false,
+    conflictCopy: false,
+    members: [
+      { position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() },
+      { position: 2, characterId: undefined, damageCoefficient: 1, coefficients: makeDefaultCoefficients() },
+      { position: 3, characterId: undefined, damageCoefficient: 1, coefficients: makeDefaultCoefficients() },
+      { position: 4, characterId: undefined, damageCoefficient: 1, coefficients: makeDefaultCoefficients() },
+      { position: 5, characterId: undefined, damageCoefficient: 1, coefficients: makeDefaultCoefficients() },
+    ],
+    totalDamageCoefficient: 5,
+  }
+
+  const rebuiltSnapshot = {
+    id: 'tpl-1',
+    name: '模板1',
+    createdAt: 1,
+    updatedAt: 2,
+    members: storedTemplate.members.map((member) => ({ ...member, coefficients: { ...member.coefficients } })),
+    totalDamageCoefficient: 5,
+  }
+
+  assert.equal(
+    templatesEqual(storedTemplate, rebuiltSnapshot),
+    true,
+    'A rebuilt snapshot with identical members should not be treated as changed just because normalized metadata fields are absent',
+  )
 })

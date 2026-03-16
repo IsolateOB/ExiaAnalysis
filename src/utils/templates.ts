@@ -52,6 +52,22 @@ function cloneTemplate(template: TeamTemplate): TeamTemplate {
   }
 }
 
+function toStableComparable<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => toStableComparable(entry)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, entryValue]) => [key, toStableComparable(entryValue)])
+    return Object.fromEntries(entries) as T
+  }
+
+  return value
+}
+
 function stripConflictCopySuffix(name: string): string {
   let nextName = String(name || '').trim()
 
@@ -160,8 +176,11 @@ export function clearTemporaryCopyTemplate() {
   localStorage.removeItem(TEMPORARY_COPY_TEMPLATE_STORAGE_KEY)
 }
 
-function templatesEqual(left: TeamTemplate, right: TeamTemplate): boolean {
-  return JSON.stringify(normalizeTemplate(left)) === JSON.stringify(normalizeTemplate(right))
+export function templatesEqual(left: TeamTemplate, right: TeamTemplate): boolean {
+  return (
+    JSON.stringify(toStableComparable(normalizeTemplate(left)))
+    === JSON.stringify(toStableComparable(normalizeTemplate(right)))
+  )
 }
 
 function createConflictTemplateCopy(template: TeamTemplate, now: number): TeamTemplate {

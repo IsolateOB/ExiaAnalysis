@@ -1,4 +1,4 @@
-import { createDefaultRaidPlan, normalizeRaidPlans } from './cloudSync.ts'
+import { createDefaultRaidPlan, normalizeRaidPlans, raidPlanDataEqual } from './cloudSync.ts'
 import { createEmptyPlanSlot, ensurePlanArray, hydratePlanSlot } from './planning.ts'
 import type { RaidPlanSnapshot } from './cloudSync.ts'
 import type { PlanSlot } from './types.ts'
@@ -101,6 +101,10 @@ type CreateOptimisticStateArgs = {
 }
 
 const clonePlans = (plans: RaidPlanSnapshot[]) => normalizeRaidPlans(plans)
+
+const normalizePlanningState = (planningState: Record<string, PlanSlot[]>) => Object.fromEntries(
+  Object.entries(planningState || {}).map(([accountKey, slots]) => [accountKey, ensurePlanArray(slots)]),
+)
 
 const applySlotUpdateField = (plans: RaidPlanSnapshot[], payload: SlotUpdatePayload) => {
   return clonePlans(plans).map((plan) => {
@@ -249,6 +253,36 @@ export const selectPatchBasePlans = ({
   visiblePlans: RaidPlanSnapshot[]
   optimisticPlans: RaidPlanSnapshot[]
 }) => clonePlans(visiblePlans.length > 0 ? visiblePlans : optimisticPlans)
+
+export const syncCurrentPlanData = ({
+  plans,
+  currentPlanId,
+  planningState,
+  updatedAt,
+}: {
+  plans: RaidPlanSnapshot[]
+  currentPlanId: string
+  planningState: Record<string, PlanSlot[]>
+  updatedAt: number
+}) => {
+  if (!currentPlanId) return plans
+
+  const normalizedPlanningState = normalizePlanningState(planningState)
+  let changed = false
+
+  const nextPlans = clonePlans(plans).map((plan) => {
+    if (plan.id !== currentPlanId) return plan
+    if (raidPlanDataEqual(plan.data, normalizedPlanningState)) return plan
+    changed = true
+    return {
+      ...plan,
+      data: normalizedPlanningState,
+      updatedAt,
+    }
+  })
+
+  return changed ? nextPlans : plans
+}
 
 export const buildPlanSeedPatches = ({
   plans,

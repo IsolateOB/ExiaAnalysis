@@ -29,3 +29,18 @@ test('TeamBuilder isolates parent callback props from effect dependencies', () =
     'TeamBuilder should wrap onTeamRatioChange in a stable effect event',
   )
 })
+
+test('TeamBuilder compares normalized templates before autosaving realtime member updates', () => {
+  const source = fs.readFileSync(teamBuilderPath, 'utf8')
+
+  assert.match(
+    source,
+    /templatesEqual\(currentTemplate,\s*comparableSnapshot\)/,
+    'TeamBuilder should reuse normalized template comparisons before queueing realtime replaceMembers patches',
+  )
+  assert.doesNotMatch(
+    source,
+    /JSON\.stringify\(currentTemplate\)\s*===\s*JSON\.stringify\(comparableSnapshot\)/,
+    'Direct JSON stringify comparisons keep treating normalized template metadata as content changes and can cause websocket autosave loops',
+  )
+})

@@ -58,7 +58,7 @@ const planSlotArraysEqual = (a: PlanSlot[] | undefined, b: PlanSlot[] | undefine
   return left.every((plan, index) => arePlansEqual(plan, right[index]))
 }
 
-const planDataEqual = (a: Record<string, PlanSlot[]>, b: Record<string, PlanSlot[]>) => {
+export const raidPlanDataEqual = (a: Record<string, PlanSlot[]>, b: Record<string, PlanSlot[]>) => {
   const keys = Array.from(new Set([...Object.keys(a), ...Object.keys(b)])).sort()
   return keys.every((key) => planSlotArraysEqual(a[key], b[key]))
 }
@@ -66,7 +66,7 @@ const planDataEqual = (a: Record<string, PlanSlot[]>, b: Record<string, PlanSlot
 const raidPlanEqual = (a: RaidPlanSnapshot | undefined, b: RaidPlanSnapshot | undefined) => {
   if (!a && !b) return true
   if (!a || !b) return false
-  return a.id === b.id && a.name === b.name && planDataEqual(a.data, b.data)
+  return a.id === b.id && a.name === b.name && raidPlanDataEqual(a.data, b.data)
 }
 
 export const raidPlansEqual = (a: RaidPlanSnapshot[], b: RaidPlanSnapshot[]) => {

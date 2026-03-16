@@ -21,6 +21,7 @@ import {
   mergePersistentTemplates,
   saveTemplates,
   saveTemporaryCopyTemplate,
+  templatesEqual,
   type TeamTemplate,
   TEMPORARY_COPY_TEMPLATE_ID,
 } from '../utils/templates'
@@ -450,7 +451,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (!currentTemplate) return
 
     const comparableSnapshot = buildCurrentSnapshot(currentTemplate, currentTemplate.updatedAt ?? currentTemplate.createdAt)
-    if (JSON.stringify(currentTemplate) === JSON.stringify(comparableSnapshot)) return
+    if (templatesEqual(currentTemplate, comparableSnapshot)) return
 
     const snapshot = buildCurrentSnapshot(currentTemplate)
 

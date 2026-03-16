@@ -46,6 +46,7 @@ import {
   reconcileIncomingPatch,
   reconcileMutationAck,
   selectPatchBasePlans,
+  syncCurrentPlanData,
   type RaidRealtimePatch,
 } from './UnionRaid/cloudRealtime.ts'
 import { mapIdsToCharacters } from '../utils/characters'
@@ -496,14 +497,22 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
       return
     }
 
-    const now = Date.now()
+    const syncedPlans = syncCurrentPlanData({
+      plans: plansRef.current,
+      currentPlanId,
+      planningState,
+      updatedAt: Date.now(),
+    })
+    if (syncedPlans === plansRef.current) return
 
-    setPlans(prev => prev.map(p => {
-      if (p.id !== currentPlanId) return p
-      if (JSON.stringify(p.data) === JSON.stringify(planningState)) return p
-      return { ...p, data: planningState, updatedAt: now }
-    }))
-  }, [planningState, currentPlanId])
+    const normalizedSyncedPlans = normalizeRaidPlans(syncedPlans)
+    plansRef.current = normalizeRaidPlans(syncedPlans)
+    optimisticPlansRef.current = normalizeRaidPlans(syncedPlans)
+    if (!authToken || pendingMutationsRef.current.length === 0) {
+      authoritativePlansRef.current = normalizeRaidPlans(syncedPlans)
+    }
+    setPlans(normalizedSyncedPlans)
+  }, [authToken, currentPlanId, planningState])
 
   const handleCreatePlan = () => {
     const newPlanId = nextMutationId()
