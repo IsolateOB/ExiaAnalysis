@@ -15,6 +15,8 @@ export interface TeamTemplate {
   name: string
   createdAt: number
   updatedAt?: number
+  localOnly?: boolean
+  conflictCopy?: boolean
   members: TeamTemplateMember[]
   totalDamageCoefficient: number
 }
@@ -22,27 +24,64 @@ export interface TeamTemplate {
 export const TEAM_TEMPLATE_STORAGE_KEY = 'nikke_team_templates'
 export const TEMPORARY_COPY_TEMPLATE_STORAGE_KEY = 'nikke_team_temporary_copy_template'
 export const TEMPORARY_COPY_TEMPLATE_ID = '__raid_copy__'
-export const TEMPORARY_COPY_TEMPLATE_NAME = '临时复制模板'
+export const TEMPORARY_COPY_TEMPLATE_NAME = '__temporary_copy__'
+
 const LEGACY_STORAGE_KEYS = ['exia_team_templates']
+const CONFLICT_TEMPLATE_ID_PATTERN = /-conflict-\d+$/
+const LEGACY_CONFLICT_COPY_SUFFIXES = [
+  '（冲突副本）',
+  '锛堝啿绐佸壇鏈級',
+  '(Conflict Copy)',
+]
 
 function readRawTemplatesFromStorage(key: string): TeamTemplate[] {
   const raw = localStorage.getItem(key)
   if (!raw) return []
 
-  const arr = JSON.parse(raw)
-  return Array.isArray(arr) ? arr : []
+  const parsed = JSON.parse(raw)
+  return Array.isArray(parsed) ? parsed : []
 }
 
 function cloneTemplate(template: TeamTemplate): TeamTemplate {
   return {
     ...template,
     updatedAt: template.updatedAt ?? template.createdAt,
-    members: Array.isArray(template.members) ? template.members.map((member) => ({ ...member })) : [],
+    members: Array.isArray(template.members)
+      ? template.members.map((member) => ({ ...member }))
+      : [],
   }
 }
 
+function stripConflictCopySuffix(name: string): string {
+  let nextName = String(name || '').trim()
+
+  LEGACY_CONFLICT_COPY_SUFFIXES.forEach((suffix) => {
+    if (nextName.endsWith(suffix)) {
+      nextName = nextName.slice(0, -suffix.length).trimEnd()
+    }
+  })
+
+  return nextName
+}
+
 function normalizeTemplate(template: TeamTemplate): TeamTemplate {
-  return cloneTemplate(template)
+  const cloned = cloneTemplate(template)
+  const conflictCopy = Boolean(cloned.conflictCopy || CONFLICT_TEMPLATE_ID_PATTERN.test(cloned.id))
+
+  return {
+    ...cloned,
+    name: conflictCopy ? stripConflictCopySuffix(cloned.name) : cloned.name,
+    conflictCopy,
+    localOnly: cloned.localOnly ?? conflictCopy,
+  }
+}
+
+function isTemplateCreateStub(template: TeamTemplate): boolean {
+  return (
+    Array.isArray(template.members)
+    && template.members.length === 0
+    && Number(template.totalDamageCoefficient || 0) === 0
+  )
 }
 
 function readTemplatesFromStorage(key: string): TeamTemplate[] {
@@ -82,22 +121,24 @@ export function listTemplates(): TeamTemplate[] {
   }
 }
 
-export function saveTemplate(tpl: TeamTemplate) {
+export function saveTemplate(template: TeamTemplate) {
   const list = listTemplates()
-  const idx = list.findIndex(x => x.id === tpl.id)
-  const normalized = normalizeTemplate(tpl)
-  if (idx >= 0) list[idx] = normalized
+  const index = list.findIndex((item) => item.id === template.id)
+  const normalized = normalizeTemplate(template)
+
+  if (index >= 0) list[index] = normalized
   else list.push(normalized)
+
   saveTemplates(list)
 }
 
 export function deleteTemplate(id: string) {
-  const list = listTemplates().filter(x => x.id !== id)
+  const list = listTemplates().filter((template) => template.id !== id)
   saveTemplates(list)
 }
 
 export function getTemplate(id: string): TeamTemplate | undefined {
-  return listTemplates().find(x => x.id === id)
+  return listTemplates().find((template) => template.id === id)
 }
 
 export function getTemporaryCopyTemplate(): TeamTemplate | null {
@@ -127,7 +168,9 @@ function createConflictTemplateCopy(template: TeamTemplate, now: number): TeamTe
   return {
     ...cloneTemplate(template),
     id: `${template.id}-conflict-${now}`,
-    name: `${template.name}（冲突副本）`,
+    name: stripConflictCopySuffix(template.name),
+    localOnly: true,
+    conflictCopy: true,
     updatedAt: now,
   }
 }
@@ -154,6 +197,13 @@ export function mergePersistentTemplates({
 
     if (!existing) {
       merged.set(normalizedRemote.id, normalizedRemote)
+      return
+    }
+
+    // A freshly seeded remote template may briefly exist as a create-stub
+    // before the replaceMembers patch arrives. Keeping the local copy avoids
+    // manufacturing conflict duplicates from that transient state.
+    if (isTemplateCreateStub(remoteTemplate)) {
       return
     }
 

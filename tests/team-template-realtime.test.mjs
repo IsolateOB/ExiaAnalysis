@@ -27,11 +27,13 @@ const makeCoefficients = () => ({
   axisHP: 0,
 })
 
-const makeTemplate = ({ id, name = id, createdAt = 1, updatedAt = createdAt, members = [] }) => ({
+const makeTemplate = ({ id, name = id, createdAt = 1, updatedAt = createdAt, members = [], localOnly = false, conflictCopy = false }) => ({
   id,
   name,
   createdAt,
   updatedAt,
+  localOnly,
+  conflictCopy,
   members,
   totalDamageCoefficient: members.reduce((sum, member) => sum + (member.damageCoefficient || 0), 0),
 })
@@ -125,6 +127,36 @@ test('buildTemplateSeedPatches never includes the temporary copy template', () =
   assert.equal(patches[0].payload.templateId, 'tpl-2')
   assert.equal(patches[0].op, 'template.create')
   assert.equal(patches[1].op, 'template.replaceMembers')
+})
+
+test('buildTemplateSeedPatches skips local-only conflict copies', () => {
+  const conflictTemplate = makeTemplate({
+    id: 'tpl-1-conflict-100',
+    name: 'template-1',
+    createdAt: 3,
+    updatedAt: 3,
+    localOnly: true,
+    conflictCopy: true,
+    members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeCoefficients() }],
+  })
+  const persistentTemplate = makeTemplate({
+    id: 'tpl-2',
+    name: 'template-2',
+    createdAt: 4,
+    updatedAt: 4,
+    members: [{ position: 1, characterId: '2001', damageCoefficient: 2, coefficients: makeCoefficients() }],
+  })
+
+  const patches = buildTemplateSeedPatches({
+    templates: [conflictTemplate, persistentTemplate],
+    sessionId: 'seed-session',
+    baseRevision: 0,
+    createMutationId: () => 'seed-id',
+  })
+
+  assert.equal(patches.length, 2)
+  assert.equal(patches[0].payload.templateId, 'tpl-2')
+  assert.equal(patches[1].payload.templateId, 'tpl-2')
 })
 
 test('getNextDispatchableTemplateMutation sends only one patch at a time', () => {

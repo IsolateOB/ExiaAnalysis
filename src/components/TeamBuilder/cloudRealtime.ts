@@ -232,7 +232,7 @@ export const buildTemplateSeedPatches = ({
   const patches: TeamTemplateRealtimePatch[] = []
 
   cloneTemplates(templates)
-    .filter((template) => template.id !== TEMPORARY_COPY_TEMPLATE_ID)
+    .filter((template) => template.id !== TEMPORARY_COPY_TEMPLATE_ID && !template.localOnly)
     .forEach((template) => {
       patches.push(buildTemplateCreatePatch({
         clientMutationId: createMutationId(),

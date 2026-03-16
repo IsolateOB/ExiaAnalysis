@@ -215,7 +215,11 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.exportFailed': '导出模板失败',
     'tpl.importFileAria': '导入模板文件',
     'tpl.defaultName': '默认模板',
+    'tpl.defaultTemplateName': '默认模板',
     'tpl.defaultNamePrefix': '模板',
+    'tpl.temporaryCopyName': '临时复制模板',
+    'tpl.localOnlyBadge': '仅本地',
+    'tpl.conflictCopySuffix': '（冲突副本）',
     'tpl.saveAsNew': '保存为新模板',
 
     // 上传
@@ -515,8 +519,12 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.exportFailed': 'Export failed',
     'tpl.importFileAria': 'Import template file',
     'tpl.defaultName': 'Default Template',
+    'tpl.defaultTemplateName': 'Default Template',
     'tpl.defaultNamePrefix': 'Template',
-    'tpl.saveAsNew': 'Save as New Template',
+    'tpl.temporaryCopyName': 'Temporary Copy',
+    'tpl.localOnlyBadge': 'Local Only',
+    'tpl.conflictCopySuffix': ' (Conflict Copy)',
+    'tpl.saveAsNew': 'Save as new template',
 
     // Upload
     'upload.title': 'Upload Accounts JSON',

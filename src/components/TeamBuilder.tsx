@@ -23,7 +23,6 @@ import {
   saveTemporaryCopyTemplate,
   type TeamTemplate,
   TEMPORARY_COPY_TEMPLATE_ID,
-  TEMPORARY_COPY_TEMPLATE_NAME,
 } from '../utils/templates'
 import { buildTemplateSnapshot, createEmptyTeam, upsertTemplateInList } from '../utils/teamTemplateState'
 import {
@@ -75,8 +74,8 @@ interface TeamBuilderProps {
 const API_BASE_URL = 'https://backend.nikke-exia.com'
 const REALTIME_API_BASE_URL = API_BASE_URL.replace(/^http/, 'ws')
 const DEFAULT_TEMPLATE_ID = 'default'
-const DEFAULT_TEMPLATE_NAME_KEY = 'tpl.defaultName'
 const MAX_TEMPLATES = 200
+const LEGACY_DEFAULT_TEMPLATE_NAMES = new Set(['默认模板', 'Default Template', '榛樿妯℃澘'])
 
 const createInitialTeam = (): TeamCharacter[] => (
   Array.from({ length: 5 }, (_, index) => ({
@@ -148,6 +147,12 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   })
 
   const normalizeCoefficients = normalizeTemplateCoefficients
+  const defaultTemplateName = t('tpl.defaultTemplateName')
+  const defaultTemplateNamePrefix = t('tpl.defaultNamePrefix')
+  const temporaryCopyTemplateName = t('tpl.temporaryCopyName')
+  const localOnlyBadgeLabel = t('tpl.localOnlyBadge')
+  const conflictCopySuffix = t('tpl.conflictCopySuffix')
+  const saveAsNewTemplateLabel = t('tpl.saveAsNew')
 
   const buildCoefficientsMapForTeam = useCallback((teamState: TeamCharacter[]) => {
     const next: { [position: number]: AttributeCoefficients } = {}
@@ -163,7 +168,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [characterStrengths, setCharacterStrengths] = useState<{ [position: number]: { baseline: number, target: number } }>({})
   const [coefficientsMap, setCoefficientsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [rawMap, setRawMap] = useState<RawStrengthMap>({})
-  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(() => readInitialPersistentTemplates(t(DEFAULT_TEMPLATE_NAME_KEY) || 'Default Template'))
+  const [persistentTemplates, setPersistentTemplates] = useState<TeamTemplate[]>(() => readInitialPersistentTemplates(defaultTemplateName))
   const [temporaryCopyTemplate, setTemporaryCopyTemplate] = useState<TeamTemplate | null>(() => getTemporaryCopyTemplate())
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
@@ -225,6 +230,19 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const getTemplateById = useCallback((templateId: string) => (
     visibleTemplates.find((template) => template.id === templateId)
   ), [visibleTemplates])
+
+  const isTemplateLocalOnly = useCallback((template: TeamTemplate) => (
+    template.id === TEMPORARY_COPY_TEMPLATE_ID || Boolean(template.localOnly)
+  ), [])
+
+  const getTemplateDisplayName = useCallback((template: TeamTemplate) => {
+    const isLegacyDefaultName = template.id === DEFAULT_TEMPLATE_ID && LEGACY_DEFAULT_TEMPLATE_NAMES.has(template.name)
+    const baseName = template.id === TEMPORARY_COPY_TEMPLATE_ID
+      ? temporaryCopyTemplateName
+      : (isLegacyDefaultName ? defaultTemplateName : template.name)
+
+    return template.conflictCopy ? `${baseName}${conflictCopySuffix}` : baseName
+  }, [conflictCopySuffix, defaultTemplateName, temporaryCopyTemplateName])
 
   const persistPersistentTemplates = useCallback((nextTemplates: TeamTemplate[]) => {
     persistentTemplatesRef.current = nextTemplates
@@ -320,12 +338,11 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }, [])
 
   const generateNextDefaultName = useCallback(() => {
-    const existingNames = persistentTemplatesRef.current.map((template) => template.name)
+    const existingNames = persistentTemplatesRef.current.map((template) => getTemplateDisplayName(template))
     let nextIndex = 1
-    const defaultPrefix = t('tpl.defaultNamePrefix') || 'Template'
-    while (existingNames.includes(`${defaultPrefix}${nextIndex}`)) nextIndex += 1
-    return `${defaultPrefix}${nextIndex}`
-  }, [t])
+    while (existingNames.includes(`${defaultTemplateNamePrefix}${nextIndex}`)) nextIndex += 1
+    return `${defaultTemplateNamePrefix}${nextIndex}`
+  }, [defaultTemplateNamePrefix, getTemplateDisplayName])
 
   const findCharacterDataById = useCallback((characterId: string, jsonData?: TeamBuilderRootData) => {
     if (!jsonData?.elements) return null
@@ -380,7 +397,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const nextCoefficients = buildCoefficientsMapForTeam(nextTeam)
     const snapshot = buildTemplateSnapshot({
       id: TEMPORARY_COPY_TEMPLATE_ID,
-      name: TEMPORARY_COPY_TEMPLATE_NAME,
+      name: temporaryCopyTemplateName,
       createdAt: temporaryCopyTemplate?.createdAt ?? nextTimestamp(),
       team: nextTeam,
       coefficientsMap: nextCoefficients,
@@ -401,7 +418,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return () => {
       cancelled = true
     }
-  }, [buildCoefficientsMapForTeam, externalTeam, nextTimestamp, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt])
+  }, [buildCoefficientsMapForTeam, externalTeam, nextTimestamp, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt, temporaryCopyTemplateName])
 
   useEffect(() => {
     if (!selectedTemplateId) return
@@ -985,15 +1002,16 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
               const template = getTemplateById(selectedTemplateId || '')
               if (!template) return ''
 
-              const isTemporary = template.id === TEMPORARY_COPY_TEMPLATE_ID
+              const isLocalOnly = isTemplateLocalOnly(template)
+              const displayName = getTemplateDisplayName(template)
               return (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                  <Typography noWrap title={template.name} sx={{ maxWidth: '100%' }}>
-                    {template.name}
+                  <Typography noWrap title={displayName} sx={{ maxWidth: '100%' }}>
+                    {displayName}
                   </Typography>
-                  {isTemporary ? (
+                  {isLocalOnly ? (
                     <Box component="span" sx={{ px: 0.75, py: 0.15, borderRadius: 999, bgcolor: '#fef3c7', color: '#92400e', fontSize: 12, lineHeight: 1.6, flexShrink: 0 }}>
-                      浠呮湰鍦?
+                      {localOnlyBadgeLabel}
                     </Box>
                   ) : null}
                 </Box>
@@ -1002,8 +1020,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           >
             {({ close }) => visibleTemplates.map((template) => {
               const isTemporary = template.id === TEMPORARY_COPY_TEMPLATE_ID
+              const isLocalOnly = isTemplateLocalOnly(template)
               const isSelected = template.id === selectedTemplateId
               const isRenamingCurrentTemplate = isRenaming && renameId === template.id
+              const displayName = getTemplateDisplayName(template)
 
               return (
                 <Box
@@ -1021,10 +1041,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                     px: 1.5,
                     py: 0.75,
                     cursor: isRenamingCurrentTemplate ? 'default' : 'pointer',
-                    bgcolor: isTemporary ? '#fff8e1' : (isSelected ? 'action.selected' : 'transparent'),
-                    borderBottom: isTemporary ? '1px solid #f3e8b6' : undefined,
+                    bgcolor: isLocalOnly ? '#fff8e1' : (isSelected ? 'action.selected' : 'transparent'),
+                    borderBottom: isLocalOnly ? '1px solid #f3e8b6' : undefined,
                     '&:hover': isRenamingCurrentTemplate ? undefined : {
-                      bgcolor: isTemporary ? '#fff3cd' : 'action.hover',
+                      bgcolor: isLocalOnly ? '#fff3cd' : 'action.hover',
                     },
                   }}
                 >
@@ -1066,17 +1086,17 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                   ) : (
                     <>
                       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" noWrap title={template.name}>
-                          {template.name}
+                        <Typography variant="body2" noWrap title={displayName}>
+                          {displayName}
                         </Typography>
-                        {isTemporary ? (
+                        {isLocalOnly ? (
                           <Box component="span" sx={{ px: 0.75, py: 0.15, borderRadius: 999, bgcolor: '#f59e0b', color: '#fff', fontSize: 12, lineHeight: 1.6, flexShrink: 0 }}>
-                            浠呮湰鍦?
+                            {localOnlyBadgeLabel}
                           </Box>
                         ) : null}
                       </Box>
                       {!isTemporary ? (
-                        <Tooltip title={t('tpl.rename') || 'Rename'}>
+                        <Tooltip title={t('tpl.rename')}>
                           <IconButton size="small" onClick={(event) => { event.stopPropagation(); startRenameTemplate(template.id) }}>
                             <EditIcon fontSize="small" />
                           </IconButton>
@@ -1084,13 +1104,13 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                       ) : (
                         <Box sx={{ width: 32, flexShrink: 0 }} />
                       )}
-                      <Tooltip title={t('tpl.copy') || 'Copy'}>
+                      <Tooltip title={t('tpl.copy')}>
                         <IconButton size="small" onClick={(event) => { event.stopPropagation(); handleDuplicateTemplate(template.id); close() }}>
                           <ContentCopyIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       {!isTemporary ? (
-                        <Tooltip title={t('tpl.delete') || 'Delete'}>
+                        <Tooltip title={t('tpl.delete')}>
                           <span>
                             <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); handleDeleteTemplate(template.id); close() }}>
                               <DeleteIcon fontSize="small" />
@@ -1107,9 +1127,9 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
             })}
           </InteractiveSelector>
 
-          <Tooltip title={t('tpl.saveAsNew') || 'Save as New Template'}>
+          <Tooltip title={saveAsNewTemplateLabel}>
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreateTemplate} disabled={persistentTemplates.length >= MAX_TEMPLATES}>
-              {t('tpl.create') || 'Create'}
+              {t('tpl.create')}
             </Button>
           </Tooltip>
         </Stack>

@@ -118,7 +118,11 @@ test('temporary copy template persists in its own localStorage key', () => {
 
   const stored = getTemporaryCopyTemplate()
 
-  assert.deepEqual(stored, temporaryTemplate)
+  assert.deepEqual(stored, {
+    ...temporaryTemplate,
+    conflictCopy: false,
+    localOnly: false,
+  })
   assert.deepEqual(listTemplates(), [])
 })
 
@@ -152,7 +156,46 @@ test('mergePersistentTemplates keeps the newer template and turns the older conf
   assert.equal(merged[0].updatedAt, 80)
 
   assert.notEqual(merged[1].id, 'shared-id')
-  assert.match(merged[1].name, /冲突副本/)
+  assert.equal(merged[1].conflictCopy, true)
+  assert.equal(merged[1].localOnly, true)
   assert.equal(merged[1].updatedAt, 100)
   assert.equal(merged[1].members[0].characterId, '1001')
+})
+
+test('mergePersistentTemplates ignores remote create stubs for templates that already exist locally', () => {
+  const localTemplate = buildTemplateSnapshot({
+    id: 'shared-id',
+    name: 'template-1',
+    team: Array.from({ length: 5 }, (_, index) => ({
+      position: index + 1,
+      damageCoefficient: 1,
+      character: index === 0 ? { id: 1001 } : undefined,
+    })),
+    coefficientsMap: {},
+    normalizeCoefficients: (coefficients) => ({
+      ...makeDefaultCoefficients(),
+      ...coefficients,
+    }),
+    createdAt: 1,
+    updatedAt: 50,
+  })
+  const remoteTemplateStub = {
+    id: 'shared-id',
+    name: 'template-1',
+    createdAt: 80,
+    updatedAt: 80,
+    members: [],
+    totalDamageCoefficient: 0,
+  }
+
+  const merged = mergePersistentTemplates({
+    localTemplates: [localTemplate],
+    remoteTemplates: [remoteTemplateStub],
+    now: 100,
+  })
+
+  assert.equal(merged.length, 1)
+  assert.equal(merged[0].id, 'shared-id')
+  assert.equal(merged[0].members.length, 5)
+  assert.equal(merged[0].members[0].characterId, '1001')
 })
