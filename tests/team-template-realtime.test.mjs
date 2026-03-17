@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   applyIncomingPatch,
   buildTemplateCreatePatch,
+  buildTemplateDeletePatch,
   buildTemplateSeedPatches,
   createOptimisticTemplateState,
   getNextDispatchableTemplateMutation,
@@ -56,6 +57,26 @@ test('buildTemplateCreatePatch creates a realtime create payload', () => {
     payload: {
       templateId: 'tpl-1',
       name: '模板1',
+    },
+  })
+})
+
+test('buildTemplateDeletePatch creates a realtime delete payload', () => {
+  const patch = buildTemplateDeletePatch({
+    clientMutationId: 'm-delete',
+    sessionId: 's-1',
+    baseRevision: 8,
+    templateId: 'tpl-1',
+  })
+
+  assert.deepEqual(patch, {
+    type: 'patch',
+    clientMutationId: 'm-delete',
+    sessionId: 's-1',
+    baseRevision: 8,
+    op: 'template.delete',
+    payload: {
+      templateId: 'tpl-1',
     },
   })
 })

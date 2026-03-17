@@ -5,6 +5,7 @@ import {
   getTemporaryCopyTemplate,
   listTemplates,
   mergePersistentTemplates,
+  reconcilePersistentTemplatesFromSnapshot,
   saveTemporaryCopyTemplate,
   templatesEqual,
 } from '../src/utils/templates.ts'
@@ -238,5 +239,87 @@ test('templatesEqual treats normalized non-local metadata as unchanged', () => {
     templatesEqual(storedTemplate, rebuiltSnapshot),
     true,
     'A rebuilt snapshot with identical members should not be treated as changed just because normalized metadata fields are absent',
+  )
+})
+
+test('reconcilePersistentTemplatesFromSnapshot does not re-seed cloud templates that disappeared remotely', () => {
+  const staleCloudTemplate = {
+    id: 'tpl-1',
+    name: '云端旧模板',
+    createdAt: 1,
+    updatedAt: 10,
+    members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 1,
+  }
+  const offlineLocalTemplate = {
+    id: 'tpl-local',
+    name: '本地模板',
+    createdAt: 2,
+    updatedAt: 20,
+    members: [{ position: 1, characterId: '2001', damageCoefficient: 2, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 2,
+  }
+
+  const reconciled = reconcilePersistentTemplatesFromSnapshot({
+    localTemplates: [staleCloudTemplate, offlineLocalTemplate],
+    remoteTemplates: [],
+    knownCloudTemplateIds: ['tpl-1'],
+    deletedTemplateIds: [],
+    now: 100,
+  })
+
+  assert.deepEqual(
+    reconciled.mergedTemplates.map((template) => template.id),
+    ['tpl-local'],
+    'Templates that were previously known to exist in cloud should not be resurrected from stale local cache when the latest remote snapshot no longer contains them',
+  )
+  assert.deepEqual(
+    reconciled.templatesToSeed.map((template) => template.id),
+    ['tpl-local'],
+    'Only truly local templates should be seeded back to cloud',
+  )
+  assert.deepEqual(
+    reconciled.templateIdsToDeleteFromCloud,
+    [],
+    'A template that is already absent remotely should not generate extra delete patches',
+  )
+})
+
+test('reconcilePersistentTemplatesFromSnapshot keeps deleted templates hidden and retries cloud deletion after reconnect', () => {
+  const deletedTemplate = {
+    id: 'tpl-2',
+    name: '待删除模板',
+    createdAt: 3,
+    updatedAt: 30,
+    members: [{ position: 1, characterId: '3001', damageCoefficient: 3, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 3,
+  }
+  const remoteTemplate = {
+    ...deletedTemplate,
+    updatedAt: 40,
+  }
+
+  const reconciled = reconcilePersistentTemplatesFromSnapshot({
+    localTemplates: [deletedTemplate],
+    remoteTemplates: [remoteTemplate],
+    knownCloudTemplateIds: ['tpl-2'],
+    deletedTemplateIds: ['tpl-2'],
+    now: 200,
+  })
+
+  assert.deepEqual(
+    reconciled.mergedTemplates,
+    [],
+    'Templates explicitly deleted locally should stay hidden even if a stale remote snapshot still includes them',
+  )
+  assert.deepEqual(
+    reconciled.templatesToSeed,
+    [],
+    'Deleted templates must never be re-seeded back into cloud',
+  )
+  assert.deepEqual(
+    reconciled.templateIdsToDeleteFromCloud,
+    ['tpl-2'],
+    'Deleted templates that still exist remotely should be turned into follow-up delete patches on reconnect',
   )
 })

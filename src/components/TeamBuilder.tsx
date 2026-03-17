@@ -17,8 +17,12 @@ import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficie
 import {
   clearTemporaryCopyTemplate,
   getTemporaryCopyTemplate,
+  listDeletedCloudTemplateIds,
+  listKnownCloudTemplateIds,
   listTemplates,
-  mergePersistentTemplates,
+  reconcilePersistentTemplatesFromSnapshot,
+  rememberDeletedCloudTemplateId,
+  rememberKnownCloudTemplateIds,
   saveTemplates,
   saveTemporaryCopyTemplate,
   templatesEqual,
@@ -28,6 +32,7 @@ import {
 import { buildTemplateSnapshot, createEmptyTeam, upsertTemplateInList } from '../utils/teamTemplateState'
 import {
   buildTemplateCreatePatch,
+  buildTemplateDeletePatch,
   buildTemplateReplaceMembersPatch,
   buildTemplateSeedPatches,
   createOptimisticTemplateState,
@@ -639,27 +644,37 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
       if (message.type === 'snapshot') {
         const remoteTemplates = Array.isArray(message.templates) ? message.templates as TeamTemplate[] : []
-        const localTemplates = listTemplates()
-        const mergedTemplates = mergePersistentTemplates({
-          localTemplates,
+        const snapshotResolution = reconcilePersistentTemplatesFromSnapshot({
+          localTemplates: listTemplates(),
           remoteTemplates,
+          knownCloudTemplateIds: listKnownCloudTemplateIds(),
+          deletedTemplateIds: listDeletedCloudTemplateIds(),
           now: Date.now(),
         })
         const mergedState = createOptimisticTemplateState({
-          templates: mergedTemplates,
+          templates: snapshotResolution.mergedTemplates,
           lastRevision: Number(message.revision || 0),
           pendingMutations: pendingMutationsRef.current,
         })
         commitRealtimeState(mergedState)
 
-        const remoteIds = new Set(remoteTemplates.map((template) => template.id))
-        const templatesToSeed = mergedTemplates.filter((template) => !remoteIds.has(template.id))
-        if (templatesToSeed.length > 0) {
-          queueRealtimeMutations(buildTemplateSeedPatches({
-            templates: templatesToSeed,
+        rememberKnownCloudTemplateIds(snapshotResolution.knownCloudTemplateIds)
+
+        const patchesToQueue = [
+          ...buildTemplateSeedPatches({
+            templates: snapshotResolution.templatesToSeed,
             sessionId: sessionIdRef.current,
             baseRevision: Number(message.revision || 0),
-          }))
+          }),
+          ...snapshotResolution.templateIdsToDeleteFromCloud.map((templateId) => buildTemplateDeletePatch({
+            clientMutationId: nextSequenceId('mutation'),
+            sessionId: sessionIdRef.current,
+            baseRevision: Number(message.revision || 0),
+            templateId,
+          })),
+        ]
+        if (patchesToQueue.length > 0) {
+          queueRealtimeMutations(patchesToQueue)
         }
         sendPendingMutations()
         return
@@ -681,6 +696,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         })
         nextState.lastRevision = Number(message.revision || nextState.lastRevision)
         commitRealtimeState(nextState)
+        rememberKnownCloudTemplateIds(nextState.authoritativeTemplates.map((template) => template.id))
         sendPendingMutations()
         return
       }
@@ -702,6 +718,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           inflightMutationIdRef.current = null
         }
         commitRealtimeState(nextState)
+        rememberKnownCloudTemplateIds(nextState.authoritativeTemplates.map((template) => template.id))
         sendPendingMutations()
         return
       }
@@ -720,6 +737,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           },
         )
         commitRealtimeState(nextState)
+        rememberKnownCloudTemplateIds(nextState.authoritativeTemplates.map((template) => template.id))
         return
       }
 
@@ -760,7 +778,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       socket.onerror = null
       socket.close()
     }
-  }, [authToken, commitRealtimeState, queueRealtimeMutations, reconnectNonce, sendPendingMutations])
+  }, [authToken, commitRealtimeState, nextSequenceId, queueRealtimeMutations, reconnectNonce, sendPendingMutations])
 
   const handleAddCharacter = (position: number) => {
     setSelectedPosition(position)
@@ -910,16 +928,15 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const handleDeleteTemplate = (templateId?: string) => {
     const targetId = templateId || selectedTemplateId
     if (!targetId || targetId === DEFAULT_TEMPLATE_ID || targetId === TEMPORARY_COPY_TEMPLATE_ID) return
+    rememberDeletedCloudTemplateId(targetId)
 
     if (authToken) {
-      queueRealtimeMutations([{
-        type: 'patch',
+      queueRealtimeMutations([buildTemplateDeletePatch({
         clientMutationId: nextSequenceId('mutation'),
         sessionId: sessionIdRef.current,
         baseRevision: lastRevisionRef.current,
-        op: 'template.delete',
-        payload: { templateId: targetId },
-      }])
+        templateId: targetId,
+      })])
     } else {
       const nextTemplates = persistentTemplatesRef.current.filter((template) => template.id !== targetId)
       authoritativeTemplatesRef.current = nextTemplates

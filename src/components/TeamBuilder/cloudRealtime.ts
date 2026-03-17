@@ -191,6 +191,27 @@ export const buildTemplateCreatePatch = ({
   },
 })
 
+export const buildTemplateDeletePatch = ({
+  clientMutationId,
+  sessionId,
+  baseRevision,
+  templateId,
+}: {
+  clientMutationId: string
+  sessionId: string
+  baseRevision: number
+  templateId: string
+}): TeamTemplateRealtimePatch => ({
+  type: 'patch',
+  clientMutationId,
+  sessionId,
+  baseRevision,
+  op: 'template.delete',
+  payload: {
+    templateId,
+  },
+})
+
 export const buildTemplateReplaceMembersPatch = ({
   clientMutationId,
   sessionId,
