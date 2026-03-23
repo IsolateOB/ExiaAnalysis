@@ -349,14 +349,17 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   }, [characterFromList, normalizeCoefficients])
 
   const buildCurrentSnapshot = useCallback((template: TeamTemplate, updatedAt?: number) => (
-    buildTemplateSnapshot({
-      id: template.id,
-      name: template.name,
-      createdAt: template.createdAt,
-      updatedAt,
-      team,
-      coefficientsMap,
-      normalizeCoefficients,
+    createTemplateWithScope({
+      template: buildTemplateSnapshot({
+        id: template.id,
+        name: template.name,
+        createdAt: template.createdAt,
+        updatedAt,
+        team,
+        coefficientsMap,
+        normalizeCoefficients,
+      }),
+      localOnly: Boolean(template.localOnly),
     })
   ), [coefficientsMap, normalizeCoefficients, team])
 

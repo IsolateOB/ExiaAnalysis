@@ -64,3 +64,18 @@ test('TeamBuilder treats offline-created templates as local-only and no longer r
     'Conflict-copy presentation should be removed once cloud snapshots directly replace stale cloud cache',
   )
 })
+
+test('TeamBuilder preserves localOnly metadata when comparing and saving snapshots', () => {
+  const source = fs.readFileSync(teamBuilderPath, 'utf8')
+
+  assert.match(
+    source,
+    /const buildCurrentSnapshot = useCallback\(\(template: TeamTemplate, updatedAt\?: number\) =>\s*\(\s*createTemplateWithScope\(/s,
+    'Local-only templates must keep their scope metadata in current snapshots, otherwise the autosave comparison will think they changed on every render and freeze the page',
+  )
+  assert.match(
+    source,
+    /localOnly:\s*Boolean\(template\.localOnly\)/,
+    'Current snapshots should preserve the template localOnly flag so templatesEqual can detect true no-op renders',
+  )
+})
