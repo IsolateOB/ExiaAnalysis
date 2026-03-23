@@ -157,22 +157,6 @@ const CharacterFilterDialog: React.FC<CharacterFilterDialogProps> = ({
   }
 
   const getBurstLabel = (burst: Character['use_burst_skill']) => {
-    const romanMap: Record<string, string> = {
-      Step1: 'I',
-      Step2: 'II',
-      Step3: 'III'
-    }
-
-    if (burst === 'AllStep') {
-      const suffix = t('option.burst.AllStep')
-      return lang === 'zh' ? `鐖嗚 ${suffix}` : `Burst ${suffix}`
-    }
-
-    const roman = romanMap[burst]
-    if (roman) {
-      return lang === 'zh' ? `鐖嗚 ${roman}` : `Burst ${roman}`
-    }
-
     return t(`option.burst.${burst}`)
   }
 

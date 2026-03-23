@@ -84,35 +84,6 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
     'StatAccuracyCircle',
     'StatDef',
   ]
-  // 缈昏瘧鏄犲皠
-  const translations = {
-    class: {
-      Attacker: 'Attacker',
-      Defender: 'Defender',
-      Supporter: 'Supporter',
-    },
-    element: {
-      Electronic: 'Electronic',
-      Fire: 'Fire',
-      Wind: 'Wind',
-      Water: 'Water',
-      Iron: 'Iron',
-    },
-    corporation: {
-      ELYSION: 'ELYSION',
-      MISSILIS: 'MISSILIS',
-      TETRA: 'TETRA',
-      PILGRIM: 'PILGRIM',
-      ABNORMAL: 'ABNORMAL',
-    },
-    burstSkill: {
-      Step1: 'Step I',
-      Step2: 'Step II',
-      Step3: 'Step III',
-      AllStep: 'All Steps',
-    },
-  }
-  
   if (!character) {
     return (
       <Box
@@ -174,13 +145,11 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minWidth: 0 }}>
             <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{lang === 'zh' ? character.name_cn : character.name_en}</Typography>
             <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
-              {lang === 'zh' ? translations.element[character.element] : character.element}
-              {' '}路{' '}
-              {lang === 'zh' ? translations.burstSkill[character.use_burst_skill] : (
-                character.use_burst_skill === 'Step1' ? 'Step I' : character.use_burst_skill === 'Step2' ? 'Step II' : character.use_burst_skill === 'Step3' ? 'Step III' : 'All Steps'
-              )}
-              {' '}路{' '}
-              {lang === 'zh' ? translations.class[character.class] : character.class}
+              {t('option.element.' + character.element)}
+              {' | '}
+              {t('option.burst.' + character.use_burst_skill)}
+              {' | '}
+              {t('option.class.' + character.class)}
             </Typography>
           </Box>
         </Box>
