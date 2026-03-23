@@ -68,6 +68,7 @@ interface TeamBuilderProps {
   onTeamRatioChange?: (scale: number, ratioLabel: string) => void
   onTeamSelectionChange?: (chars: (Character | undefined)[], coeffs: { [position: number]: AttributeCoefficients }) => void
   externalTeam?: (Character | undefined)[]
+  externalTeamEventId?: number
   authToken?: string | null
   nikkeList?: Character[]
 }
@@ -151,6 +152,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   onTeamRatioChange,
   onTeamSelectionChange,
   externalTeam,
+  externalTeamEventId,
   authToken,
   nikkeList: propNikkeList,
 }) => {
@@ -202,8 +204,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   const defaultTemplateInitRef = useRef(true)
   const isHydratingTemplateRef = useRef(false)
-  const isInternalUpdateRef = useRef(false)
   const lastAppliedTemplateIdRef = useRef('')
+  const lastHandledExternalTeamEventIdRef = useRef(0)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
   const persistentTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
   const authoritativeTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
@@ -420,10 +422,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   useEffect(() => {
     if (!externalTeam || externalTeam.length === 0) return
-    if (isInternalUpdateRef.current) {
-      isInternalUpdateRef.current = false
-      return
-    }
+    if (!externalTeamEventId || externalTeamEventId === lastHandledExternalTeamEventIdRef.current) return
+    lastHandledExternalTeamEventIdRef.current = externalTeamEventId
 
     const nextTeam = buildCharactersTeam(externalTeam)
     const nextCoefficients = buildCoefficientsMapForTeam(nextTeam)
@@ -450,7 +450,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return () => {
       cancelled = true
     }
-  }, [buildCoefficientsMapForTeam, externalTeam, nextTimestamp, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt, temporaryCopyTemplateName])
+  }, [buildCoefficientsMapForTeam, externalTeam, externalTeamEventId, nextTimestamp, normalizeCoefficients, persistTemporaryTemplate, temporaryCopyTemplate?.createdAt, temporaryCopyTemplateName])
 
   useEffect(() => {
     if (!selectedTemplateId) return
@@ -614,12 +614,11 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
     void calculateAllStrengths()
 
-    const coeffsWithWeight: { [position: number]: AttributeCoefficients } = {}
-    team.forEach((slot) => {
-      const base = coefficientsMap[slot.position] || getDefaultCoefficients()
-      coeffsWithWeight[slot.position] = { ...base, damageWeight: slot.damageCoefficient || 0 }
-    })
-    isInternalUpdateRef.current = true
+      const coeffsWithWeight: { [position: number]: AttributeCoefficients } = {}
+      team.forEach((slot) => {
+        const base = coefficientsMap[slot.position] || getDefaultCoefficients()
+        coeffsWithWeight[slot.position] = { ...base, damageWeight: slot.damageCoefficient || 0 }
+      })
     emitTeamSelectionChange(team.map((slot) => slot.character), coeffsWithWeight)
   }, [baselineData, coefficientsMap, findCharacterDataById, targetData, team])
 

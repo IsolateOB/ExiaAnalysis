@@ -50,6 +50,7 @@ import {
   type RaidRealtimePatch,
 } from './UnionRaid/cloudRealtime.ts'
 import { mapIdsToCharacters } from '../utils/characters'
+import type { ImportedRaidPlanningEntry, RaidPlanningExportData } from '../utils/accountListWorkbook'
 import {
   formatActualDamage,
   ensurePlanArray,
@@ -65,7 +66,7 @@ import {
   STEP_TO_ROMAN,
   MAX_PLAN_CHARACTERS
 } from './UnionRaid/constants'
-import { getAccountKey, getCharacterName, sortCharacterIdsByBurst } from './UnionRaid/helpers'
+import { getAccountKey, getCharacterName, getGameUid, sortCharacterIdsByBurst } from './UnionRaid/helpers'
 import type { ActualStrike, PlanSlot, StrikeView } from './UnionRaid/types'
 
 type RaidPlan = ReturnType<typeof normalizeRaidPlans>[number]
@@ -99,6 +100,9 @@ interface UnionRaidStatsProps {
   nikkeList?: Character[]
   onCopyTeam?: (characters: Character[]) => void
   onNotify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void
+  onPlanningExportDataChange?: (data: RaidPlanningExportData) => void
+  importedPlanningEntries?: ImportedRaidPlanningEntry[]
+  importedPlanningEventId?: number
   teamBuilderTeam?: (Character | undefined)[]
   authToken?: string | null
   restricted?: boolean
@@ -113,6 +117,9 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   nikkeList,
   onCopyTeam,
   onNotify,
+  onPlanningExportDataChange,
+  importedPlanningEntries,
+  importedPlanningEventId,
   teamBuilderTeam,
   authToken,
   restricted = false
@@ -163,13 +170,14 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   const realtimeConnectionIdRef = useRef(0)
   const mutationCounterRef = useRef(0)
   const sessionIdRef = useRef(`raid-plan-${stableIdBase}`)
+  const lastHandledPlanningImportEventIdRef = useRef(0)
 
   const nextMutationId = useCallback(() => {
     mutationCounterRef.current += 1
     return `raid-mutation-${stableIdBase}-${mutationCounterRef.current}`
   }, [stableIdBase])
 
-  const { planningState, mutatePlanSlot, replaceAllPlanning } = useUnionRaidPlanning(accounts)
+  const { planningState, mutatePlanSlot, replaceAllPlanning, importPlanningData } = useUnionRaidPlanning(accounts)
 
   useEffect(() => {
     plansRef.current = plans
@@ -186,6 +194,19 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
   useEffect(() => {
     onNotifyRef.current = onNotify
   }, [onNotify])
+
+  const currentPlanName = useMemo(() => (
+    plans.find((plan) => plan.id === currentPlanId)?.name || ''
+  ), [currentPlanId, plans])
+
+  useEffect(() => {
+    onPlanningExportDataChange?.({
+      currentPlanName,
+      planningState,
+      nikkeMap,
+      lang,
+    })
+  }, [currentPlanName, lang, nikkeMap, onPlanningExportDataChange, planningState])
 
   const applyPlanSelection = useCallback((nextPlans: RaidPlan[], requestedPlanId?: string) => {
     const normalized = normalizeRaidPlans(nextPlans)
@@ -513,6 +534,108 @@ const UnionRaidStats: React.FC<UnionRaidStatsProps> = ({
     }
     setPlans(normalizedSyncedPlans)
   }, [authToken, currentPlanId, planningState])
+
+  const applyImportedPlanningEntries = useCallback((entries: ImportedRaidPlanningEntry[]) => {
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return { matched: 0, unmatched: 0 }
+    }
+
+    if (!authToken || !currentPlanId) {
+      return importPlanningData(entries)
+    }
+
+    const accountKeyByUid: Record<string, string> = {}
+    accounts.forEach((account) => {
+      const uid = getGameUid(account)
+      const accountKey = getAccountKey(account)
+      if (!uid || !accountKey) return
+      accountKeyByUid[uid] = accountKey
+    })
+
+    const patches: RaidRealtimePatch[] = []
+    let matched = 0
+    let unmatched = 0
+
+    entries.forEach((entry) => {
+      const uid = String(entry?.game_uid || '').trim()
+      const accountKey = accountKeyByUid[uid]
+      if (!uid || !accountKey) {
+        unmatched += 1
+        return
+      }
+
+      const plans = ensurePlanArray(entry?.plans)
+      plans.forEach((plan, planIndex) => {
+        patches.push(
+          buildSlotUpdateFieldPatch({
+            clientMutationId: nextMutationId(),
+            sessionId: sessionIdRef.current,
+            baseRevision: lastRevisionRef.current,
+            planId: currentPlanId,
+            accountKey,
+            slotIndex: planIndex,
+            field: 'step',
+            value: plan.step,
+          }),
+          buildSlotUpdateFieldPatch({
+            clientMutationId: nextMutationId(),
+            sessionId: sessionIdRef.current,
+            baseRevision: lastRevisionRef.current,
+            planId: currentPlanId,
+            accountKey,
+            slotIndex: planIndex,
+            field: 'predictedDamage',
+            value: plan.predictedDamage,
+          }),
+          buildSlotUpdateFieldPatch({
+            clientMutationId: nextMutationId(),
+            sessionId: sessionIdRef.current,
+            baseRevision: lastRevisionRef.current,
+            planId: currentPlanId,
+            accountKey,
+            slotIndex: planIndex,
+            field: 'characterIds',
+            value: [...plan.characterIds],
+          }),
+        )
+      })
+
+      matched += 1
+    })
+
+    if (patches.length > 0) {
+      queueRealtimePatches(patches, currentPlanId)
+    }
+
+    return { matched, unmatched }
+  }, [accounts, authToken, currentPlanId, importPlanningData, nextMutationId, queueRealtimePatches])
+
+  useEffect(() => {
+    if (!importedPlanningEventId || importedPlanningEventId === lastHandledPlanningImportEventIdRef.current) return
+    lastHandledPlanningImportEventIdRef.current = importedPlanningEventId
+
+    const result = applyImportedPlanningEntries(importedPlanningEntries || [])
+    if (result.matched === 0) {
+      onNotifyRef.current?.(t('accountList.importPlanningNoMatches') || 'Uploaded raid planning did not match any current account', 'warning')
+      return
+    }
+
+    if (result.unmatched > 0) {
+      onNotifyRef.current?.(
+        (t('accountList.importPlanningPartial') || 'Imported raid planning for {matched} accounts and skipped {unmatched} unmatched accounts')
+          .replace('{matched}', String(result.matched))
+          .replace('{unmatched}', String(result.unmatched)),
+        'warning',
+      )
+      return
+    }
+
+    onNotifyRef.current?.(
+      (t('accountList.importPlanningSuccess') || 'Imported raid planning for {matched} accounts')
+        .replace('{matched}', String(result.matched)),
+      'success',
+    )
+  }, [applyImportedPlanningEntries, importedPlanningEntries, importedPlanningEventId, t])
 
   const handleCreatePlan = () => {
     const newPlanId = nextMutationId()

@@ -35,6 +35,12 @@ import {
   fetchGuildSyncLevels,
   fetchCloudAccountLists
 } from './services/api'
+import {
+  buildAccountListWorkbook,
+  parseAccountListWorkbook,
+  type ImportedRaidPlanningEntry,
+  type RaidPlanningExportData,
+} from './utils/accountListWorkbook'
 
 
 const AUTH_STORAGE_KEY = 'exia-analysis-auth'
@@ -43,9 +49,6 @@ const API_BASE_URL = 'https://backend.nikke-exia.com'
 const SIDEBAR_WIDTH_MD = 400
 const SIDEBAR_TOGGLE_SIZE = 44
 const AUTH_BROADCAST_CHANNEL = 'exia-auth'
-
-type SpreadsheetCell = string | number | boolean | null | undefined
-type SpreadsheetRow = SpreadsheetCell[]
 
 type StoredAuthPayload = {
   token?: string
@@ -91,8 +94,13 @@ const App: React.FC = () => {
   const [uploadedFileName, setUploadedFileName] = useState<string | undefined>(undefined)
   const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [teamChars, setTeamChars] = useState<(Character | undefined)[]>([])
+  const [copiedTeam, setCopiedTeam] = useState<(Character | undefined)[]>([])
+  const [copiedTeamEventId, setCopiedTeamEventId] = useState(0)
+  const [importedPlanningEntries, setImportedPlanningEntries] = useState<ImportedRaidPlanningEntry[]>([])
+  const [importedPlanningEventId, setImportedPlanningEventId] = useState(0)
   const [coeffsMap, setCoeffsMap] = useState<{ [position: number]: AttributeCoefficients }>({})
   const [nikkeList, setNikkeList] = useState<Character[]>([])
+  const planningExportDataRef = useRef<RaidPlanningExportData | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
   const rebuildAccountsRef = useRef(false)
@@ -143,17 +151,26 @@ const App: React.FC = () => {
   })
   const builtAccountsCacheRef = useRef<Record<string, AccountRecord[]>>({})
 
-  const handleStatusChange = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+  const handleStatusChange = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setNotification({
       open: true,
       message,
       severity
     })
-  }
+  }, [])
 
   const handleCloseNotification = () => {
     setNotification(prev => ({ ...prev, open: false }))
   }
+
+  const sanitizeFileNamePart = (value: string) => (
+    value
+      .trim()
+      .replace(/[<>:"/\\|?*]/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+  )
 
   // Load local lists on mount
   useEffect(() => {
@@ -184,54 +201,19 @@ const App: React.FC = () => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: 'array' })
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(worksheet, { header: 1 })
-        
-        if (rows.length < 2) {
-          handleStatusChange('琛ㄦ牸鏁版嵁涓虹┖', 'error')
-          return
-        }
-
-        const headers = rows[0] as string[]
-        let gameUidCol = -1, usernameCol = -1, cookieCol = -1
-        
-        headers.forEach((header, index) => {
-          if (!header) return
-          const val = String(header).toLowerCase()
-          if (val.includes('game') && val.includes('uid')) gameUidCol = index
-          else if (val.includes('璐﹀彿') || val.includes('username') || val.includes('name')) usernameCol = index
-          else if (val.includes('cookie') && !val.includes('鏇存柊') && !val.includes('updated') && !val.includes('date') && cookieCol === -1) cookieCol = index
-        })
-
-        const localAccounts: AccountRecord[] = []
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i]
-          if (!row || row.length === 0) continue
-          const game_uid = gameUidCol >= 0 ? String(row[gameUidCol] || '').trim() : ''
-          const username = usernameCol >= 0 ? String(row[usernameCol] || '').trim() : ''
-          const cookie = cookieCol >= 0 ? String(row[cookieCol] || '').trim() : ''
-          
-          if (game_uid || username || cookie) {
-            localAccounts.push({
-              game_uid,
-              name: username || `鏈湴璐﹀彿${i}`,
-              role_name: username || `鏈湴璐﹀彿${i}`,
-              cookie,
-              synchroLevel: 0,
-              outpostLevel: 0
-            })
-          }
-        }
+        const parsed = parseAccountListWorkbook(workbook)
+        const localAccounts = parsed.accounts
 
         if (localAccounts.length === 0) {
-          handleStatusChange('鏈В鏋愬埌璐﹀彿鏁版嵁', 'error')
+          handleStatusChange(t('accountList.importNoAccounts') || 'No account data found in the workbook', 'error')
           return
         }
 
         const localListId = `local_uploaded_${Date.now()}`
+        const localListName = file.name.replace(/\.[^/.]+$/, '')
         const newLocalList = {
           id: localListId,
-          name: file.name.replace(/\.[^/.]+$/, ""),
+          name: localListName,
           data: localAccounts
         }
 
@@ -240,8 +222,14 @@ const App: React.FC = () => {
         savedLocalLists.push(newLocalList)
         window.localStorage.setItem(LOCAL_LISTS_STORAGE_KEY, JSON.stringify(savedLocalLists))
 
-        setAccountLists(prev => [newLocalList, ...prev.filter(list => list.id !== localListId)])
+        const nextLists = [newLocalList, ...accountLists.filter(list => list.id !== localListId)]
+        setAccountLists(nextLists)
         setSelectedAccountListId(localListId)
+        await applyAccountListSelection(localListId, nextLists)
+        if (parsed.planningEntries.length > 0) {
+          setImportedPlanningEntries(parsed.planningEntries)
+          setImportedPlanningEventId((value) => value + 1)
+        }
         handleStatusChange((t('accountList.importSuccess') || 'Imported {count} local accounts successfully.').replace('{count}', String(localAccounts.length)), 'success')
 
       } catch (error) {
@@ -252,6 +240,35 @@ const App: React.FC = () => {
     reader.readAsArrayBuffer(file)
     event.target.value = ''
   }
+
+  const handlePlanningExportDataChange = useCallback((nextData: RaidPlanningExportData) => {
+    planningExportDataRef.current = nextData
+  }, [])
+
+  const handleExportAccountListWithPlans = useCallback(() => {
+    const selectedList = accountLists.find((list) => list.id === selectedAccountListId) || accountLists[0]
+    if (!selectedList || !Array.isArray(selectedList.data) || selectedList.data.length === 0) {
+      handleStatusChange(t('accountList.exportNoData') || 'No accounts available to export', 'warning')
+      return
+    }
+
+    try {
+      const planningExportData = planningExportDataRef.current
+      const workbook = buildAccountListWorkbook({
+        accounts: selectedList.data,
+        planningState: planningExportData?.planningState,
+        currentPlanName: planningExportData?.currentPlanName,
+        nikkeMap: planningExportData?.nikkeMap,
+        lang: planningExportData?.lang || 'zh',
+      })
+      const baseName = sanitizeFileNamePart(selectedList.name || uploadedFileName || 'account-list') || 'account-list'
+      XLSX.writeFile(workbook, `${baseName}-union-raid.xlsx`)
+      handleStatusChange(t('accountList.exportSuccess') || 'Workbook exported successfully', 'success')
+    } catch (error) {
+      console.error('Failed to export account list workbook:', error)
+      handleStatusChange(t('accountList.exportFailed') || 'Failed to export workbook', 'error')
+    }
+  }, [accountLists, handleStatusChange, selectedAccountListId, t, uploadedFileName])
 
 
   const accountDetailCacheRef = useRef<Record<string, Set<number>>>({})
@@ -564,7 +581,7 @@ const App: React.FC = () => {
     return () => {
       channel.close()
     }
-  }, [t])
+  }, [handleStatusChange, t])
 
   useEffect(() => {
     if (!authInitRef.current) return
@@ -850,6 +867,15 @@ const App: React.FC = () => {
                           {t('accountList.uploadExcel') || 'Upload'}
                           <input type="file" hidden accept=".xlsx,.xls" onChange={handleUploadAccountList} />
                         </Button>
+                        <Button
+                          variant="outlined"
+                          sx={{ minWidth: 'auto', p: '7px', flexShrink: 0, whiteSpace: 'nowrap' }}
+                          title={t('accountList.exportWithPlansTitle') || 'Export the current account list with union raid planning'}
+                          onClick={handleExportAccountListWithPlans}
+                          disabled={accountLists.length === 0}
+                        >
+                          {t('accountList.exportWithPlans') || 'Export Plans'}
+                        </Button>
                         {selectedAccountListId?.startsWith('local_') && (
                           <Button 
                             variant="outlined" 
@@ -903,7 +929,8 @@ const App: React.FC = () => {
                     </Box>
                     <Box sx={{ flex: 1, minHeight: 0 }}>
                       <TeamBuilder
-                        externalTeam={teamChars}
+                        externalTeam={copiedTeam}
+                        externalTeamEventId={copiedTeamEventId}
                         authToken={authToken}
                         nikkeList={nikkeList}
                         onTeamSelectionChange={(chars, coeffs) => {
@@ -995,12 +1022,17 @@ const App: React.FC = () => {
                       teamBuilderTeam={teamChars}
                       authToken={authToken}
                       restricted={authRestricted}
+                      onPlanningExportDataChange={handlePlanningExportDataChange}
+                      importedPlanningEntries={importedPlanningEntries}
+                      importedPlanningEventId={importedPlanningEventId}
                       onCopyTeam={(characters) => {
                         const teamArray: (Character | undefined)[] = Array(5).fill(undefined)
                         characters.forEach((char, idx) => {
                           if (idx < 5) teamArray[idx] = char
                         })
                         setTeamChars(teamArray)
+                        setCopiedTeam(teamArray)
+                        setCopiedTeamEventId((value) => value + 1)
                         handleStatusChange(t('unionRaid.teamCopied') || 'Team copied to builder.', 'success')
                       }}
                       onNotify={handleStatusChange}

@@ -12,6 +12,15 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     en: '英语',
     'lang.zh': '中文',
     'lang.en': 'English',
+    'accountList.exportWithPlans': '导出规划',
+    'accountList.exportWithPlansTitle': '导出当前账号列表及联盟突袭规划 Excel',
+    'accountList.importNoAccounts': 'Excel 中未找到有效的账号数据',
+    'accountList.importPlanningSuccess': '已导入联盟突袭规划，匹配 {matched} 个账号',
+    'accountList.importPlanningPartial': '已导入联盟突袭规划，匹配 {matched} 个账号，跳过 {unmatched} 个未匹配账号',
+    'accountList.importPlanningNoMatches': '上传的联盟突袭规划未匹配任何当前账号',
+    'accountList.exportNoData': '暂无账号可导出',
+    'accountList.exportSuccess': '已成功导出带联盟突袭规划的 Excel',
+    'accountList.exportFailed': '导出 Excel 失败',
 
     // 认证
     'auth.login': '登录',
@@ -419,6 +428,15 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'accountList.deleteLocalTitle': 'Delete local list',
     'accountList.importSuccess': 'Imported {count} local accounts successfully.',
     'accountList.importExcelFailed': 'Failed to parse Excel',
+    'accountList.exportWithPlans': 'Export Plans',
+    'accountList.exportWithPlansTitle': 'Export the current account list with union raid planning',
+    'accountList.importNoAccounts': 'No account data found in the workbook',
+    'accountList.importPlanningSuccess': 'Imported raid planning for {matched} accounts',
+    'accountList.importPlanningPartial': 'Imported raid planning for {matched} accounts and skipped {unmatched} unmatched accounts',
+    'accountList.importPlanningNoMatches': 'Uploaded raid planning did not match any current account',
+    'accountList.exportNoData': 'No accounts available to export',
+    'accountList.exportSuccess': 'Workbook exported successfully',
+    'accountList.exportFailed': 'Failed to export workbook',
 
     // Analyzer
     accountAnalysis: 'Account Analysis',
