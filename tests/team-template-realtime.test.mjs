@@ -150,14 +150,13 @@ test('buildTemplateSeedPatches never includes the temporary copy template', () =
   assert.equal(patches[1].op, 'template.replaceMembers')
 })
 
-test('buildTemplateSeedPatches skips local-only conflict copies', () => {
-  const conflictTemplate = makeTemplate({
-    id: 'tpl-1-conflict-100',
+test('buildTemplateSeedPatches skips local-only templates', () => {
+  const localOnlyTemplate = makeTemplate({
+    id: 'local-template-1',
     name: 'template-1',
     createdAt: 3,
     updatedAt: 3,
     localOnly: true,
-    conflictCopy: true,
     members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeCoefficients() }],
   })
   const persistentTemplate = makeTemplate({
@@ -169,7 +168,7 @@ test('buildTemplateSeedPatches skips local-only conflict copies', () => {
   })
 
   const patches = buildTemplateSeedPatches({
-    templates: [conflictTemplate, persistentTemplate],
+    templates: [localOnlyTemplate, persistentTemplate],
     sessionId: 'seed-session',
     baseRevision: 0,
     createMutationId: () => 'seed-id',

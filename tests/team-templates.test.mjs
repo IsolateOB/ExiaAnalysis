@@ -59,7 +59,7 @@ test('listTemplates can read legacy exia_team_templates data and migrate it', ()
   const legacyTemplates = [
     {
       id: 'legacy-1',
-      name: '风vv',
+      name: 'legacy-template',
       createdAt: 1,
       members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
       totalDamageCoefficient: 1,
@@ -72,9 +72,14 @@ test('listTemplates can read legacy exia_team_templates data and migrate it', ()
 
   assert.equal(templates.length, 1)
   assert.equal(templates[0].id, 'legacy-1')
-  assert.equal(
-    globalThis.localStorage.getItem('nikke_team_templates'),
-    JSON.stringify(legacyTemplates),
+  assert.deepEqual(
+    JSON.parse(globalThis.localStorage.getItem('nikke_team_templates')),
+    [{
+      ...legacyTemplates[0],
+      updatedAt: 1,
+      localOnly: false,
+      conflictCopy: false,
+    }],
   )
 })
 
@@ -90,7 +95,7 @@ test('buildTemplateSnapshot captures all five positions from the current team st
 
   const snapshot = buildTemplateSnapshot({
     id: 'tpl-1',
-    name: '模板1',
+    name: 'template-1',
     team,
     coefficientsMap,
     normalizeCoefficients: (coefficients) => ({
@@ -109,7 +114,7 @@ test('buildTemplateSnapshot captures all five positions from the current team st
 test('temporary copy template persists in its own localStorage key', () => {
   const temporaryTemplate = {
     id: '__raid_copy__',
-    name: '临时复制模板',
+    name: 'temporary-copy',
     createdAt: 10,
     updatedAt: 20,
     members: [{ position: 1, characterId: '1002', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
@@ -128,10 +133,10 @@ test('temporary copy template persists in its own localStorage key', () => {
   assert.deepEqual(listTemplates(), [])
 })
 
-test('mergePersistentTemplates keeps the newer template and turns the older conflict into a copy', () => {
+test('mergePersistentTemplates lets the remote version replace the local cloud cache without creating conflict copies', () => {
   const localTemplate = {
     id: 'shared-id',
-    name: '本地模板',
+    name: 'cached-template',
     createdAt: 1,
     updatedAt: 50,
     members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
@@ -139,7 +144,7 @@ test('mergePersistentTemplates keeps the newer template and turns the older conf
   }
   const remoteTemplate = {
     id: 'shared-id',
-    name: '云端模板',
+    name: 'remote-template',
     createdAt: 2,
     updatedAt: 80,
     members: [{ position: 1, characterId: '2001', damageCoefficient: 2, coefficients: makeDefaultCoefficients() }],
@@ -152,22 +157,28 @@ test('mergePersistentTemplates keeps the newer template and turns the older conf
     now: 100,
   })
 
-  assert.equal(merged.length, 2)
+  assert.equal(merged.length, 1)
   assert.equal(merged[0].id, 'shared-id')
-  assert.equal(merged[0].name, '云端模板')
+  assert.equal(merged[0].name, 'remote-template')
   assert.equal(merged[0].updatedAt, 80)
-
-  assert.notEqual(merged[1].id, 'shared-id')
-  assert.equal(merged[1].conflictCopy, true)
-  assert.equal(merged[1].localOnly, true)
-  assert.equal(merged[1].updatedAt, 100)
-  assert.equal(merged[1].members[0].characterId, '1001')
+  assert.equal(merged[0].conflictCopy, false)
+  assert.equal(merged[0].localOnly, false)
+  assert.equal(merged[0].members[0].characterId, '2001')
 })
 
-test('mergePersistentTemplates ignores remote create stubs for templates that already exist locally', () => {
-  const localTemplate = buildTemplateSnapshot({
+test('mergePersistentTemplates keeps local-only templates while replacing cloud templates from the latest remote snapshot', () => {
+  const localOnlyTemplate = {
+    id: 'local-template-1',
+    name: 'local-only-template',
+    createdAt: 1,
+    updatedAt: 40,
+    localOnly: true,
+    members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 1,
+  }
+  const staleCloudTemplate = buildTemplateSnapshot({
     id: 'shared-id',
-    name: 'template-1',
+    name: 'stale-cloud-template',
     team: Array.from({ length: 5 }, (_, index) => ({
       position: index + 1,
       damageCoefficient: 1,
@@ -178,28 +189,31 @@ test('mergePersistentTemplates ignores remote create stubs for templates that al
       ...makeDefaultCoefficients(),
       ...coefficients,
     }),
-    createdAt: 1,
+    createdAt: 2,
     updatedAt: 50,
   })
-  const remoteTemplateStub = {
+  const remoteTemplate = {
     id: 'shared-id',
-    name: 'template-1',
-    createdAt: 80,
+    name: 'fresh-cloud-template',
+    createdAt: 3,
     updatedAt: 80,
-    members: [],
-    totalDamageCoefficient: 0,
+    members: [{ position: 1, characterId: '2001', damageCoefficient: 2, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 2,
   }
 
   const merged = mergePersistentTemplates({
-    localTemplates: [localTemplate],
-    remoteTemplates: [remoteTemplateStub],
+    localTemplates: [localOnlyTemplate, staleCloudTemplate],
+    remoteTemplates: [remoteTemplate],
     now: 100,
   })
 
-  assert.equal(merged.length, 1)
-  assert.equal(merged[0].id, 'shared-id')
-  assert.equal(merged[0].members.length, 5)
-  assert.equal(merged[0].members[0].characterId, '1001')
+  assert.deepEqual(
+    merged.map((template) => template.id),
+    ['local-template-1', 'shared-id'],
+  )
+  assert.equal(merged[0].localOnly, true)
+  assert.equal(merged[1].name, 'fresh-cloud-template')
+  assert.equal(merged[1].members[0].characterId, '2001')
 })
 
 test('templatesEqual treats normalized non-local metadata as unchanged', () => {
@@ -211,7 +225,7 @@ test('templatesEqual treats normalized non-local metadata as unchanged', () => {
 
   const storedTemplate = {
     id: 'tpl-1',
-    name: '模板1',
+    name: 'template-1',
     createdAt: 1,
     updatedAt: 2,
     localOnly: false,
@@ -228,7 +242,7 @@ test('templatesEqual treats normalized non-local metadata as unchanged', () => {
 
   const rebuiltSnapshot = {
     id: 'tpl-1',
-    name: '模板1',
+    name: 'template-1',
     createdAt: 1,
     updatedAt: 2,
     members: storedTemplate.members.map((member) => ({ ...member, coefficients: { ...member.coefficients } })),
@@ -242,84 +256,45 @@ test('templatesEqual treats normalized non-local metadata as unchanged', () => {
   )
 })
 
-test('reconcilePersistentTemplatesFromSnapshot does not re-seed cloud templates that disappeared remotely', () => {
-  const staleCloudTemplate = {
-    id: 'tpl-1',
-    name: '云端旧模板',
-    createdAt: 1,
-    updatedAt: 10,
-    members: [{ position: 1, characterId: '1001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
-    totalDamageCoefficient: 1,
-  }
-  const offlineLocalTemplate = {
-    id: 'tpl-local',
-    name: '本地模板',
-    createdAt: 2,
-    updatedAt: 20,
-    members: [{ position: 1, characterId: '2001', damageCoefficient: 2, coefficients: makeDefaultCoefficients() }],
-    totalDamageCoefficient: 2,
-  }
-
-  const reconciled = reconcilePersistentTemplatesFromSnapshot({
-    localTemplates: [staleCloudTemplate, offlineLocalTemplate],
-    remoteTemplates: [],
-    knownCloudTemplateIds: ['tpl-1'],
-    deletedTemplateIds: [],
-    now: 100,
-  })
-
-  assert.deepEqual(
-    reconciled.mergedTemplates.map((template) => template.id),
-    ['tpl-local'],
-    'Templates that were previously known to exist in cloud should not be resurrected from stale local cache when the latest remote snapshot no longer contains them',
-  )
-  assert.deepEqual(
-    reconciled.templatesToSeed.map((template) => template.id),
-    ['tpl-local'],
-    'Only truly local templates should be seeded back to cloud',
-  )
-  assert.deepEqual(
-    reconciled.templateIdsToDeleteFromCloud,
-    [],
-    'A template that is already absent remotely should not generate extra delete patches',
-  )
-})
-
-test('reconcilePersistentTemplatesFromSnapshot keeps deleted templates hidden and retries cloud deletion after reconnect', () => {
-  const deletedTemplate = {
-    id: 'tpl-2',
-    name: '待删除模板',
+test('reconcilePersistentTemplatesFromSnapshot keeps local-only templates and replaces cloud templates with the latest remote snapshot', () => {
+  const localOnlyTemplate = {
+    id: 'local-template-2',
+    name: 'offline-template',
     createdAt: 3,
     updatedAt: 30,
+    localOnly: true,
     members: [{ position: 1, characterId: '3001', damageCoefficient: 3, coefficients: makeDefaultCoefficients() }],
     totalDamageCoefficient: 3,
   }
+  const staleCloudTemplate = {
+    id: 'cloud-template-1',
+    name: 'old-cloud-template',
+    createdAt: 4,
+    updatedAt: 20,
+    members: [{ position: 1, characterId: '4001', damageCoefficient: 1, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 1,
+  }
   const remoteTemplate = {
-    ...deletedTemplate,
-    updatedAt: 40,
+    id: 'cloud-template-1',
+    name: 'new-cloud-template',
+    createdAt: 5,
+    updatedAt: 50,
+    members: [{ position: 1, characterId: '5001', damageCoefficient: 5, coefficients: makeDefaultCoefficients() }],
+    totalDamageCoefficient: 5,
   }
 
   const reconciled = reconcilePersistentTemplatesFromSnapshot({
-    localTemplates: [deletedTemplate],
+    localTemplates: [localOnlyTemplate, staleCloudTemplate],
     remoteTemplates: [remoteTemplate],
-    knownCloudTemplateIds: ['tpl-2'],
-    deletedTemplateIds: ['tpl-2'],
     now: 200,
   })
 
   assert.deepEqual(
-    reconciled.mergedTemplates,
-    [],
-    'Templates explicitly deleted locally should stay hidden even if a stale remote snapshot still includes them',
+    reconciled.mergedTemplates.map((template) => template.id),
+    ['local-template-2', 'cloud-template-1'],
   )
-  assert.deepEqual(
-    reconciled.templatesToSeed,
-    [],
-    'Deleted templates must never be re-seeded back into cloud',
-  )
-  assert.deepEqual(
-    reconciled.templateIdsToDeleteFromCloud,
-    ['tpl-2'],
-    'Deleted templates that still exist remotely should be turned into follow-up delete patches on reconnect',
-  )
+  assert.equal(reconciled.mergedTemplates[0].localOnly, true)
+  assert.equal(reconciled.mergedTemplates[1].name, 'new-cloud-template')
+  assert.deepEqual(reconciled.templatesToSeed, [])
+  assert.deepEqual(reconciled.templateIdsToDeleteFromCloud, [])
 })

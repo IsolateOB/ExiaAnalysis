@@ -17,12 +17,8 @@ import { computeRawAttributeScores, computeWeightedStrength, getDefaultCoefficie
 import {
   clearTemporaryCopyTemplate,
   getTemporaryCopyTemplate,
-  listDeletedCloudTemplateIds,
-  listKnownCloudTemplateIds,
   listTemplates,
   reconcilePersistentTemplatesFromSnapshot,
-  rememberDeletedCloudTemplateId,
-  rememberKnownCloudTemplateIds,
   saveTemplates,
   saveTemporaryCopyTemplate,
   templatesEqual,
@@ -34,7 +30,6 @@ import {
   buildTemplateCreatePatch,
   buildTemplateDeletePatch,
   buildTemplateReplaceMembersPatch,
-  buildTemplateSeedPatches,
   createOptimisticTemplateState,
   prepareNextOutboundTemplateMutation,
   reconcileIncomingTemplatePatch,
@@ -80,6 +75,7 @@ interface TeamBuilderProps {
 const API_BASE_URL = 'https://backend.nikke-exia.com'
 const REALTIME_API_BASE_URL = API_BASE_URL.replace(/^http/, 'ws')
 const DEFAULT_TEMPLATE_ID = 'default'
+const LOCAL_DEFAULT_TEMPLATE_ID = 'default-local'
 const MAX_TEMPLATES = 200
 const LEGACY_DEFAULT_TEMPLATE_NAMES = new Set(['默认模板', 'Default Template', '榛樿妯℃澘'])
 
@@ -101,20 +97,43 @@ const normalizeTemplateCoefficients = (coefficients?: AttributeCoefficients): At
 
 const readInitialPersistentTemplates = (defaultTemplateName: string): TeamTemplate[] => {
   const existing = listTemplates()
-  if (existing.some((template) => template.id === DEFAULT_TEMPLATE_ID)) {
+  if (existing.some((template) => template.id === LOCAL_DEFAULT_TEMPLATE_ID)) {
     return existing
   }
 
-  const defaultTemplate = buildTemplateSnapshot({
-    id: DEFAULT_TEMPLATE_ID,
-    name: defaultTemplateName,
-    team: createInitialTeam(),
-    coefficientsMap: {},
-    normalizeCoefficients: normalizeTemplateCoefficients,
-  })
+  const defaultTemplate = {
+    ...buildTemplateSnapshot({
+      id: LOCAL_DEFAULT_TEMPLATE_ID,
+      name: defaultTemplateName,
+      team: createInitialTeam(),
+      coefficientsMap: {},
+      normalizeCoefficients: normalizeTemplateCoefficients,
+    }),
+    localOnly: true,
+  }
   const nextTemplates = [defaultTemplate, ...existing]
   saveTemplates(nextTemplates)
   return nextTemplates
+}
+
+const createTemplateWithScope = ({
+  template,
+  localOnly,
+}: {
+  template: TeamTemplate
+  localOnly: boolean
+}): TeamTemplate => ({
+  ...template,
+  localOnly,
+  conflictCopy: false,
+})
+
+const splitVisibleTemplates = (templates: TeamTemplate[], includeCloudTemplates: boolean): TeamTemplate[] => {
+  const localTemplates = templates.filter((template) => Boolean(template.localOnly))
+  if (!includeCloudTemplates) return localTemplates
+
+  const cloudTemplates = templates.filter((template) => !template.localOnly)
+  return [...localTemplates, ...cloudTemplates]
 }
 
 const buildCharactersTeam = (characters: (Character | undefined)[]): TeamCharacter[] => (
@@ -157,7 +176,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const defaultTemplateNamePrefix = t('tpl.defaultNamePrefix')
   const temporaryCopyTemplateName = t('tpl.temporaryCopyName')
   const localOnlyBadgeLabel = t('tpl.localOnlyBadge')
-  const conflictCopySuffix = t('tpl.conflictCopySuffix')
   const saveAsNewTemplateLabel = t('tpl.saveAsNew')
 
   const buildCoefficientsMapForTeam = useCallback((teamState: TeamCharacter[]) => {
@@ -199,6 +217,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const lastRevisionRef = useRef(0)
   const localIdCounterRef = useRef(0)
   const logicalTimestampRef = useRef(0)
+  const isRealtimeConnectedRef = useRef(false)
   const sessionIdRef = useRef(`team-builder-${stableIdBase}`)
 
   const nextSequenceId = useCallback((prefix: string) => {
@@ -211,9 +230,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     return logicalTimestampRef.current
   }, [])
 
+  const visiblePersistentTemplates = useMemo(
+    () => splitVisibleTemplates(persistentTemplates, Boolean(authToken)),
+    [authToken, persistentTemplates],
+  )
+
   const visibleTemplates = useMemo(
-    () => temporaryCopyTemplate ? [temporaryCopyTemplate, ...persistentTemplates] : persistentTemplates,
-    [persistentTemplates, temporaryCopyTemplate],
+    () => temporaryCopyTemplate ? [temporaryCopyTemplate, ...visiblePersistentTemplates] : visiblePersistentTemplates,
+    [temporaryCopyTemplate, visiblePersistentTemplates],
   )
 
   useEffect(() => {
@@ -247,8 +271,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       ? temporaryCopyTemplateName
       : (isLegacyDefaultName ? defaultTemplateName : template.name)
 
-    return template.conflictCopy ? `${baseName}${conflictCopySuffix}` : baseName
-  }, [conflictCopySuffix, defaultTemplateName, temporaryCopyTemplateName])
+    return baseName
+  }, [defaultTemplateName, temporaryCopyTemplateName])
 
   const persistPersistentTemplates = useCallback((nextTemplates: TeamTemplate[]) => {
     persistentTemplatesRef.current = nextTemplates
@@ -373,8 +397,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     }
 
     const nextSelectedTemplateId =
-      persistentTemplates[0]?.id
-      || temporaryCopyTemplate?.id
+      temporaryCopyTemplate?.id
       || visibleTemplates[0]?.id
       || ''
 
@@ -472,7 +495,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       }
     }
 
-    if (authToken) {
+    const isLocalOnlyTemplate = Boolean(currentTemplate.localOnly)
+    if (authToken && !isLocalOnlyTemplate) {
       queueRealtimeMutations([
         buildTemplateReplaceMembersPatch({
           clientMutationId: nextSequenceId('mutation'),
@@ -486,7 +510,13 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       return
     }
 
-    const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, snapshot)
+    const nextTemplates = upsertTemplateInList(
+      persistentTemplatesRef.current,
+      createTemplateWithScope({
+        template: snapshot,
+        localOnly: isLocalOnlyTemplate,
+      }),
+    )
     authoritativeTemplatesRef.current = nextTemplates
     optimisticTemplatesRef.current = nextTemplates
     let cancelled = false
@@ -606,6 +636,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       }
       currentSocketRef.current = null
       websocketRef.current = null
+      isRealtimeConnectedRef.current = false
       inflightMutationIdRef.current = null
       reconnectAttemptRef.current = 0
       lastRevisionRef.current = 0
@@ -622,6 +653,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     socket.onopen = () => {
       if (currentSocketRef.current !== socket) return
       reconnectAttemptRef.current = 0
+      isRealtimeConnectedRef.current = true
       socket.send(JSON.stringify({
         type: 'hello',
         token: authToken,
@@ -647,9 +679,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         const snapshotResolution = reconcilePersistentTemplatesFromSnapshot({
           localTemplates: listTemplates(),
           remoteTemplates,
-          knownCloudTemplateIds: listKnownCloudTemplateIds(),
-          deletedTemplateIds: listDeletedCloudTemplateIds(),
-          now: Date.now(),
         })
         const mergedState = createOptimisticTemplateState({
           templates: snapshotResolution.mergedTemplates,
@@ -657,25 +686,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           pendingMutations: pendingMutationsRef.current,
         })
         commitRealtimeState(mergedState)
-
-        rememberKnownCloudTemplateIds(snapshotResolution.knownCloudTemplateIds)
-
-        const patchesToQueue = [
-          ...buildTemplateSeedPatches({
-            templates: snapshotResolution.templatesToSeed,
-            sessionId: sessionIdRef.current,
-            baseRevision: Number(message.revision || 0),
-          }),
-          ...snapshotResolution.templateIdsToDeleteFromCloud.map((templateId) => buildTemplateDeletePatch({
-            clientMutationId: nextSequenceId('mutation'),
-            sessionId: sessionIdRef.current,
-            baseRevision: Number(message.revision || 0),
-            templateId,
-          })),
-        ]
-        if (patchesToQueue.length > 0) {
-          queueRealtimeMutations(patchesToQueue)
-        }
         sendPendingMutations()
         return
       }
@@ -696,7 +706,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         })
         nextState.lastRevision = Number(message.revision || nextState.lastRevision)
         commitRealtimeState(nextState)
-        rememberKnownCloudTemplateIds(nextState.authoritativeTemplates.map((template) => template.id))
         sendPendingMutations()
         return
       }
@@ -718,7 +727,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           inflightMutationIdRef.current = null
         }
         commitRealtimeState(nextState)
-        rememberKnownCloudTemplateIds(nextState.authoritativeTemplates.map((template) => template.id))
         sendPendingMutations()
         return
       }
@@ -737,7 +745,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
           },
         )
         commitRealtimeState(nextState)
-        rememberKnownCloudTemplateIds(nextState.authoritativeTemplates.map((template) => template.id))
         return
       }
 
@@ -749,6 +756,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     socket.onclose = () => {
       if (currentSocketRef.current !== socket) return
       websocketRef.current = null
+      isRealtimeConnectedRef.current = false
       inflightMutationIdRef.current = null
       reconnectAttemptRef.current += 1
       const delay = Math.min(5000, reconnectAttemptRef.current * 1000)
@@ -760,6 +768,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
     socket.onerror = (error) => {
       if (currentSocketRef.current !== socket) return
+      isRealtimeConnectedRef.current = false
       console.error('Team template websocket error', error)
     }
 
@@ -772,6 +781,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
         currentSocketRef.current = null
         websocketRef.current = null
       }
+      isRealtimeConnectedRef.current = false
       socket.onopen = null
       socket.onmessage = null
       socket.onclose = null
@@ -837,14 +847,18 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   const handleCreateTemplate = () => {
     if (persistentTemplatesRef.current.length >= MAX_TEMPLATES) return
+    const createAsLocalOnly = !authToken || !isRealtimeConnectedRef.current
 
     const emptyTeam = createEmptyTeam()
-    const template = buildTemplateSnapshot({
-      id: nextSequenceId('template'),
-      name: generateNextDefaultName(),
-      team: emptyTeam,
-      coefficientsMap: {},
-      normalizeCoefficients,
+    const template = createTemplateWithScope({
+      template: buildTemplateSnapshot({
+        id: nextSequenceId(createAsLocalOnly ? 'local-template' : 'template'),
+        name: generateNextDefaultName(),
+        team: emptyTeam,
+        coefficientsMap: {},
+        normalizeCoefficients,
+      }),
+      localOnly: createAsLocalOnly,
     })
 
     isHydratingTemplateRef.current = true
@@ -853,7 +867,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     setTeam(emptyTeam)
     setCoefficientsMap({})
 
-    if (authToken) {
+    if (authToken && !createAsLocalOnly) {
       queueRealtimeMutations([
         buildTemplateCreatePatch({
           clientMutationId: nextSequenceId('mutation'),
@@ -898,8 +912,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     const templateId = renameId
     const nextName = renameValue.trim()
     if (!templateId || !nextName) return
+    const targetTemplate = persistentTemplatesRef.current.find((template) => template.id === templateId)
+    const isLocalOnlyTemplate = Boolean(targetTemplate?.localOnly)
 
-    if (authToken) {
+    if (authToken && !isLocalOnlyTemplate) {
       queueRealtimeMutations([{
         type: 'patch',
         clientMutationId: nextSequenceId('mutation'),
@@ -927,10 +943,11 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
 
   const handleDeleteTemplate = (templateId?: string) => {
     const targetId = templateId || selectedTemplateId
-    if (!targetId || targetId === DEFAULT_TEMPLATE_ID || targetId === TEMPORARY_COPY_TEMPLATE_ID) return
-    rememberDeletedCloudTemplateId(targetId)
+    if (!targetId || targetId === DEFAULT_TEMPLATE_ID || targetId === LOCAL_DEFAULT_TEMPLATE_ID || targetId === TEMPORARY_COPY_TEMPLATE_ID) return
+    const targetTemplate = persistentTemplatesRef.current.find((template) => template.id === targetId)
+    const isLocalOnlyTemplate = Boolean(targetTemplate?.localOnly)
 
-    if (authToken) {
+    if (authToken && !isLocalOnlyTemplate) {
       queueRealtimeMutations([buildTemplateDeletePatch({
         clientMutationId: nextSequenceId('mutation'),
         sessionId: sessionIdRef.current,
@@ -953,25 +970,29 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const handleDuplicateTemplate = (templateId: string) => {
     const sourceTemplate = getTemplateById(templateId)
     if (!sourceTemplate) return
+    const createAsLocalOnly = !authToken || !isRealtimeConnectedRef.current || Boolean(sourceTemplate.localOnly)
 
-    const copy: TeamTemplate = {
-      ...sourceTemplate,
-      id: nextSequenceId('template'),
-      name: generateNextDefaultName(),
-      createdAt: nextTimestamp(),
-      updatedAt: nextTimestamp(),
-      members: sourceTemplate.members.map((member) => ({
-        ...member,
-        coefficients: member.coefficients == null ? member.coefficients : { ...member.coefficients },
-      })),
-    }
+    const copy: TeamTemplate = createTemplateWithScope({
+      template: {
+        ...sourceTemplate,
+        id: nextSequenceId(createAsLocalOnly ? 'local-template' : 'template'),
+        name: generateNextDefaultName(),
+        createdAt: nextTimestamp(),
+        updatedAt: nextTimestamp(),
+        members: sourceTemplate.members.map((member) => ({
+          ...member,
+          coefficients: member.coefficients == null ? member.coefficients : { ...member.coefficients },
+        })),
+      },
+      localOnly: createAsLocalOnly,
+    })
 
     isHydratingTemplateRef.current = true
     lastAppliedTemplateIdRef.current = copy.id
     setSelectedTemplateId(copy.id)
     restoreTemplate(copy)
 
-    if (authToken) {
+    if (authToken && !createAsLocalOnly) {
       queueRealtimeMutations([
         buildTemplateCreatePatch({
           clientMutationId: nextSequenceId('mutation'),
@@ -1130,7 +1151,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
                       {!isTemporary ? (
                         <Tooltip title={t('tpl.delete')}>
                           <span>
-                            <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); handleDeleteTemplate(template.id); close() }}>
+                            <IconButton size="small" color="error" disabled={template.id === DEFAULT_TEMPLATE_ID || template.id === LOCAL_DEFAULT_TEMPLATE_ID} onClick={(event) => { event.stopPropagation(); handleDeleteTemplate(template.id); close() }}>
                               <DeleteIcon fontSize="small" />
                             </IconButton>
                           </span>

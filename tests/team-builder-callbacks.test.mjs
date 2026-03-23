@@ -45,17 +45,22 @@ test('TeamBuilder compares normalized templates before autosaving realtime membe
   )
 })
 
-test('TeamBuilder reconciles remote snapshots and deletions without re-seeding deleted templates', () => {
+test('TeamBuilder treats offline-created templates as local-only and no longer references conflict-copy tombstones', () => {
   const source = fs.readFileSync(teamBuilderPath, 'utf8')
 
   assert.match(
     source,
-    /reconcilePersistentTemplatesFromSnapshot\(/,
-    'TeamBuilder should reconcile websocket snapshots through the shared template snapshot resolver so stale local cloud templates are not blindly re-seeded',
+    /createAsLocalOnly/,
+    'TeamBuilder should explicitly decide whether a new template is local-only so offline creation can stay local after the user logs back in',
   )
-  assert.match(
+  assert.doesNotMatch(
     source,
     /rememberDeletedCloudTemplateId\(targetId\)/,
-    'Deleting a template should leave a local tombstone so reconnects and refreshes do not resurrect it from stale cache',
+    'The new sync model should not rely on delete tombstones for cloud templates',
+  )
+  assert.doesNotMatch(
+    source,
+    /conflictCopySuffix/,
+    'Conflict-copy presentation should be removed once cloud snapshots directly replace stale cloud cache',
   )
 })
