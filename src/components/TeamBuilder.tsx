@@ -2,13 +2,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 import React, { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
-import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack } from '@mui/material'
+import { Box, Typography, TextField, Button, IconButton, Tooltip, Stack, CircularProgress } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 
 import type { AccountCharacterDetail, AccountRecord, AttributeCoefficients, Character, RawAttributeScores, TeamCharacter } from '../types'
 import CharacterCard from './CharacterCard'
@@ -26,18 +28,9 @@ import {
   TEMPORARY_COPY_TEMPLATE_ID,
 } from '../utils/templates'
 import { buildTemplateSnapshot, createEmptyTeam, upsertTemplateInList } from '../utils/teamTemplateState'
-import {
-  buildTemplateCreatePatch,
-  buildTemplateDeletePatch,
-  buildTemplateReplaceMembersPatch,
-  createOptimisticTemplateState,
-  prepareNextOutboundTemplateMutation,
-  reconcileIncomingTemplatePatch,
-  reconcileTemplateAck,
-  type TeamTemplateRealtimePatch,
-} from './TeamBuilder/cloudRealtime'
 import { useI18n } from '../hooks/useI18n'
 import InteractiveSelector from './shared/InteractiveSelector'
+import { fetchCloudTeamTemplates, saveCloudTeamTemplates } from '../services/api'
 
 type TeamBuilderCharacterData = AccountCharacterDetail & {
   id?: number | string
@@ -54,13 +47,6 @@ type RawStrengthMap = {
   }
 }
 
-type TeamBuilderRealtimeMessage =
-  | { type: 'snapshot'; revision?: number; templates?: TeamTemplate[] }
-  | { type: 'patch_replay'; revision?: number; patches?: TeamTemplateRealtimePatch[] }
-  | { type: 'ack'; revision?: number; clientMutationId?: string; appliedPatch?: TeamTemplateRealtimePatch }
-  | { type: 'patch_broadcast'; revision?: number; sessionId?: string; patch?: TeamTemplateRealtimePatch }
-  | { type: 'error'; message?: string }
-
 interface TeamBuilderProps {
   baselineData?: TeamBuilderRootData
   targetData?: TeamBuilderRootData
@@ -73,8 +59,6 @@ interface TeamBuilderProps {
   nikkeList?: Character[]
 }
 
-const API_BASE_URL = 'https://backend.nikke-exia.com'
-const REALTIME_API_BASE_URL = API_BASE_URL.replace(/^http/, 'ws')
 const DEFAULT_TEMPLATE_ID = 'default'
 const LOCAL_DEFAULT_TEMPLATE_ID = 'default-local'
 const MAX_TEMPLATES = 200
@@ -200,7 +184,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameId, setRenameId] = useState('')
   const [renameValue, setRenameValue] = useState('')
-  const [reconnectNonce, setReconnectNonce] = useState(0)
+  const [templateCloudLoading, setTemplateCloudLoading] = useState(false)
 
   const defaultTemplateInitRef = useRef(true)
   const isHydratingTemplateRef = useRef(false)
@@ -210,17 +194,8 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const persistentTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
   const authoritativeTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
   const optimisticTemplatesRef = useRef<TeamTemplate[]>(persistentTemplates)
-  const pendingMutationsRef = useRef<TeamTemplateRealtimePatch[]>([])
-  const inflightMutationIdRef = useRef<string | null>(null)
-  const websocketRef = useRef<WebSocket | null>(null)
-  const currentSocketRef = useRef<WebSocket | null>(null)
-  const reconnectTimerRef = useRef<number | null>(null)
-  const reconnectAttemptRef = useRef(0)
-  const lastRevisionRef = useRef(0)
   const localIdCounterRef = useRef(0)
   const logicalTimestampRef = useRef(0)
-  const isRealtimeConnectedRef = useRef(false)
-  const sessionIdRef = useRef(`team-builder-${stableIdBase}`)
 
   const nextSequenceId = useCallback((prefix: string) => {
     localIdCounterRef.current += 1
@@ -291,42 +266,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     clearTemporaryCopyTemplate()
     setTemporaryCopyTemplate(null)
   }, [])
-
-  const commitRealtimeState = useCallback((state: ReturnType<typeof createOptimisticTemplateState>) => {
-    authoritativeTemplatesRef.current = state.authoritativeTemplates
-    optimisticTemplatesRef.current = state.optimisticTemplates
-    pendingMutationsRef.current = state.pendingMutations
-    lastRevisionRef.current = state.lastRevision
-    persistPersistentTemplates(state.optimisticTemplates)
-  }, [persistPersistentTemplates])
-
-  const sendPendingMutations = useCallback(() => {
-    const socket = websocketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) return
-
-    const nextDispatch = prepareNextOutboundTemplateMutation({
-      pendingMutations: pendingMutationsRef.current,
-      inflightMutationId: inflightMutationIdRef.current,
-      lastRevision: lastRevisionRef.current,
-    })
-    if (!nextDispatch) return
-
-    inflightMutationIdRef.current = nextDispatch.outboundMutation.clientMutationId
-    pendingMutationsRef.current = nextDispatch.pendingMutations
-    socket.send(JSON.stringify(nextDispatch.outboundMutation))
-  }, [])
-
-  const queueRealtimeMutations = useCallback((mutations: TeamTemplateRealtimePatch[]) => {
-    if (mutations.length === 0) return
-
-    const nextState = createOptimisticTemplateState({
-      templates: authoritativeTemplatesRef.current,
-      lastRevision: lastRevisionRef.current,
-      pendingMutations: [...pendingMutationsRef.current, ...mutations],
-    })
-    commitRealtimeState(nextState)
-    sendPendingMutations()
-  }, [commitRealtimeState, sendPendingMutations])
 
   const restoreTemplate = useCallback((template: TeamTemplate) => {
     isHydratingTemplateRef.current = true
@@ -499,20 +438,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     }
 
     const isLocalOnlyTemplate = Boolean(currentTemplate.localOnly)
-    if (authToken && !isLocalOnlyTemplate) {
-      queueRealtimeMutations([
-        buildTemplateReplaceMembersPatch({
-          clientMutationId: nextSequenceId('mutation'),
-          sessionId: sessionIdRef.current,
-          baseRevision: lastRevisionRef.current,
-          templateId: currentTemplate.id,
-          members: snapshot.members,
-          totalDamageCoefficient: snapshot.totalDamageCoefficient,
-        }),
-      ])
-      return
-    }
-
     const nextTemplates = upsertTemplateInList(
       persistentTemplatesRef.current,
       createTemplateWithScope({
@@ -533,14 +458,11 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
       cancelled = true
     }
   }, [
-    authToken,
     buildCurrentSnapshot,
     coefficientsMap,
     getTemplateById,
     persistPersistentTemplates,
     persistTemporaryTemplate,
-    queueRealtimeMutations,
-    nextSequenceId,
     selectedTemplateId,
     team,
   ])
@@ -622,176 +544,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     emitTeamSelectionChange(team.map((slot) => slot.character), coeffsWithWeight)
   }, [baselineData, coefficientsMap, findCharacterDataById, targetData, team])
 
-  useEffect(() => {
-    if (!authToken) {
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current)
-        reconnectTimerRef.current = null
-      }
-      const socket = currentSocketRef.current
-      if (socket) {
-        socket.onopen = null
-        socket.onmessage = null
-        socket.onclose = null
-        socket.onerror = null
-        socket.close()
-      }
-      currentSocketRef.current = null
-      websocketRef.current = null
-      isRealtimeConnectedRef.current = false
-      inflightMutationIdRef.current = null
-      reconnectAttemptRef.current = 0
-      lastRevisionRef.current = 0
-      pendingMutationsRef.current = []
-      authoritativeTemplatesRef.current = persistentTemplatesRef.current
-      optimisticTemplatesRef.current = persistentTemplatesRef.current
-      return
-    }
-
-    const socket = new WebSocket(`${REALTIME_API_BASE_URL}/team-template/realtime?token=${encodeURIComponent(authToken)}`)
-    currentSocketRef.current = socket
-    websocketRef.current = socket
-
-    socket.onopen = () => {
-      if (currentSocketRef.current !== socket) return
-      reconnectAttemptRef.current = 0
-      isRealtimeConnectedRef.current = true
-      socket.send(JSON.stringify({
-        type: 'hello',
-        token: authToken,
-        documentId: 'team-template',
-        lastRevision: lastRevisionRef.current,
-        sessionId: sessionIdRef.current,
-      }))
-    }
-
-    socket.onmessage = (event) => {
-      if (currentSocketRef.current !== socket) return
-
-      let message: TeamBuilderRealtimeMessage
-      try {
-        message = JSON.parse(event.data) as TeamBuilderRealtimeMessage
-      } catch (error) {
-        console.error('Failed to parse team-template realtime message', error)
-        return
-      }
-
-      if (message.type === 'snapshot') {
-        const remoteTemplates = Array.isArray(message.templates) ? message.templates as TeamTemplate[] : []
-        const snapshotResolution = reconcilePersistentTemplatesFromSnapshot({
-          localTemplates: listTemplates(),
-          remoteTemplates,
-        })
-        const mergedState = createOptimisticTemplateState({
-          templates: snapshotResolution.mergedTemplates,
-          lastRevision: Number(message.revision || 0),
-          pendingMutations: pendingMutationsRef.current,
-        })
-        commitRealtimeState(mergedState)
-        sendPendingMutations()
-        return
-      }
-
-      if (message.type === 'patch_replay') {
-        let nextState = createOptimisticTemplateState({
-          templates: authoritativeTemplatesRef.current,
-          lastRevision: lastRevisionRef.current,
-          pendingMutations: pendingMutationsRef.current,
-        })
-        const patches = Array.isArray(message.patches) ? message.patches : []
-        patches.forEach((patch: TeamTemplateRealtimePatch, index: number) => {
-          nextState = reconcileIncomingTemplatePatch(nextState, {
-            revision: lastRevisionRef.current + index + 1,
-            sessionId: patch.sessionId,
-            patch,
-          })
-        })
-        nextState.lastRevision = Number(message.revision || nextState.lastRevision)
-        commitRealtimeState(nextState)
-        sendPendingMutations()
-        return
-      }
-
-      if (message.type === 'ack') {
-        const nextState = reconcileTemplateAck(
-          createOptimisticTemplateState({
-            templates: authoritativeTemplatesRef.current,
-            lastRevision: lastRevisionRef.current,
-            pendingMutations: pendingMutationsRef.current,
-          }),
-          {
-            revision: Number(message.revision || 0),
-            clientMutationId: String(message.clientMutationId || ''),
-            appliedPatch: message.appliedPatch as TeamTemplateRealtimePatch,
-          },
-        )
-        if (inflightMutationIdRef.current === message.clientMutationId) {
-          inflightMutationIdRef.current = null
-        }
-        commitRealtimeState(nextState)
-        sendPendingMutations()
-        return
-      }
-
-      if (message.type === 'patch_broadcast') {
-        const nextState = reconcileIncomingTemplatePatch(
-          createOptimisticTemplateState({
-            templates: authoritativeTemplatesRef.current,
-            lastRevision: lastRevisionRef.current,
-            pendingMutations: pendingMutationsRef.current,
-          }),
-          {
-            revision: Number(message.revision || 0),
-            sessionId: String(message.sessionId || ''),
-            patch: message.patch as TeamTemplateRealtimePatch,
-          },
-        )
-        commitRealtimeState(nextState)
-        return
-      }
-
-      if (message.type === 'error') {
-        console.error('Team template realtime error:', message)
-      }
-    }
-
-    socket.onclose = () => {
-      if (currentSocketRef.current !== socket) return
-      websocketRef.current = null
-      isRealtimeConnectedRef.current = false
-      inflightMutationIdRef.current = null
-      reconnectAttemptRef.current += 1
-      const delay = Math.min(5000, reconnectAttemptRef.current * 1000)
-      reconnectTimerRef.current = window.setTimeout(() => {
-        reconnectTimerRef.current = null
-        setReconnectNonce((value) => value + 1)
-      }, delay)
-    }
-
-    socket.onerror = (error) => {
-      if (currentSocketRef.current !== socket) return
-      isRealtimeConnectedRef.current = false
-      console.error('Team template websocket error', error)
-    }
-
-    return () => {
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current)
-        reconnectTimerRef.current = null
-      }
-      if (currentSocketRef.current === socket) {
-        currentSocketRef.current = null
-        websocketRef.current = null
-      }
-      isRealtimeConnectedRef.current = false
-      socket.onopen = null
-      socket.onmessage = null
-      socket.onclose = null
-      socket.onerror = null
-      socket.close()
-    }
-  }, [authToken, commitRealtimeState, nextSequenceId, queueRealtimeMutations, reconnectNonce, sendPendingMutations])
-
   const handleAddCharacter = (position: number) => {
     setSelectedPosition(position)
     setFilterDialogOpen(true)
@@ -847,9 +599,51 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     setCoefficientsMap((prev) => ({ ...prev, [position]: next }))
   }
 
+  const handleDownloadTeamTemplatesFromCloud = useCallback(async () => {
+    if (!authToken) return
+
+    setTemplateCloudLoading(true)
+    try {
+      const remoteTemplates = await fetchCloudTeamTemplates(authToken) as TeamTemplate[]
+      const snapshotResolution = reconcilePersistentTemplatesFromSnapshot({
+        localTemplates: listTemplates(),
+        remoteTemplates,
+      })
+      authoritativeTemplatesRef.current = snapshotResolution.mergedTemplates
+      optimisticTemplatesRef.current = snapshotResolution.mergedTemplates
+      persistPersistentTemplates(snapshotResolution.mergedTemplates)
+      if (selectedTemplateId && !snapshotResolution.mergedTemplates.some((template) => template.id === selectedTemplateId)) {
+        lastAppliedTemplateIdRef.current = ''
+        setSelectedTemplateId('')
+      }
+    } catch (error) {
+      console.error('Failed to download team templates from cloud:', error)
+    } finally {
+      setTemplateCloudLoading(false)
+    }
+  }, [authToken, persistPersistentTemplates, selectedTemplateId])
+
+  const handleUploadTeamTemplatesToCloud = useCallback(async () => {
+    if (!authToken) return
+
+    setTemplateCloudLoading(true)
+    try {
+      const cloudTemplates = persistentTemplatesRef.current.filter((template) => (
+        template.id !== TEMPORARY_COPY_TEMPLATE_ID && !template.localOnly
+      ))
+      await saveCloudTeamTemplates(authToken, cloudTemplates)
+      authoritativeTemplatesRef.current = persistentTemplatesRef.current
+      optimisticTemplatesRef.current = persistentTemplatesRef.current
+    } catch (error) {
+      console.error('Failed to upload team templates to cloud:', error)
+    } finally {
+      setTemplateCloudLoading(false)
+    }
+  }, [authToken])
+
   const handleCreateTemplate = () => {
     if (persistentTemplatesRef.current.length >= MAX_TEMPLATES) return
-    const createAsLocalOnly = !authToken || !isRealtimeConnectedRef.current
+    const createAsLocalOnly = !authToken
 
     const emptyTeam = createEmptyTeam()
     const template = createTemplateWithScope({
@@ -868,27 +662,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     setSelectedTemplateId(template.id)
     setTeam(emptyTeam)
     setCoefficientsMap({})
-
-    if (authToken && !createAsLocalOnly) {
-      queueRealtimeMutations([
-        buildTemplateCreatePatch({
-          clientMutationId: nextSequenceId('mutation'),
-          sessionId: sessionIdRef.current,
-          baseRevision: lastRevisionRef.current,
-          templateId: template.id,
-          name: template.name,
-        }),
-        buildTemplateReplaceMembersPatch({
-          clientMutationId: nextSequenceId('mutation'),
-          sessionId: sessionIdRef.current,
-          baseRevision: lastRevisionRef.current,
-          templateId: template.id,
-          members: template.members,
-          totalDamageCoefficient: template.totalDamageCoefficient,
-        }),
-      ])
-      return
-    }
 
     const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, template)
     authoritativeTemplatesRef.current = nextTemplates
@@ -916,26 +689,14 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     if (!templateId || !nextName) return
     const targetTemplate = persistentTemplatesRef.current.find((template) => template.id === templateId)
     const isLocalOnlyTemplate = Boolean(targetTemplate?.localOnly)
-
-    if (authToken && !isLocalOnlyTemplate) {
-      queueRealtimeMutations([{
-        type: 'patch',
-        clientMutationId: nextSequenceId('mutation'),
-        sessionId: sessionIdRef.current,
-        baseRevision: lastRevisionRef.current,
-        op: 'template.rename',
-        payload: { templateId, name: nextName },
-      }])
-    } else {
-      const nextTemplates = persistentTemplatesRef.current.map((template) => (
-        template.id === templateId
-          ? { ...template, name: nextName, updatedAt: nextTimestamp() }
-          : template
-      ))
-      authoritativeTemplatesRef.current = nextTemplates
-      optimisticTemplatesRef.current = nextTemplates
-      persistPersistentTemplates(nextTemplates)
-    }
+    const nextTemplates = persistentTemplatesRef.current.map((template) => (
+      template.id === templateId
+        ? { ...template, name: nextName, updatedAt: nextTimestamp(), localOnly: isLocalOnlyTemplate }
+        : template
+    ))
+    authoritativeTemplatesRef.current = nextTemplates
+    optimisticTemplatesRef.current = nextTemplates
+    persistPersistentTemplates(nextTemplates)
 
     setSelectedTemplateId(templateId)
     setIsRenaming(false)
@@ -946,22 +707,10 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const handleDeleteTemplate = (templateId?: string) => {
     const targetId = templateId || selectedTemplateId
     if (!targetId || targetId === DEFAULT_TEMPLATE_ID || targetId === LOCAL_DEFAULT_TEMPLATE_ID || targetId === TEMPORARY_COPY_TEMPLATE_ID) return
-    const targetTemplate = persistentTemplatesRef.current.find((template) => template.id === targetId)
-    const isLocalOnlyTemplate = Boolean(targetTemplate?.localOnly)
-
-    if (authToken && !isLocalOnlyTemplate) {
-      queueRealtimeMutations([buildTemplateDeletePatch({
-        clientMutationId: nextSequenceId('mutation'),
-        sessionId: sessionIdRef.current,
-        baseRevision: lastRevisionRef.current,
-        templateId: targetId,
-      })])
-    } else {
-      const nextTemplates = persistentTemplatesRef.current.filter((template) => template.id !== targetId)
-      authoritativeTemplatesRef.current = nextTemplates
-      optimisticTemplatesRef.current = nextTemplates
-      persistPersistentTemplates(nextTemplates)
-    }
+    const nextTemplates = persistentTemplatesRef.current.filter((template) => template.id !== targetId)
+    authoritativeTemplatesRef.current = nextTemplates
+    optimisticTemplatesRef.current = nextTemplates
+    persistPersistentTemplates(nextTemplates)
 
     if (selectedTemplateId === targetId) {
       lastAppliedTemplateIdRef.current = ''
@@ -972,7 +721,7 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
   const handleDuplicateTemplate = (templateId: string) => {
     const sourceTemplate = getTemplateById(templateId)
     if (!sourceTemplate) return
-    const createAsLocalOnly = !authToken || !isRealtimeConnectedRef.current || Boolean(sourceTemplate.localOnly)
+    const createAsLocalOnly = !authToken || Boolean(sourceTemplate.localOnly)
 
     const copy: TeamTemplate = createTemplateWithScope({
       template: {
@@ -993,27 +742,6 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
     lastAppliedTemplateIdRef.current = copy.id
     setSelectedTemplateId(copy.id)
     restoreTemplate(copy)
-
-    if (authToken && !createAsLocalOnly) {
-      queueRealtimeMutations([
-        buildTemplateCreatePatch({
-          clientMutationId: nextSequenceId('mutation'),
-          sessionId: sessionIdRef.current,
-          baseRevision: lastRevisionRef.current,
-          templateId: copy.id,
-          name: copy.name,
-        }),
-        buildTemplateReplaceMembersPatch({
-          clientMutationId: nextSequenceId('mutation'),
-          sessionId: sessionIdRef.current,
-          baseRevision: lastRevisionRef.current,
-          templateId: copy.id,
-          members: copy.members,
-          totalDamageCoefficient: copy.totalDamageCoefficient,
-        }),
-      ])
-      return
-    }
 
     const nextTemplates = upsertTemplateInList(persistentTemplatesRef.current, copy)
     authoritativeTemplatesRef.current = nextTemplates
@@ -1173,6 +901,25 @@ const TeamBuilder: React.FC<TeamBuilderProps> = ({
               {t('tpl.create')}
             </Button>
           </Tooltip>
+          {authToken ? (
+            <>
+              <Tooltip title={t('tpl.cloudDownload') || 'Load from Cloud'}>
+                <span>
+                  <IconButton size="small" aria-label={t('tpl.cloudDownload') || 'Load from Cloud'} onClick={handleDownloadTeamTemplatesFromCloud} disabled={templateCloudLoading}>
+                    <CloudDownloadIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={t('tpl.cloudUpload') || 'Save to Cloud'}>
+                <span>
+                  <IconButton size="small" color="primary" aria-label={t('tpl.cloudUpload') || 'Save to Cloud'} onClick={handleUploadTeamTemplatesToCloud} disabled={templateCloudLoading}>
+                    <CloudUploadIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              {templateCloudLoading ? <CircularProgress size={20} /> : null}
+            </>
+          ) : null}
         </Stack>
       </Box>
 

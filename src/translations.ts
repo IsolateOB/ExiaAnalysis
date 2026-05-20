@@ -230,6 +230,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.localOnlyBadge': '仅本地',
     'tpl.conflictCopySuffix': '（冲突副本）',
     'tpl.saveAsNew': '保存为新模板',
+    'tpl.cloudUpload': '上传到云端',
+    'tpl.cloudDownload': '从云端下载',
 
     // 上传
     'upload.title': '上传账号 JSON',
@@ -543,6 +545,8 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     'tpl.localOnlyBadge': 'Local Only',
     'tpl.conflictCopySuffix': ' (Conflict Copy)',
     'tpl.saveAsNew': 'Save as new template',
+    'tpl.cloudUpload': 'Save to Cloud',
+    'tpl.cloudDownload': 'Load from Cloud',
 
     // Upload
     'upload.title': 'Upload Accounts JSON',

@@ -130,3 +130,28 @@ export const fetchCloudAccountLists = async (token: string) => {
   if (Array.isArray(json?.accounts)) return json.accounts
   return null
 }
+
+export const fetchCloudTeamTemplates = async (token: string) => {
+  const res = await fetch(`${API_BASE_URL}/team-template`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error('Failed to fetch cloud team templates')
+  const json = await res.json()
+  if (Array.isArray(json?.template_data)) return json.template_data
+  if (Array.isArray(json?.templates)) return json.templates
+  return []
+}
+
+export const saveCloudTeamTemplates = async (token: string, templates: unknown[]) => {
+  const res = await fetch(`${API_BASE_URL}/team-template`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ template_data: templates })
+  })
+  if (!res.ok) throw new Error('Failed to save cloud team templates')
+  return res.json()
+}
